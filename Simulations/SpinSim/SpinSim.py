@@ -6,7 +6,7 @@ starttime = time.time()
 
 # Load data
 OGtable = pd.read_table("SpinSim/SG2017_WC1.txt", header=0)  # Expression table (TPMs) from which to start centrifugation. Whole Cell sample for A. Khong 2017 in example
-WeightTable = pd.read_table("SpinSim/MolecularWeights.csv", header=0, sep=" ")  # Molecular weights of RNAs
+WeightTable = pd.read_table("SpinSim/MolecularWeights.csv", header=0, sep=" ")  # Molecular weights of RNAs. This version has no modifications. If  modifications are wanted, please use appropriate file.
 
 # Centrifugation parameters
 CentrifugationN = 3 # Number of centrifugations performed
