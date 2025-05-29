@@ -1,6 +1,6 @@
 # Datasets
 
-This folder contains code necessary to run the analyses I performed on each dataset.
+This folder contains code necessary to run the analyses I performed on each dataset. I always provide both an R markdown file, as well as an html file of the analyses.
 
 ## Repository Structure
 
