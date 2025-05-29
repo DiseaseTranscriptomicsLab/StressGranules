@@ -32,3 +32,7 @@ If you use this repository or any of its contents, please cite our associated pu
 
 > [Insert full citation and DOI once available]
 
+# Contact
+
+If you have any doubts or other issues related to the analyses and provided files, please feel free to email Alex Kaizeler at:
+alexandre.afonso@gimm.pt
