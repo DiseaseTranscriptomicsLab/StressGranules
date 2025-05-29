@@ -1,4 +1,4 @@
-# StressGranules
+# StressGranules - WIP
 
 This repository contains all analyses and code associated with our study on stress granule signatures, as described in [DOI placeholder].
 
