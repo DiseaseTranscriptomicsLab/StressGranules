@@ -1,0 +1,604 @@
+---
+title: "Analyses of GSE236521"
+subtitle: "Analyses of Genetic and pharmacologic modulation of mitofusins in cellular senescence"
+author: 
+  - name: "Alexandre Kaizeler^[Disease Transcriptomics Group, Gulbenkian Institute of Molecular Medicine]"
+    email: alexandreafonso@gimm.pt
+date: "`r format(Sys.time(), '%d %B %Y')`"
+output: 
+  rmdformats::downcute:
+    downcute_theme: "chaos"
+---
+
+# Introduction
+
+In this document, I present all analyses pertaining to the dataset **GSE236521**  
+([NCBI GEO Link](https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=GSE236521)),  
+originally published by **V. López-Polo, 2024**.
+
+## Libraries
+
+```{r preparation, message=FALSE}
+# These are all the libraries I used throughout the analysis. Not all of them will be required on this guidebook
+library(Rsubread)
+library(limma)
+library(edgeR)
+library(DESeq2)
+library(magrittr)
+library(ggrepel)
+library(tidyverse)
+library(vsn)
+library(ggplot2)
+library(NMF)
+library(biomaRt)
+library(ggpubr)
+library(factoextra)
+library(ggfortify)
+library(plotly)
+library(reshape2)
+library(fgsea)
+library(msigdbr)
+library(data.table)
+library(colorspace)
+library(readxl)
+
+set.seed(1906)
+```
+
+
+## Loading up the data
+
+```{r, warning=FALSE}
+#We will need this metadata table, which was kindly ceded by the original authors. For convenience of those who want to replicate, this file is provided on the repository.
+metadata <- read_excel("~/Projects/StressGranules/sampleinfo_vlopez_202303_rnaseq.xlsx")[,1:2]
+
+#These changes are to facilitate future merge
+metadata$SampleName <- substr(metadata$SampleName, 1, nchar(metadata$SampleName) - 1)
+metadata$SampleName <- gsub("  ", " ", metadata$SampleName)
+
+#And these changes will be useful when we have to account for other variables
+SampleIDS <- metadata$SampleName
+metadata <- separate(metadata, SampleName, c("Cell", "Doxo", "Target"), sep = " ")
+metadata$Target <- gsub("^siMFN$", "siMFN2", metadata$Target)
+metadata$Target <- gsub("cNeg", "", metadata$Target)
+
+
+#This file can be obtained from the GEO repository. See Introduction for this link.
+raw.read.counts <- fread("~/Projects/StressGranules/GSE236521_rawcounts_vlopez_202303_rnaseq.txt", header = T)
+
+#Loading up our biomart file, obtained from Ensembl, where we have the equivalence between Ensembl IDs and HGNC names
+biomart <- fread("~/biomart.txt")[,-2]
+
+
+colnames(raw.read.counts)[1] <- "ensembl_gene_id"
+colnames(biomart) <- c("ensembl_gene_id", "hgnc_symbol")
+
+eltable <- merge(raw.read.counts,biomart,by = "ensembl_gene_id", all= TRUE) #this creates a table with both ensemble ids and HGNC codes.
+
+eltable <- subset(eltable, hgnc_symbol!="") #this removes reads that dont have a corresponding hgnc symbol.
+
+eltable$ensembl_gene_id <- NULL # We no longer need this column
+
+read.counts <- eltable %>% # If two gene ids resulted in the same gene name, this will sum up their counts
+  group_by(hgnc_symbol) %>%
+  summarise(across(everything(), sum, na.rm = TRUE))
+
+read.counts <- as.data.frame(read.counts)
+
+row.names(read.counts) <- read.counts$hgnc_symbol #changes rownames into hgnc symbols
+read.counts$hgnc_symbol <- NULL #We no longer need this column, as we have the rownames.
+```
+
+
+## Extra Quality Control
+
+Let's check for sample complexity. It is possible that one or more samples have different complexity. In specific, I am going to check if enough reads have been obtained from every sample. If not, we should have a great bias to housekeeping genes. Another way to put it, is to say that even with all reads, we won't obtain a great deal of different genes.
+
+```{r complexity, warning=FALSE, message=FALSE, results='hide'}
+
+# Define color palette
+custom_palette <- c("red", "blue")
+
+# Use SampleColouring from metadata
+SampleColouring <- metadata$Cell  # e.g., "U2OS", "PC3", ...
+
+# Build cumulative counts
+final <- sapply(1:ncol(read.counts), function(i) {
+  sort_vals <- read.counts[order(read.counts[, i], decreasing = TRUE), i]
+  cumsum(sort_vals)
+})
+final <- as.data.frame(final)
+colnames(final) <- colnames(read.counts)
+
+# Melt and add gene position + sample info
+finalmelt <- reshape2::melt(final, variable.name = "Sample")
+finalmelt$genes <- rep(1:nrow(final), times = ncol(final))
+finalmelt$SampleColouring <- rep(SampleColouring, each = nrow(final))
+
+# Plot cumulative read coverage
+ggplot(data = finalmelt, aes(x = genes, y = log10(value), group = Sample, color = SampleColouring)) +
+  geom_line() +
+  scale_color_manual(values = custom_palette, name = "Cell Line") +
+  theme_bw() +
+  xlab("Number of Genes Covered") +
+  ylab("Number of Reads (log10)") +
+  xlim(0, 20000) +
+  ylim(6, 8) +
+  theme(
+    axis.line = element_line(colour = "black"),
+    panel.grid.minor = element_blank(),
+    panel.border = element_blank(),
+    panel.background = element_blank()
+  )
+
+# Create percentage-based plot
+orderfinal <- subset(finalmelt, genes == max(finalmelt$genes))
+trial <- merge(orderfinal[, c("Sample", "value")], finalmelt, by = "Sample", suffixes = c(".total", ".current"))
+trial$percent <- (trial$value.current / trial$value.total) * 100
+trial$SampleColouring <- rep(SampleColouring, each = nrow(final))
+
+ggplot(data = trial, aes(x = genes, y = percent, group = Sample, color = SampleColouring)) +
+  geom_line() +
+  geom_hline(yintercept = 50, linetype = "dashed") +
+  scale_color_manual(values = custom_palette, name = "Cell Line") +
+  xlab("Number of Genes Covered") +
+  ylab("Number of Reads (%)") +
+  xlim(0, 20000) +
+  theme_bw() +
+  theme(
+    axis.line = element_line(colour = "black"),
+    panel.grid.minor = element_blank(),
+    panel.border = element_blank(),
+    panel.background = element_blank()
+  )
+```
+
+
+As we can see in these plots, in this case there are no sample outliers in terms of complexity or read depth. Excellent!
+
+# Differential Expression Analysis
+
+## Filtration
+
+### ***Before Filtration***
+
+Let us begin with the filtration. Personally, I find that its easier to do visually. I am aware that my filtration is more violent than most. Usually, from RNA-Seq experiments, we commonly obtain bi-modal distributions, with the first mode corresponding to lowly expressed genes. I remove these by cutting just before the second mode.
+
+```{r filtration, warning=FALSE}
+
+alternew <- log10(rowSums(read.counts))
+alternew <- as.data.frame(alternew)
+
+ggplot(alternew, aes(x=alternew)) + geom_density() + theme_bw() + geom_vline(xintercept = 4, linetype = "dashed") + ylab("Events") + xlab("Number of Reads (log10)") +
+  theme(axis.line = element_line(colour = "black"),
+        panel.grid.minor = element_blank(),
+        panel.border = element_blank(),
+        panel.background = element_blank()) + ggtitle("Density of Reads - All Samples")
+```
+
+
+### ***After Filtration***
+
+```{r filtration 2}
+#Here is my filtration itself.
+filterednew <- subset(read.counts, alternew>4)
+
+#After cutting, its a good idea to visualise again, to see if your filtration was sufficient.
+falternew <- log10(rowSums(filterednew))
+falternew <- as.data.frame(falternew)
+ggplot(falternew, aes(x=falternew)) + geom_density() + theme_bw() + ylab("Events") + xlab("Number of Reads (log10)") +
+  theme(axis.line = element_line(colour = "black"),
+        panel.grid.minor = element_blank(),
+        panel.border = element_blank(),
+        panel.background = element_blank())
+
+#lets save the genes which we maintain
+impgenes <- c(row.names(falternew))
+
+#Now we need to select only the rows which have those genes.
+finaltable <- read.counts[row.names(read.counts)%in%impgenes,]
+```
+
+
+## Matrices
+
+Good! Now we can proceed by designing our matrices. 
+
+```{r matrixes and normalization}
+#Let us prepare metadata to add to our samples
+metadata$Target <- gsub("^siMFN$", "siMFN2", metadata$Target)
+metadata$Target <- gsub("cNeg", "", metadata$Target)
+metadata$SampleName <- paste(metadata$Cell, metadata$Doxo, metadata$Target, sep = "_")
+
+
+
+#To be able to use Voom, we must first convert our read count table into a special DGE object.
+D0 <- DGEList(finaltable)
+
+#Then we calculate the normalization factors.
+#Bear in mind this step calculates the normalization factors, but does not normalize itself.
+D0 <- calcNormFactors(D0)
+
+
+#Now we do our matrix itself.
+#NOTE: This won't be our actual matrix we will use for differential expression, but for now it will serve as a placeholder.
+mm <- model.matrix(~0+SampleName, metadata)
+
+#and now we normalize. This step also turns our counts into log2-counts per million.
+y <- voom(D0, mm, plot = T)
+```
+The Mean-Variance Trend graph from voom also allows to determine if the filtration was appropriate. In this case, it was.
+
+## PCA
+
+I like to start with a Principal Component Analysis (PCA), which helps to identify what drives the largest variation in the data.
+
+```{r PCA}
+
+#In here, I am just defining some colours to use
+custom_palette <- qualitative_hcl(8, palette = "Pastel")
+custom_palette <- sample(custom_palette, 8)
+
+#This prepares my data for the PCA
+dfforpca <- y$E
+dfforpca <- t(dfforpca)
+dfforpca <- as.data.frame(dfforpca) # needs to be a data.frame
+dfforpca <- apply(dfforpca, 2, as.numeric) # Ensure numeric
+dfforpca <- as.data.frame(dfforpca) # still needs to be a data.frame
+
+# Add metadata, which we will then use to plot
+dfforpca$Target <- metadata$Target
+dfforpca$Doxo <- metadata$Doxo
+dfforpca$Cell <- metadata$Cell
+
+# PCA computation itself. I do one PCA for each variable I want to see.
+pca_res <- prcomp(dfforpca[, 1:(ncol(dfforpca)-3)], scale = FALSE)
+p_target <- autoplot(pca_res, data = dfforpca, x = 1, y = 2, colour = "Target", size = 8) +
+  theme_bw() +
+  scale_colour_manual(name = "Target", values = custom_palette) +
+  ggtitle("PCA - Coloured by Target") +
+  theme(plot.title = element_text(hjust = 0.5),
+        axis.line = element_line(colour = "black"),
+        panel.grid.minor = element_blank(),
+        panel.border = element_blank(),
+        panel.background = element_blank())
+
+p_doxo <- autoplot(pca_res, data = dfforpca, x = 1, y = 2, colour = "Doxo", size = 8) +
+  theme_bw() +
+  scale_colour_manual(name = "Doxo", values = custom_palette) +
+  ggtitle("PCA - Coloured by Doxo") +
+  theme(plot.title = element_text(hjust = 0.5),
+        axis.line = element_line(colour = "black"),
+        panel.grid.minor = element_blank(),
+        panel.border = element_blank(),
+        panel.background = element_blank())
+
+p_cell <- autoplot(pca_res, data = dfforpca, x = 1, y = 2, colour = "Cell", size = 8) +
+  theme_bw() +
+  scale_colour_manual(name = "Cell", values = custom_palette) +
+  ggtitle("PCA - Coloured by Cell") +
+  theme(plot.title = element_text(hjust = 0.5),
+        axis.line = element_line(colour = "black"),
+        panel.grid.minor = element_blank(),
+        panel.border = element_blank(),
+        panel.background = element_blank())
+
+p_target
+p_doxo
+p_cell
+
+
+#in case you want to see most important genes for PCA yourself
+contribs1 <- pca_res$rotation[,1]
+contribs2 <- pca_res$rotation[,2]
+
+#These are the biggest contributors to the PCA1 (right side)
+(pos1genes <- sort(contribs1, decreasing=T)[1:10])
+#These are the biggest contributors to the PCA1 (left side)
+(neg1genes <- sort(contribs1, decreasing=F)[1:10])
+
+#These are the biggest contributors to the PCA2 (up side)
+(pos2genes <- sort(contribs2, decreasing=T)[1:10])
+#These are the biggest contributors to the PCA2 (down side)
+(neg2genes <- sort(contribs2, decreasing=F)[1:10])
+
+```
+
+As one can observe from the PCAs, our PC1 is mostly explained by cell type, while our PC2 is explained by if the sample is proliferative or not. In fact, from the contributors, we can see that the main one from PC2, proliferation side, is MKI67, one of the most commonly used proliferation markers.
+
+Now, in my opinion, cell type is not really relevant in this case. Therefore, I will treat it as "batch-effect", and will remove it. This way, we can compare samples from different cells, as they were the same.
+
+## Batch Effect Correction
+
+```{r, warning=FALSE}
+#This is the code I used to correct batch effect. It is based on the one we used in Schneider et al. (2024), aka voyAGEr.
+batch_cols <- c("Cell") #We define which variable we want to treat as batch effects
+metadata_cols <- c("Doxo", "Target") #And those we dont want to treat as such
+#This creates a new matrix with all our variables of interest
+mmbatch <- model.matrix(reformulate(paste0("~0 + ",paste0( batch_cols,collapse = " + "))), data=metadata)
+mmkeep <- model.matrix(reformulate(paste0("~0 + ",paste0( metadata_cols,collapse =  "+" ))), data=metadata)
+mm <- cbind(mmkeep,mmbatch)
+#Now, we apply the new model
+D0 <- DGEList(2^y$E) #I use the normalised counts, but these must be "unloged". Hence the 2^
+D0 <- calcNormFactors(D0) 
+y <- voom(D0, mm, plot = F)
+fit <- lmFit(y, mm)
+
+#Basicly, we determine what coefficients are originated from our batch variable, and we remove those across the data
+beta <- fit$coefficients[,-(1:ncol(mmkeep)),drop=FALSE]
+beta[is.na(beta)] <- 0 #In the case of binary variables, one of them wont have "any effect" and will thus be NA. This corrects for that step.
+corrcounts_v1 <- as.matrix(y$E) - beta %*% t(mmbatch)
+offset <- apply(corrcounts_v1,1,min) - apply(y$E,1,min) #This gives the offset itself that needs to be applied
+corrcounts_v1 <- as.data.frame(corrcounts_v1-offset)
+corrcounts_v1 <- 2^corrcounts_v1 #I prefer to unlog them, to have a dataframe of non-log CPMs, in case I need.
+```
+
+## Batch Corrected PCA
+
+```{r}
+# Now we simply generate new log CPM expression values, starting from the correct expression values.
+y <- voom(corrcounts_v1, mm, plot = T)
+
+#This prepares my data for the PCA
+dfforpca <- y$E
+dfforpca <- t(dfforpca)
+dfforpca <- as.data.frame(dfforpca) # needs to be a data.frame
+dfforpca <- apply(dfforpca, 2, as.numeric) # Ensure numeric
+dfforpca <- as.data.frame(dfforpca) # still needs to be a data.frame
+
+# Add metadata, which we will then use to plot
+dfforpca$Target <- metadata$Target
+dfforpca$Doxo <- metadata$Doxo
+dfforpca$Cell <- metadata$Cell
+
+# PCA computation itself. I do one PCA for each variable I want to see.
+pca_res <- prcomp(dfforpca[, 1:(ncol(dfforpca)-3)], scale = FALSE)
+p_target <- autoplot(pca_res, data = dfforpca, x = 1, y = 2, colour = "Target", size = 8) +
+  theme_bw() +
+  scale_colour_manual(name = "Target", values = custom_palette) +
+  ggtitle("PCA - Coloured by Target") +
+  theme(plot.title = element_text(hjust = 0.5),
+        axis.line = element_line(colour = "black"),
+        panel.grid.minor = element_blank(),
+        panel.border = element_blank(),
+        panel.background = element_blank())
+
+p_doxo <- autoplot(pca_res, data = dfforpca, x = 1, y = 2, colour = "Doxo", size = 8) +
+  theme_bw() +
+  scale_colour_manual(name = "Doxo", values = custom_palette) +
+  ggtitle("PCA - Coloured by Doxo") +
+  theme(plot.title = element_text(hjust = 0.5),
+        axis.line = element_line(colour = "black"),
+        panel.grid.minor = element_blank(),
+        panel.border = element_blank(),
+        panel.background = element_blank())
+
+p_cell <- autoplot(pca_res, data = dfforpca, x = 1, y = 2, colour = "Cell", size = 8) +
+  theme_bw() +
+  scale_colour_manual(name = "Cell", values = custom_palette) +
+  ggtitle("PCA - Coloured by Cell") +
+  theme(plot.title = element_text(hjust = 0.5),
+        axis.line = element_line(colour = "black"),
+        panel.grid.minor = element_blank(),
+        panel.border = element_blank(),
+        panel.background = element_blank())
+
+p_target
+p_doxo
+p_cell
+
+
+#in case you want to see most important genes for PCA yourself
+contribs1 <- pca_res$rotation[,1]
+contribs2 <- pca_res$rotation[,2]
+
+#These are the biggest contributors to the PCA1 (right side)
+(pos1genes <- sort(contribs1, decreasing=T)[1:10])
+#These are the biggest contributors to the PCA1 (left side)
+(neg1genes <- sort(contribs1, decreasing=F)[1:10])
+
+#These are the biggest contributors to the PCA2 (up side)
+(pos2genes <- sort(contribs2, decreasing=T)[1:10])
+#These are the biggest contributors to the PCA2 (down side)
+(neg2genes <- sort(contribs2, decreasing=F)[1:10])
+
+```
+After batch correction, as one can observe from the PCAs, our PC1 NO LONGER  mostly explained by cell type, instead being explained by samples being proliferative or not. In fact, from the contributors, we can see that one of main ones from PC1, proliferation side, is MKI67, one of the most commonly used proliferation markers.
+
+## Normalisation
+
+Now, we are almost ready to move on to the differential gene expression analysis. I will first check to see if any issues arose during the normalisation process, by looking at samples before and after this process.
+
+```{r normalisation, fig.height=4, fig.width=8}
+
+dfforboxy <- finaltable
+
+orderforplots <- metadata$Target
+colouring <- data.frame(Sample=colnames(dfforboxy), Types=orderforplots)
+dfforboxy <- reshape2::melt(dfforboxy)
+colnames(dfforboxy) <- c("Sample", "Expression")
+dfforboxy <- merge(dfforboxy, colouring, by="Sample")
+prenorm <- ggplot(dfforboxy, aes(x=Sample, y=(log2(Expression+1)), fill=Types)) + geom_boxplot(alpha=0.6) + theme_bw() + ylab("Read Counts (Log2)") + xlab("Samples") + scale_fill_manual(name = "Sample Type", values = custom_palette, labels=unique(orderforplots), breaks =unique(orderforplots)) +
+  theme(axis.line = element_line(colour = "black"),
+        panel.grid.minor = element_blank(),
+        panel.border = element_blank(),
+        panel.background = element_blank(),
+        axis.text.x=element_blank(),
+        axis.ticks.x=element_blank(),
+        legend.position = "None") + ggtitle("Prior to Normalisation")
+
+dfforboxy <- y$E
+dfforboxy <- reshape2::melt(dfforboxy)
+dfforboxy <- dfforboxy[,-1]
+colnames(dfforboxy) <- c("Sample", "Expression")
+dfforboxy <- merge(dfforboxy, colouring, by="Sample")
+postnorm <- ggplot(dfforboxy, aes(x=Sample, y=Expression, fill=Types)) + geom_boxplot(alpha=0.6) + theme_bw() + ylab("Read Counts (Log2CPM)") + xlab("Samples") + scale_fill_manual(name = "Sample Type", values = custom_palette, labels=unique(orderforplots), breaks =unique(orderforplots)) +
+  theme(axis.line = element_line(colour = "black"),
+        panel.grid.minor = element_blank(),
+        panel.border = element_blank(),
+        panel.background = element_blank(),
+        axis.text.x=element_blank(),
+        axis.ticks.x=element_blank(),
+        legend.position = "None") + ggtitle("After Normalisation")
+
+ggarrange(prenorm, postnorm, nrow=1)
+
+```
+
+In this case, from the boxplots, we can see that there no samples which can be considered outliers.
+
+## Linear Models
+
+Finally, we move on to differential gene expression! In this chunk, I define the linear model I will actually use for my analyses. 
+
+```{r Linear Models}
+
+#Here, I define the variables I am interested in. In this case, I am interested in the target variable, as I want to see the effect of inhibiting both mitofusins. However, I must also supply the effect of being treated with Doxo, or both would be confounded with each other.
+mm <- model.matrix(~0+Doxo+Target,metadata) #The 0~ means I am not considering any sample as the baseline. If I had a ~1, it would consider that my Doxo samples are the baseline. In the end, this ends up being a bit of personal preference. I find that its easier to interpret if no samples are baselines.
+
+# Don't forget, use corrected counts here
+y <- voom(corrcounts_v1, mm, plot = T)
+
+#We now fit the linear model to our expression
+fitted <- lmFit(y,mm)
+
+#To check our coefficients
+head(coef(fitted))
+
+#Correction for multiple testing. This is very important, as with so many tests, a ton of transcripts will otherwise achieve very low p-values, simply by random chance.
+tmp <- eBayes(fitted)
+```
+
+# Results
+
+Lets move on to the main analyses.
+
+```{r midstep}
+#This is where we extract the "differential expression" related to our different coefficients. This is by coefficient/column number. Since I am interested in the effect of MFN1/MFN2 inhibition, this corresponds to column 8.
+top <- topTable(tmp,8, sort.by = "logFC", n=Inf)
+
+DEGenes <- top
+```
+
+
+## Volcano Plot 
+
+Now, we simply see all of this on a volcano plot. Personally, I prefer my significance to be given by B-statistic, since adjusted p-values easily saturate at values closer to 0. As B-statistic is an "infinite" scale, this doesn't occur.
+
+```{r bulk vs sg, results='hide', warning=FALSE, message=FALSE}
+
+ndegs <- 20 #How many genes I want to be labelled
+
+#This defines which genes are most differentially expressed. In this case, I considered that only downregulated genes upon MFN inhibition were important.
+
+upmarkers <- as.data.frame(DEGenes[DEGenes$logFC>2 & DEGenes$B>15,] )
+downmarkers <- as.data.frame(DEGenes[DEGenes$logFC< -1 & DEGenes$B>10,] )
+
+#The plot itself
+ggplot(data=DEGenes,
+                 aes(x=logFC,
+                     y=  B)) +
+  geom_point(color="#DDDDDD")+
+  theme_bw() +
+  theme(axis.line = element_line(colour = "black"),
+        panel.grid.minor = element_blank(),
+        panel.border = element_blank(),
+        panel.background = element_blank()) +
+  ggtitle("MFN1/2 Inhibition")+
+  theme(plot.title = element_text(hjust = 0.5)) +
+  geom_label_repel(upmarkers[1:ndegs,] , mapping=aes(label=row.names(upmarkers)[1:ndegs]),size=3,point.padding=-0.5, color="#de425b",max.overlaps = 200)+
+  geom_label_repel(downmarkers[1:ndegs,] , mapping=aes(label=row.names(downmarkers)[1:ndegs]),size=4,point.padding=-0.5, color="#769fca",max.overlaps = 200, fontface="italic")+
+  geom_point(data=upmarkers, aes(x=logFC, y=  B), color="#de425b")+
+  geom_point(data=downmarkers, aes(x=logFC, y=  B), color="#769fca", size=3) + xlab(expression(Log[2] ~ Fold ~ Change)) + ylab("B-Statistic") + theme(text=element_text(family = "Arial", size = 20))
+
+#In here, I same this differential expression table, for use in other analyses and graphs, outside of this markdown.
+write.table(x = DEGenes,
+          file = "~/Projects/StressGranules/SGPAPER/siMFNboth.txt", sep="\t", col.names = TRUE, row.names = TRUE, quote=FALSE)
+
+
+```
+
+From the volcano, as expected, we see a downregulation of MFN1 and MFN2, which does make sense, considering they are literally being inhibited in this experiment. Besides those, most downregulated genes are actually mitochondrially encoded. Now, if I had a nickel for every time some of the most differentially expressed transcripts in one of my analyses were mitochondrial transcripts, I would have two nickels, which isn't a lot, but it is weird it happened twice.
+
+## GSEA Enrichment
+
+Now that we have our genes of interest, it would also be interesting to see what are the **altered gene sets** between upregulated and downregulated transcripts from the above comparison. Therefore, lets perform a *Gene Set Enrichment Analysis*
+
+```{r win gsea, fig.height=20, fig.width=30, results=FALSE}
+
+DEGenes <- DEGenes[order(DEGenes[,3]),] #we order by t-statistic. I find that the t-stat is a good middle ground between significance and effect-size.
+
+#We create a temporary mini data frame, with only the information we need
+gseatool <- DEGenes[,3]
+gseatool <- as.data.frame(gseatool)
+colnames(gseatool)[1] <- "t" 
+gseatool[,2] <- row.names(DEGenes)
+colnames(gseatool)[2] <- "Symbol" 
+gseatool <- gseatool[,c(2,1)]
+
+#We transform that mini data frame into a vector
+vectorranks <- gseatool$t
+names(vectorranks) <- gseatool$Symbol
+
+
+#to load our gene sets. In this case I am loading the hallmark gene sets, from human. While it is true that many other gene sets exist, such as the famout KEGG and REACTOME, I really like the hallmark gene sets, as they were developed to reduce reduncancy between gene sets. 
+hallmarks.gs <- msigdbr(species = "Homo sapiens", collection = "H")
+
+#The "gs" object above is very dense, so we will start by treating that table.This merges all genes by pathway. 
+hallmarks.gsets <- hallmarks.gs %>% split(x = .$gene_symbol, f = .$gs_name)
+for (set in names(hallmarks.gsets)){
+  hallmarks.gsets[[set]] <- toupper(hallmarks.gsets[[set]])
+}
+
+# This part does the GSEA itself. Take note that we use our vector that we defined in the beggining of this chunk
+hallmarks.res <- fgsea(pathways = hallmarks.gsets, 
+                       stats = vectorranks)
+
+#This part is to simplify the GSEA table
+hallmarks.res.tidy <- hallmarks.res %>%
+  as_tibble() %>%
+  arrange(desc(NES))
+
+hallmarks.res.tidy %>% 
+  dplyr::select(-leadingEdge, -ES) %>% 
+  arrange(padj)
+
+#to define our adjusted p-value threshold. Only genesets with lower p-value than this will be plotted.
+thresh <- 0.05
+data_to_plot <- hallmarks.res.tidy %>% filter(padj < thresh)
+
+
+#In here, I create a variable "status", which can be up or downregulated. It is here to simply facilitate the colouring of the plot.
+statvec <- c()
+for (i in 1:nrow(data_to_plot)){
+  if (data_to_plot[i,6] > 0){
+    status <- "Upregulated"
+  }
+ else {
+   status <- "Downregulated"
+ }   
+statvec <- c(statvec, status)
+}
+data_to_plot$Status <- statvec
+
+
+#Now we simply plot
+##-----HALMARK-----
+(gsea_plot_hall <- ggplot(data_to_plot, aes(reorder(pathway, NES), NES)) +
+  geom_col(aes(fill= Status), alpha=0.75) + scale_fill_manual(values = c("#53A2BE","#BA3B46"), name = "Regulation Status", labels = c("Downregulated", "Upregulated"), breaks = c("Downregulated", "Upregulated")) +
+  coord_flip() +
+  labs(x="Pathway", y="Normalised Enrichment Score (NES)",
+       title= "Hallmark Gene Sets",
+       caption = paste0("p-value < ", thresh)) + theme(plot.title = element_text(hjust = 1)) +
+  theme_bw() + theme(text=element_text(family = "Arial", 20)) + theme(legend.position = "none"))
+
+```
+
+And from the GSEA, we can see a substantial down-regulation of gene sets related to inflammation, which is also what happens in cells with stress granules. Very interesting indeed. Could they be related? 
+
+# Session Info
+
+```{r}
+sessionInfo()
+```
+
