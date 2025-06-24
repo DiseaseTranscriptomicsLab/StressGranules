@@ -1,0 +1,1673 @@
+---
+title: "Analyses of GSE265963"
+subtitle: "Transcriptome-wide mRNA condensation precedes stress granule formation and excludes stress-induced transcripts"
+author: 
+  - name: "Alexandre Kaizeler^[Disease Transcriptomics Group, Gulbenkian Institute of Molecular Medicine]"
+    email: alexandreafonso@gimm.pt
+date: "`r format(Sys.time(), '%d %B %Y')`"
+output: 
+  rmdformats::downcute:
+    downcute_theme: "chaos"
+---
+
+# Introduction
+
+In this document, I present all analyses pertaining to the dataset **GSE265963**  
+([NCBI GEO Link](https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=GSE265963)),  
+originally published by **H. Glauninger, 2024**.
+
+## Libraries
+
+```{r, message=FALSE}
+# These are all the libraries I used throughout the analysis. Not all of them will be required on this guidebook
+library(Rsubread)
+library(limma)
+library(edgeR)
+library(DESeq2)
+library(magrittr)
+library(ggrepel)
+library(tidyverse)
+library(vsn)
+library(ggplot2)
+library(NMF)
+library(biomaRt)
+library(ggpubr)
+library(factoextra)
+library(ggfortify)
+library(plotly)
+library(reshape2)
+library(fgsea)
+library(msigdbr)
+library(data.table)
+library(colorspace)
+library(readxl)
+
+set.seed(1906)
+```
+
+# Data for Centrifugation Simulation
+
+In this part I load up the table from SedSeq which I then used to model my own SpinSim pipeline. As SedSeq is empirically determined in an experimental setting, this way I can sharpen SpinSim to better reflect reality. In this case, by having the pSup, I can reverse engineer the approximate Sedimentation Coefficient from every "RNA Transcript".
+
+```{r}
+#This file can be obtained from the GEO repository. See Introduction for this link.
+OGTable <- fread("../Projects/StressGranules/SG_Transcriptome/Sed-Seq/GSE265963_sedseq_out.tsv")[,c(2,1,4)]
+Samples <- unique(OGTable$Lysate_sample)
+
+OGTable <- dcast(OGTable, ORF ~ Lysate_sample, value.var = "pSup")
+
+
+#Loading up our biomart file, obtained from Ensembl, where we have the equivalence between Ensembl IDs and gene names
+biomart <- fread("~/YeastNames.txt")
+
+colnames(OGTable)[1] <- "ensembl_gene_id"
+colnames(biomart) <- c("ensembl_gene_id", "external_gene_name")
+
+
+eltable <- merge(OGTable,biomart,by = "ensembl_gene_id", all= TRUE) #this creates a table with both ensemble ids and HGNC codes.
+
+eltable <- subset(eltable, external_gene_name!="") #this removes reads that dont have a corresponding hgnc symbol.
+
+eltable$ensembl_gene_id <- NULL # We no longer need this column
+
+pSUPtable <- eltable %>%
+  group_by(external_gene_name) %>%
+  summarise(across(everything(), sum, na.rm = TRUE))
+
+pSUPtable <- as.data.frame(pSUPtable)
+
+HSStress <- c("external_gene_name","L9","L13")
+Azide0.5 <- c("external_gene_name","L82","L84")
+Ethanol <- c("external_gene_name","L43","L46")
+Control <- c("external_gene_name","L7","L11")
+
+#This way, I separate samples by stress type
+HSStress <- pSUPtable[,HSStress]
+Azide0.5 <- pSUPtable[,Azide0.5]
+Ethanol <- pSUPtable[,Ethanol]
+Control <- pSUPtable[,Control]
+
+#Now, I save these data frames so that I have the pSUP from different stress types, and different samples.
+write.table(HSStress, "../Projects/StressGranules/Simulator/New/SEDSEQ_S/HSStress.txt", row.names = F, col.names = F)
+write.table(Azide0.5, "../Projects/StressGranules/Simulator/New/SEDSEQ_S/Azide0.5.txt", row.names = F, col.names = F)
+write.table(Ethanol, "../Projects/StressGranules/Simulator/New/SEDSEQ_S/Ethanol.txt", row.names = F, col.names = F)
+write.table(Control, "../Projects/StressGranules/Simulator/New/SEDSEQ_S/Control.txt", row.names = F, col.names = F)
+#Afterwards, I simply calculate the average S of each RNA transcripts, in these different conditions. For the exact formula used, please refer to the publication itself, to the Methods section.
+
+#In here, I simply upload the resulting files from this reverse engineering. Obviously, they are provided on the repository for ease of access.
+SAzide <- fread("../Projects/StressGranules/Simulator/New/SEDSEQ_S/Azide0.5_processed.txt")
+SHS <- fread("../Projects/StressGranules/Simulator/New/SEDSEQ_S/HSStress_processed.txt")
+SEthanol <- fread("../Projects/StressGranules/Simulator/New/SEDSEQ_S/Ethanol_processed.txt")
+SControl <- fread("../Projects/StressGranules/Simulator/New/SEDSEQ_S/Control_processed.txt")
+
+
+
+
+
+```
+
+
+# Data for Standard Analyses
+
+Even though the process is the same, I opted to keep the sections separate, even if it ends up being a bit repetitive. 
+
+```{r}
+#This file can be obtained from the GEO repository. See Introduction for this link.
+#In this case to facilitate comprehension, I separate the table in two parts.
+unformatedTable <- fread("../Projects/StressGranules/SG_Transcriptome/Sed-Seq/GSE265963_sedseq_out.tsv")[,c(1,2,10:12)]
+metaTable <- fread("../Projects/StressGranules/SG_Transcriptome/Sed-Seq/GSE265963_sedseq_out.tsv")[,c(1,17:19,21:23)]
+
+#These are simply some formatting fixes. We only needed one metadata row per Lysate sample, so we are taking care of that.
+metaTable <- metaTable[!duplicated(metaTable$Lysate_sample), ]
+#Now, we ended up with only one row. However, we will need 3 of them, because we have reads from total sample, reads from the supernatant, and reads from pellet. Hence, we can simply repeat each row as much as needed.
+metaTable <- metaTable[rep(1:nrow(metaTable), each = 3), ]
+metaTable$Type <- rep(c("Total", "Supernatant", "Pellet"), length.out = nrow(metaTable))
+
+
+
+#Personally, I opted to format the original table in order to resemble a standard RNA-Seq table, with the first collumn being gene names, and each subsequent column a sample, and with the rows being genes and their respective counts in each sample.
+Samples <- unique(unformatedTable$Lysate_sample)
+
+organiser <- function(table, sample_name){
+  sample_table <- subset(table, Lysate_sample == sample_name)
+  
+  # Create column names
+  col_total <- paste0("Total_", sample_name)
+  col_supernatant <- paste0("Supernatant_", sample_name)
+  col_pellet <- paste0("Pellet_", sample_name)
+  
+  # Construct the data frame with the new column names
+  newsample_table <- data.frame(
+    Gene = sample_table[,"ORF"],
+    Total = sample_table[,3],
+    Supernatant = sample_table[,4],
+    Pellet = sample_table[,5]
+  )
+  
+  # Rename the columns
+  colnames(newsample_table)[2:4] <- c(col_total, col_supernatant, col_pellet)
+  
+  return(newsample_table)
+}
+
+df_list <- list()
+
+# Iterate over unique sample names and apply the organiser function
+for (sample_name in Samples) {
+  df_list[[sample_name]] <- organiser(unformatedTable, sample_name)
+}
+
+# Merge all dataframes in the list by "Gene" column
+merged_df <- Reduce(function(x, y) merge(x, y, by = "ORF", all = TRUE), df_list)
+raw.read.counts <- merged_df
+
+
+
+#After this process, the table is now formated.
+
+#Loading up our biomart file, obtained from Ensembl, where we have the equivalence between Ensembl IDs and gene names
+biomart <- fread("~/YeastNames.txt")
+
+colnames(raw.read.counts)[1] <- "ensembl_gene_id"
+colnames(biomart) <- c("ensembl_gene_id", "external_gene_name")
+
+
+eltable <- merge(raw.read.counts,biomart,by = "ensembl_gene_id", all= TRUE) #this creates a table with both ensemble ids and HGNC codes.
+
+eltable <- subset(eltable, external_gene_name!="") #this removes gene that dont have a corresponding gene name
+
+eltable$ensembl_gene_id <- NULL # We no longer need this column
+
+read.counts <- eltable %>%
+  group_by(external_gene_name) %>%
+  summarise(across(everything(), sum, na.rm = TRUE))
+
+read.counts <- as.data.frame(read.counts)
+
+row.names(read.counts) <- read.counts$external_gene_name #changes rownames into gene names
+read.counts$external_gene_name <- NULL
+
+merged_df <- read.counts
+
+```
+
+
+## Extra Quality Control
+
+Let's check for sample complexity. It is possible that one or more samples have different complexity. In specific, I am going to check if enough reads have been obtained from every sample. If not, we should have a great bias to housekeeping genes. Another way to put it, is to say that even with all reads, we won't obtain a great deal of different genes.
+
+```{r, warning=FALSE, message=FALSE, results='hide'}
+final <- c()
+#create new dataset that contains cumulative reads
+for (i in 1:ncol(merged_df)){
+  temporary <- merged_df[order(merged_df[,i],decreasing = TRUE),]
+  database <- cumsum(temporary[,i])
+  final <- cbind(final, database)
+}
+
+
+final <- as.data.frame(final)
+colnames(final) <- c(1:ncol(final))
+#this is the plot
+finalmelt <- reshape2::melt(final)
+finalmelt <- cbind(finalmelt,rep(x=c(1:nrow(final)),length(unique(finalmelt$variable))))
+colnames(finalmelt)[3] <- "genes"
+ggplot(data = finalmelt, aes(x=genes, y=log10(value), group=variable, color=variable)) + geom_line() +
+  theme_bw() +theme(legend.position="none") + xlab("Number of Genes Covered") + ylab("Number of Reads (log10)") + xlim(0, 5500) + 
+  theme(axis.line = element_line(colour = "black"),
+        panel.grid.minor = element_blank(),
+        panel.border = element_blank(),
+        panel.background = element_blank())+ scale_colour_manual(name = "Sample Number", values = rep(c("red", "blue", "green"),77))
+#head(finalmelt)
+
+orderfinal <- subset(finalmelt, genes == max(finalmelt$genes))
+#as percentage
+trial <- merge(orderfinal, finalmelt, by = "variable", all=TRUE)
+trial <- trial[,-3]
+trial[,5] <- (trial$value.y / trial$value.x)
+trial[,5] <- trial[,5] * 100
+trial <- trial[,-c(2,3)]
+colnames(trial)[2:3] <- c("genes", "value")
+
+ggplot(data = trial, aes(x=genes, y=value, group=variable, color=variable)) + geom_line() +
+  theme_bw() +theme(legend.position="none") + geom_hline(yintercept = 50, linetype="dashed") + xlim(0, 5500) + xlab("Number of Genes Covered") + ylab("Number of Reads (%)")+ 
+  theme(axis.line = element_line(colour = "black"),
+        panel.grid.minor = element_blank(),
+        panel.border = element_blank(),
+        panel.background = element_blank())+ scale_colour_manual(name = "Sample Number", values = rep(c("red", "blue", "green"),77))
+```
+
+As we can see in these plots, in this case there are no sample outliers in terms of of read depth. Generally, pellet samples (in green), appear to be more complex than their total or supernatant counterparts. Curiously, the same trend was visible on SG samples purified by differential centrifugation. Either way, there does not seem to be any obvious trio of sample outliers. Excellent!
+
+
+# Differential Expression Analysis
+
+## Filtration
+
+### ***Before Filtration***
+
+Let us begin with the filtration. Personally, I find that its easier to do visually. I am aware that my filtration is more violent than most. While usually from RNA-Seq experiments we commonly obtain bimodal distributions, this is not the case. In this experiment there is just one mode. I therefore remove what I consider lowly expressed genes by clipping the beggining of the distribution.
+
+```{r, warning=FALSE}
+alternew <- log10(rowSums(merged_df))
+alternew <- as.data.frame(alternew)
+
+ggplot(alternew, aes(x=alternew)) + geom_density() + theme_bw() + geom_vline(xintercept = 4.25, linetype = "dashed") + ylab("Events") + xlab("Number of Reads (log10)") +
+  theme(axis.line = element_line(colour = "black"),
+        panel.grid.minor = element_blank(),
+        panel.border = element_blank(),
+        panel.background = element_blank()) + ggtitle("Density of Reads - All Samples")
+```
+
+### ***After Filtration***
+
+```{r}
+filterednew <- subset(merged_df, alternew>0)
+
+#after cutting, its a good idea to visualize again
+falternew <- log10(rowSums(filterednew))
+falternew <- as.data.frame(falternew)
+ggplot(falternew, aes(x=falternew)) + geom_density() + theme_bw() + ylab("Events") + xlab("Number of Reads (log10)") +
+  theme(axis.line = element_line(colour = "black"),
+        panel.grid.minor = element_blank(),
+        panel.border = element_blank(),
+        panel.background = element_blank())
+
+#lets save the genes which we maintain
+impgenes <- c(row.names(falternew))
+
+
+#Now we need to select only the rows which have those genes.
+finaltable <- merged_df[row.names(merged_df)%in%impgenes,]
+```
+## Data Curation
+
+For simplicity sake, I chose to curate the metadata table as such. My rationale at the time of this analyes, was that even without any isolation protocol for the SGs, we would perhaps be able to still observe their signal. As such, I "stratified samples into those that had, those that had not, and those whose SG presence was ambiguous.
+
+```{r}
+metaTable$Simple <- c(1:nrow(metaTable))
+
+#Temperature
+metaTable <- metaTable %>%
+  mutate(Simple = case_when(
+    Treatment_group == "EW_TSPP" & Temperature == "30C" ~ "Control",
+    Treatment_group == "EW_TSPP" & Temperature == "42C" ~ "MildHS",
+    Treatment_group == "EW_TSPP" & Temperature == "46C" ~ "HardHS",
+    TRUE ~ as.character(Simple)  # Ensure all outputs are character
+  ))
+#Cyclohex
+metaTable <- metaTable %>%
+  mutate(Simple = case_when(
+    Treatment_group == "CHX" & Treatment == "mock" & Temperature == "30C" ~ "Control",
+    Treatment_group == "CHX" & Treatment == "mock" & Temperature == "46C" ~ "HardHS",
+    Treatment_group == "CHX" & Treatment == "mock" & Temperature == "42C" ~ "MildHS",
+    Treatment_group == "CHX" & Treatment == "CHX" & Temperature == "30C" ~ "CHXControl",
+    Treatment_group == "CHX" & Treatment == "CHX" & Temperature == "46C" ~ "CHXHardHS",
+    Treatment_group == "CHX" & Treatment == "CHX" & Temperature == "42C" ~ "CHXMildHS",
+    TRUE ~ Simple
+  ))
+#Hyperosmosis (alcohol)
+metaTable <- metaTable %>%
+  mutate(Simple = case_when(
+    Treatment_group == "HyperOsmotic_EtOH" & Treatment == "mock" ~ "Control",
+    Treatment_group == "HyperOsmotic_EtOH" & Treatment == "EtOH_15%" ~ "EtOH_15",
+    Treatment_group == "milderEtOH1" & Treatment == "mock" ~ "Control",
+    Treatment_group == "milderEtOH1" & Treatment == "EtOH_5%" ~ "EtOH_5",
+    Treatment_group == "milderEtOH1" & Treatment == "EtOH_10%" ~ "EtOH_10",
+    Treatment_group == "milderEtOH2" & Treatment == "mock" ~ "Control",
+    Treatment_group == "milderEtOH2" & Treatment == "EtOH_7.5%" ~ "EtOH_7.5",
+    TRUE ~ Simple
+  ))
+#UPR
+metaTable <- metaTable %>%
+  mutate(Simple = case_when(
+    Treatment_group == "uprInduction" & Treatment == "mock" ~ "Control",
+    Treatment_group == "uprInduction" & Treatment == "DTT_10mM" ~ "DTT_10mM",
+    TRUE ~ Simple
+  ))
+#eIF4E Depletion
+metaTable <- metaTable %>%
+  mutate(Simple = case_when(
+    Treatment_group == "eIF4E_deplete" & Treatment == "mock" & Temperature == "30C" ~ "Control",
+    Treatment_group == "eIF4E_deplete" & Treatment == "mock" & Temperature == "46C" ~ "HardHS",
+    Treatment_group == "eIF4E_deplete" & Treatment == "mock" & Temperature == "42C" ~ "MildHS",
+    Treatment_group == "eIF4E_deplete" & Treatment == "eIF4E_deplete" & Temperature == "30C" ~ "eIF4EControl",
+    Treatment_group == "eIF4E_deplete" & Treatment == "eIF4E_deplete" & Temperature == "46C" ~ "eIF4EHardHS",
+    Treatment_group == "eIF4E_deplete" & Treatment == "eIF4E_deplete" & Temperature == "42C" ~ "eIF4EMildHS",
+    TRUE ~ Simple
+  ))
+#eIF3B
+metaTable <- metaTable %>%
+  mutate(Simple = case_when(
+    Treatment_group == "eIF3b_deplete" & Treatment == "mock" & Temperature == "30C" ~ "Control",
+    Treatment_group == "eIF3b_deplete" & Treatment == "mock" & Temperature == "46C" ~ "HardHS",
+    Treatment_group == "eIF3b_deplete" & Treatment == "mock" & Temperature == "42C" ~ "MildHS",
+    Treatment_group == "eIF3b_deplete" & Treatment == "eIF3b_deplete" & Temperature == "30C" ~ "eIF3bControl",
+    Treatment_group == "eIF3b_deplete" & Treatment == "eIF3b_deplete" & Temperature == "46C" ~ "eIF3bHardHS",
+    Treatment_group == "eIF3b_deplete" & Treatment == "eIF3b_deplete" & Temperature == "42C" ~ "eIF3bMildHS",
+    TRUE ~ Simple
+  ))
+#Azide
+metaTable <- metaTable %>%
+  mutate(Simple = case_when(
+    Treatment_group == "Azide_0.5%_pH6.8" & Treatment == "mock" ~ "Control",
+    Treatment_group == "Azide_0.5%_pH6.8" & Treatment == "Azide_0.5%_pH6.8" ~ "Azide0.5",
+    Treatment_group == "azide3" & Treatment == "mock" ~ "Control",
+    Treatment_group == "azide3" & Treatment == "Azide_0.8%_pH6.8" ~ "Azide0.8",
+    TRUE ~ Simple
+  ))
+#Hairpin
+metaTable <- metaTable %>%
+  mutate(Simple = case_when(
+    Treatment_group == "hairpinReporters" ~ "Hairpin",
+    TRUE ~ Simple
+  ))
+#SpikeIn
+metaTable <- metaTable %>%
+  mutate(Simple = case_when(
+    Treatment_group == "spombe_spikeIn" & Temperature == "30C" ~ "SpikeInControl",
+    Treatment_group == "spombe_spikeIn" & Temperature == "46C" ~ "SpikeInHardHS",
+    TRUE ~ Simple
+  ))
+```
+
+
+## Matrices
+
+Good! Now after all these steps, we can proceed by designing our matrices. 
+
+```{r}
+#My "finaltable" is my object with filtered reads. First, I transform it into a DGEList object.
+D0 <- DGEList(finaltable)
+
+
+#Then we calculate the normalisation factors for these expression tables.
+#Bear in mind this step calculates the normalisation factors, but does not normalise itself.
+D0 <- calcNormFactors(D0)
+
+#Now we do the matrixes
+metaTable[is.na(metaTable)] <- 0
+
+#In this case, this study/dataset is extremely rich and complex (which is good!), and therefore I had to use several variables. These were the ones I considered relevant for this. Notice how the "biological stress" effect comes from the "Simple" column I previously defined
+mm <- model.matrix(~0+Strain+Biorep+Type+Simple,metaTable)
+
+
+
+#and now we normalise. This step also turns our counts into log2-counts per million.
+y <- voom(D0, mm, plot = T)
+```
+
+The Mean-Variance Trend graph from voom also allows to determine if the filtration was appropriate. In this case, it was.
+
+
+## Normalisation
+
+For normalisation I convert the read counts into log2CPMs. I will first check to see if any issues arose during this process, by looking at samples before and after this process.
+
+```{r fig.height=10, fig.width=30}
+
+custom_palette <- qualitative_hcl(12, palette = "Pastel")
+dfforboxy <- merged_df
+orderforplots <- metaTable$Treatment_group
+colouring <- data.frame(Sample=colnames(dfforboxy), Types=orderforplots)
+dfforboxy <- reshape2::melt(dfforboxy)
+colnames(dfforboxy) <- c("Sample", "Expression")
+dfforboxy <- merge(dfforboxy, colouring, by="Sample")
+# Convert 'Types' to factor with custom order
+dfforboxy$Types <- factor(dfforboxy$Types, levels = unique(metaTable$Treatment_group))
+
+prenorm <- ggplot(dfforboxy, aes(x=Sample, y=(log2(Expression+1)), fill=Types)) + geom_boxplot(alpha=0.6) + theme_bw() + ylab("Read Counts (Log2)") + xlab("Samples") + scale_fill_manual(name = "Sample Type", values = custom_palette, labels=c(unique(orderforplots))) +
+  theme(axis.line = element_line(colour = "black"),
+        panel.grid.minor = element_blank(),
+        panel.border = element_blank(),
+        panel.background = element_blank(),
+        axis.text.x=element_blank(),
+        axis.ticks.x=element_blank(),
+        legend.position = "None") + ggtitle("Prior to Normalization")
+
+#Using the Standard Matrix
+
+dfforboxy <- y$E
+dfforboxy <- reshape2::melt(dfforboxy)
+dfforboxy <- dfforboxy[,-1]
+colnames(dfforboxy) <- c("Sample", "Expression")
+dfforboxy <- merge(dfforboxy, colouring, by="Sample")
+# Convert 'Types' to factor with custom order
+dfforboxy$Types <- factor(dfforboxy$Types, levels = unique(metaTable$Treatment_group))
+postnorm <- ggplot(dfforboxy, aes(x=Sample, y=Expression, fill=Types)) + geom_boxplot(alpha=0.6) + theme_bw() + ylab("Read Counts (Log2CPM)") + xlab("Samples") + scale_fill_manual(name = "Sample Type", values = custom_palette, labels=c(unique(orderforplots))) +
+  theme(axis.line = element_line(colour = "black"),
+        panel.grid.minor = element_blank(),
+        panel.border = element_blank(),
+        panel.background = element_blank(),
+        axis.text.x=element_blank(),
+        axis.ticks.x=element_blank(),
+        legend.position = "None") + ggtitle("After Normalization")
+
+ggarrange(prenorm, postnorm, nrow=1)
+
+```
+In this case, from the boxplots, even though they aren't perfect, we do not any obvious outliers. 
+
+## PCA
+
+I like to start with a Principal Component Analysis (PCA), which helps to identify what drives the largest variation in the data.
+
+```{r}
+# Create a custom palette
+custom_palette <- qualitative_hcl(22, palette = "Pastel")
+custom_palette <- sample(custom_palette, 22, FALSE)
+
+# Prepare PCA data
+dfforpca <- y$E
+dfforpca <- t(dfforpca)
+dfforpca <- as.data.frame(dfforpca)
+dfforpca <- apply(dfforpca, 2, as.numeric)  # Ensure numeric
+dfforpca <- as.data.frame(dfforpca)
+
+# Add metaTable columns
+dfforpca$Strain <- metaTable$Strain
+dfforpca$Type <- metaTable$Type
+dfforpca$Simple <- metaTable$Simple
+
+# PCA computation
+pca_res <- prcomp(dfforpca[, 1:(ncol(dfforpca)-3)], scale = FALSE)
+
+# PCA plot for Strain
+p_strain <- autoplot(pca_res, data = dfforpca, x = 1, y = 2, colour = "Strain", size = 8) +
+  theme_bw() +
+  scale_colour_manual(name = "Strain", values = custom_palette) +
+  ggtitle("PCA - Coloured by Strain") +
+  theme(plot.title = element_text(hjust = 0.5),
+        axis.line = element_line(colour = "black"),
+        panel.grid.minor = element_blank(),
+        panel.border = element_blank(),
+        panel.background = element_blank())
+
+# PCA plot for Type
+p_type <- autoplot(pca_res, data = dfforpca, x = 1, y = 2, colour = "Type", size = 8) +
+  theme_bw() +
+  scale_colour_manual(name = "Type", values = custom_palette) +
+  ggtitle("PCA - Coloured by Type") +
+  theme(plot.title = element_text(hjust = 0.5),
+        axis.line = element_line(colour = "black"),
+        panel.grid.minor = element_blank(),
+        panel.border = element_blank(),
+        panel.background = element_blank())
+
+# PCA plot for Simple
+p_simple <- autoplot(pca_res, data = dfforpca, x = 1, y = 2, colour = "Simple", size = 8) +
+  theme_bw() +
+  scale_colour_manual(name = "Simple", values = custom_palette) +
+  ggtitle("PCA - Coloured by Simple") +
+  theme(plot.title = element_text(hjust = 0.5),
+        axis.line = element_line(colour = "black"),
+        panel.grid.minor = element_blank(),
+        panel.border = element_blank(),
+        panel.background = element_blank())
+
+# Show plots
+p_strain
+p_type
+p_simple
+
+# PCA contributors
+contribs1 <- pca_res$rotation[,1]
+contribs2 <- pca_res$rotation[,2]
+
+(pos1genes <- sort(contribs1, decreasing = TRUE)[1:10])
+(neg1genes <- sort(contribs1, decreasing = FALSE)[1:10])
+(pos2genes <- sort(contribs2, decreasing = TRUE)[1:10])
+(neg2genes <- sort(contribs2, decreasing = FALSE)[1:10])
+
+```
+
+As one can observe from the PCAs, our PC1 is mostly explained by sample type. That is, if a sample is of total sample, or if the supernatant or pellet subsets. Interestingly, albeit expected, the total samples appear to be in the middle of these.
+
+Now, in my opinion, yeast strand is not really relevant in this case. Therefore, I will treat it as "batch-effect", and will remove it. This way, we can compare samples from different strands, as they were the same.
+
+## Batch Effect Correction
+
+```{r, warning=FALSE}
+#This is the code I used to correct batch effect. It is based on the one we used in Schneider et al. (2024), aka voyAGEr.
+batch_cols <- c("Strain") #We define which variable we want to treat as batch effects
+metadata_cols <- c("Type", "Simple", "Biorep") #And those we dont want to treat as such
+#This creates a new matrix with all our variables of interest
+mmbatch <- model.matrix(reformulate(paste0("~0 + ",paste0( batch_cols,collapse = " + "))), data=metaTable)
+mmkeep <- model.matrix(reformulate(paste0("~0 + ",paste0( metadata_cols,collapse =  "+" ))), data=metaTable)
+mm <- cbind(mmkeep,mmbatch)
+#Now, we apply the new model
+D0 <- DGEList(2^y$E) #I use the normalised counts, but these must be "unloged". Hence the 2^
+D0 <- calcNormFactors(D0) 
+y <- voom(D0, mm, plot = F)
+fit <- lmFit(y, mm)
+
+#Basicly, we determine what coefficients are originated from our batch variable, and we remove those across the data
+beta <- fit$coefficients[,-(1:ncol(mmkeep)),drop=FALSE]
+beta[is.na(beta)] <- 0 #In the case of binary variables, one of them wont have "any effect" and will thus be NA. This corrects for that step.
+corrcounts_v1 <- as.matrix(y$E) - beta %*% t(mmbatch)
+offset <- apply(corrcounts_v1,1,min) - apply(y$E,1,min) #This gives the offset itself that needs to be applied
+corrcounts_v1 <- as.data.frame(corrcounts_v1-offset)
+corrcounts_v1 <- 2^corrcounts_v1 #I prefer to unlog them, to have a dataframe of non-log CPMs, in case I need.
+```
+
+
+## Batch Corrected PCA
+
+
+```{r}
+# Now we simply generate new log CPM expression values, starting from the correct expression values.
+y <- voom(corrcounts_v1, mm, plot = T)
+
+# Prepare PCA data
+dfforpca <- y$E
+dfforpca <- t(dfforpca)
+dfforpca <- as.data.frame(dfforpca)
+dfforpca <- apply(dfforpca, 2, as.numeric)  # Ensure numeric
+dfforpca <- as.data.frame(dfforpca)
+
+# Add metaTable columns
+dfforpca$Strain <- metaTable$Strain
+dfforpca$Type <- metaTable$Type
+dfforpca$Simple <- metaTable$Simple
+
+# PCA computation
+pca_res <- prcomp(dfforpca[, 1:(ncol(dfforpca)-3)], scale = FALSE)
+
+# PCA plot for Strain
+p_strain <- autoplot(pca_res, data = dfforpca, x = 1, y = 2, colour = "Strain", size = 8) +
+  theme_bw() +
+  scale_colour_manual(name = "Strain", values = custom_palette) +
+  ggtitle("PCA - Coloured by Strain") +
+  theme(plot.title = element_text(hjust = 0.5),
+        axis.line = element_line(colour = "black"),
+        panel.grid.minor = element_blank(),
+        panel.border = element_blank(),
+        panel.background = element_blank())
+
+# PCA plot for Type
+p_type <- autoplot(pca_res, data = dfforpca, x = 1, y = 2, colour = "Type", size = 8) +
+  theme_bw() +
+  scale_colour_manual(name = "Type", values = custom_palette) +
+  ggtitle("PCA - Coloured by Type") +
+  theme(plot.title = element_text(hjust = 0.5),
+        axis.line = element_line(colour = "black"),
+        panel.grid.minor = element_blank(),
+        panel.border = element_blank(),
+        panel.background = element_blank())
+
+# PCA plot for Simple
+p_simple <- autoplot(pca_res, data = dfforpca, x = 1, y = 2, colour = "Simple", size = 8) +
+  theme_bw() +
+  scale_colour_manual(name = "Simple", values = custom_palette) +
+  ggtitle("PCA - Coloured by Simple") +
+  theme(plot.title = element_text(hjust = 0.5),
+        axis.line = element_line(colour = "black"),
+        panel.grid.minor = element_blank(),
+        panel.border = element_blank(),
+        panel.background = element_blank())
+
+# Show plots
+p_strain
+p_type
+p_simple
+
+# PCA contributors
+contribs1 <- pca_res$rotation[,1]
+contribs2 <- pca_res$rotation[,2]
+
+(pos1genes <- sort(contribs1, decreasing = TRUE)[1:10])
+(neg1genes <- sort(contribs1, decreasing = FALSE)[1:10])
+(pos2genes <- sort(contribs2, decreasing = TRUE)[1:10])
+(neg2genes <- sort(contribs2, decreasing = FALSE)[1:10])
+
+```
+
+## Linear Models
+
+Finally, we move on to differential gene expression! In this chunk, I define the linear model I will actually use for my analyses. 
+
+```{r}
+#As linear models usually take the first "string" as the baseline, I am instead going to refactor them so that the baseline is Total, in terms of sample type, and control, in terms of stress.
+metaTable$Type <- factor(metaTable$Type)
+metaTable$Type <- relevel(metaTable$Type,"Total")
+metaTable$Simple <- factor(metaTable$Simple)
+metaTable$Simple <- relevel(metaTable$Simple,"Control")
+
+#In here, I use all the variables I considered biologically (and technically) relevant. Note that I removed Strain, as that was removed by batch correction.
+mm <- model.matrix(~0+Type+Biorep+Simple,metaTable)
+
+fitted <- lmFit(y$E, mm)
+
+head(coef(fitted))
+```
+
+I opted to divide each contrasts (comparison) that I will be making in different sections.
+
+# Comparisons between sample types
+
+## Supernatant vs Total
+
+Starting with supernatant, compared to total samples. So, in other words, what precipitates less.
+
+```{r}
+contri <- makeContrasts(TypeSupernatant  - TypeTotal , levels = colnames(coef(fitted)))
+#Lets fit the contrasts
+tmp <- contrasts.fit(fitted, contri)
+
+#Correction for multiple testing
+tmp <- eBayes(tmp)
+
+top.table <- topTable(tmp,  sort.by = "logFC", n=Inf)
+DEGenes <- top.table
+ndegs=20
+```
+
+
+```{r, results='hide', warning=FALSE, message=FALSE}
+
+upmarkers <- as.data.frame(DEGenes[DEGenes$logFC>1 & DEGenes$B>80,] )
+downmarkers <- as.data.frame(DEGenes[DEGenes$logFC< -1 & DEGenes$B>80,] )
+
+ggplot(data=DEGenes,
+                 aes(x=logFC,
+                     y=  B)) +
+  geom_point(color="#DDDDDD")+
+  theme_bw() +
+  theme(axis.line = element_line(colour = "black"),
+        panel.grid.minor = element_blank(),
+        panel.border = element_blank(),
+        panel.background = element_blank()) +
+  ggtitle("Supernatant vs Total")+
+  theme(plot.title = element_text(hjust = 0.5)) +
+  geom_label_repel(upmarkers[1:ndegs,] , mapping=aes(label=row.names(upmarkers)[1:ndegs]),size=3,point.padding=-0.5, color="#de425b",max.overlaps = 200)+
+  geom_label_repel(downmarkers[1:ndegs,] , mapping=aes(label=row.names(downmarkers)[1:ndegs]),size=4,point.padding=-0.5, color="#769fca",max.overlaps = 200, fontface="italic")+
+  geom_point(data=upmarkers, aes(x=logFC, y=  B), color="#de425b")+
+  geom_point(data=downmarkers, aes(x=logFC, y=  B), color="#769fca", size=3) + xlab(expression(Log[2] ~ Fold ~ Change)) + ylab("B-Statistic") + theme(text=element_text(family = "Arial", size = 20))
+
+```
+
+
+### Expression Graphs (Extra QC)
+
+As an added control, let's plot these genes in regard to their expression. 
+
+```{r, fig.height=12, fig.width=12}
+finagenes <- rbind(upmarkers, downmarkers)
+
+custom_palette <- qualitative_hcl(22, palette = "Pastel")
+custom_palette <- sample(custom_palette,22, FALSE)
+
+dfforexpression <- y$E
+dfforexpression <- as.data.frame(dfforexpression)
+
+sampletype <- data.frame(samples=colnames(dfforexpression), sampletype=metaTable$Type)
+genesforexp <- dfforexpression[row.names(dfforexpression)%in%row.names(finagenes),]
+genesforexp$Genes <- row.names(genesforexp)
+genesforexp <- reshape2::melt(genesforexp)
+colnames(genesforexp) <- c("Gene", "samples", "expression")
+genesforexp <- merge(genesforexp, sampletype, by="samples")
+stresstype <- data.frame(samples=colnames(dfforexpression), stress=metaTable$Simple)
+genesforexp <- merge(genesforexp, stresstype, by="samples")
+
+winnyplot <- ggplot(genesforexp, aes(x=sampletype, y=expression))  + geom_jitter(aes(colour=stress), size=1) + facet_wrap(.~ Gene, ncol=5, scales = "free")+ geom_violin(colour="black", alpha=0.3)
+winnyplot <- winnyplot + 
+  scale_colour_manual(name = "Sample Type", values = custom_palette, breaks = c(unique(metaTable$Simple))) 
+winnyplot <- winnyplot + theme_bw() + xlab("Sample Type") + ylab("Gene Expression (Log2 CPM)") + theme(
+      strip.text.x = element_text(
+        size = 12, face="italic"
+        )) +
+ theme(
+   strip.background = element_rect(
+     color="black", fill="#FFFFFF", size=1, linetype="solid"
+     )
+   ) + theme(
+    #legend.position = c(.95, .40),
+    legend.justification = c("right", "top"),
+    legend.box.just = "right",
+    ) + theme(legend.title = element_text(size = 12)) + ggtitle("Expression of DEA genes") + theme(plot.title = element_text(hjust = 0.5, size=14, face="bold"))
+winnyplot
+```
+Now, the important part we have to check, is whether the differences in supernatant enriched appear to correlate with gene length.
+
+```{r, message=FALSE, warning=FALSE, results='hide'}
+genelength <- fread("../Yeast_length.txt")[,c(2,1)]
+
+
+DEGenes$Gene <- row.names(DEGenes)
+colnames(genelength) <- c("Length","Gene")
+DEGenes <- merge(DEGenes, genelength, by="Gene")
+
+#Now, I repeat the volcano plot, instead this times circles are coloured by gene lenght.
+ggplot(data=DEGenes,
+                 aes(x=logFC,
+                     y=  B)) +
+  geom_point(aes(color=log10(Length)))+
+  theme_bw() +
+  theme(axis.line = element_line(colour = "black"),
+        panel.grid.minor = element_blank(),
+        panel.border = element_blank(),
+        panel.background = element_blank()) +
+  ggtitle("Supernatant vs Total")+ xlab(expression(Log[2] ~ Fold ~ Change)) + ylab("B-Statistic") +
+  theme(plot.title = element_text(hjust = 0.5))  +
+  scale_colour_gradient(low = "black", high = "red")+ theme(text=element_text(family = "MS Arial"))
+
+
+smooth.SG <- lm(t~log10(Length), DEGenes)
+
+
+ggplot(DEGenes, aes(y=t, x=log10(Length))) + geom_point(color="#CCCCCC", alpha=1) +   theme_bw()+ geom_density_2d()+
+ ylab("Supernatant Enrichment (t-stat)") + xlab(expression(RNA ~ Length ~ Log[10] ~ Base ~ Pairs)) +
+  theme(axis.line = element_line(colour = "black"),
+        panel.grid.minor = element_blank(),
+        panel.border = element_blank(),
+        panel.background = element_blank()) + 
+  theme(plot.title = element_text(hjust = 0.5))  +
+  geom_abline(slope=smooth.SG$coefficients[2], intercept = smooth.SG$coefficients[1], linetype = "dashed")+ stat_cor(method = "spearman", cor.coef.name = "rho", size=5)
+
+
+
+
+```
+
+As one can clearly observe from both plots, there is a clear influence of RNA Lenght in supernatant enrichment. In this case, the shorter an RNA is, the more likely it is enriched in the supernatant, as also verified by the original authors.
+
+## Pellet vs Total
+
+So, it stands to reason that we will now observe the opposite, with the longer and RNA is, the more likely it will be enriched in the pellet.
+
+```{r}
+contri <- makeContrasts(TypePellet  - TypeTotal , levels = colnames(coef(fitted)))
+#Lets fit the contrasts
+tmp <- contrasts.fit(fitted, contri)
+
+#Correction for multiple testing
+tmp <- eBayes(tmp)
+
+top.table <- topTable(tmp,  sort.by = "logFC", n=Inf)
+DEGenes <- top.table
+ndegs=20
+```
+
+
+```{r, results='hide', warning=FALSE, message=FALSE}
+upmarkers <- as.data.frame(DEGenes[DEGenes$logFC>1 & DEGenes$B>80,] )
+downmarkers <- as.data.frame(DEGenes[DEGenes$logFC< -1.25 & DEGenes$B>100,] )
+
+ggplot(data=DEGenes,
+                 aes(x=logFC,
+                     y=  B)) +
+  geom_point(color="#DDDDDD")+
+  theme_bw() +
+  theme(axis.line = element_line(colour = "black"),
+        panel.grid.minor = element_blank(),
+        panel.border = element_blank(),
+        panel.background = element_blank()) +
+  ggtitle("Pellet vs Total")+
+  theme(plot.title = element_text(hjust = 0.5)) +
+  geom_label_repel(upmarkers[1:ndegs,] , mapping=aes(label=row.names(upmarkers)[1:ndegs]),size=4,point.padding=-0.5, color="#de425b",max.overlaps = 200, fontface="italic")+
+  geom_label_repel(downmarkers[1:ndegs,] , mapping=aes(label=row.names(downmarkers)[1:ndegs]),size=4,point.padding=-0.5, color="#769fca",max.overlaps = 200, fontface="italic")+
+  geom_point(data=upmarkers, aes(x=logFC, y=  B), color="#de425b", size=3)+
+  geom_point(data=downmarkers, aes(x=logFC, y=  B), color="#769fca", size=3) + xlab(expression(Log[2] ~ Fold ~ Change)) + ylab("B-Statistic") + theme(text=element_text(family = "Arial", size = 20))
+```
+
+
+### Expression Graphs (Extra QC)
+
+As an added control, let's plot these genes in regard to their expression. 
+
+```{r, fig.height=12, fig.width=12}
+finagenes <- rbind(upmarkers, downmarkers)
+
+custom_palette <- qualitative_hcl(22, palette = "Pastel")
+custom_palette <- sample(custom_palette,22, FALSE)
+
+dfforexpression <- y$E
+dfforexpression <- as.data.frame(dfforexpression)
+
+sampletype <- data.frame(samples=colnames(dfforexpression), sampletype=metaTable$Type)
+genesforexp <- dfforexpression[row.names(dfforexpression)%in%row.names(finagenes),]
+genesforexp$Genes <- row.names(genesforexp)
+genesforexp <- reshape2::melt(genesforexp)
+colnames(genesforexp) <- c("Gene", "samples", "expression")
+genesforexp <- merge(genesforexp, sampletype, by="samples")
+stresstype <- data.frame(samples=colnames(dfforexpression), stress=metaTable$Simple)
+genesforexp <- merge(genesforexp, stresstype, by="samples")
+
+winnyplot <- ggplot(genesforexp, aes(x=sampletype, y=expression))  + geom_jitter(aes(colour=stress), size=1) + facet_wrap(.~ Gene, ncol=5, scales = "free")+ geom_violin(colour="black", alpha=0.3)
+winnyplot <- winnyplot + 
+  scale_colour_manual(name = "Sample Type", values = custom_palette, breaks = c(unique(metaTable$Simple))) 
+winnyplot <- winnyplot + theme_bw() + xlab("Sample Type") + ylab("Gene Expression (Log2 CPM)") + theme(
+      strip.text.x = element_text(
+        size = 12, face="italic"
+        )) +
+ theme(
+   strip.background = element_rect(
+     color="black", fill="#FFFFFF", size=1, linetype="solid"
+     )
+   ) + theme(
+    #legend.position = c(.95, .40),
+    legend.justification = c("right", "top"),
+    legend.box.just = "right",
+    ) + theme(legend.title = element_text(size = 12)) + ggtitle("Expression of DEA genes") + theme(plot.title = element_text(hjust = 0.5, size=14, face="bold"))
+winnyplot
+```
+
+And once again, to check the issue with correlation with gene length. 
+
+```{r, message=FALSE, warning=FALSE, results='hide'}
+genelength <- fread("../Yeast_length.txt")[,c(2,1)]
+
+
+DEGenes$Gene <- row.names(DEGenes)
+colnames(genelength) <- c("Length","Gene")
+DEGenes <- merge(DEGenes, genelength, by="Gene")
+
+#Now, I repeat the volcano plot, instead this times circles are coloured by gene lenght.
+ggplot(data=DEGenes,
+                 aes(x=logFC,
+                     y=  B)) +
+  geom_point(aes(color=log10(Length)))+
+  theme_bw() +
+  theme(axis.line = element_line(colour = "black"),
+        panel.grid.minor = element_blank(),
+        panel.border = element_blank(),
+        panel.background = element_blank()) +
+  ggtitle("Pellet vs Total")+ xlab(expression(Log[2] ~ Fold ~ Change)) + ylab("B-Statistic") +
+  theme(plot.title = element_text(hjust = 0.5))  +
+  scale_colour_gradient(low = "black", high = "red")+ theme(text=element_text(family = "MS Arial"))
+
+
+smooth.SG <- lm(t~log10(Length), DEGenes)
+
+
+ggplot(DEGenes, aes(y=t, x=log10(Length))) + geom_point(color="#CCCCCC", alpha=1) +   theme_bw()+ geom_density_2d()+
+ ylab("Pellet Enrichment (t-stat)") + xlab(expression(RNA ~ Length ~ Log[10] ~ Base ~ Pairs)) +
+  theme(axis.line = element_line(colour = "black"),
+        panel.grid.minor = element_blank(),
+        panel.border = element_blank(),
+        panel.background = element_blank()) + 
+  theme(plot.title = element_text(hjust = 0.5))  +
+  geom_abline(slope=smooth.SG$coefficients[2], intercept = smooth.SG$coefficients[1], linetype = "dashed")+ stat_cor(method = "spearman", cor.coef.name = "rho", size=5)
+
+
+
+```
+And as expected, we observe a positive correlation of pellet enrichment with RNA Length. 
+
+## Pellet vs Supernatant
+
+Finally, its time to directly compare Pellet with Supernatant. 
+
+```{r}
+contri <- makeContrasts(TypePellet  - TypeSupernatant , levels = colnames(coef(fitted)))
+#Lets fit the contrasts
+tmp <- contrasts.fit(fitted, contri)
+
+#Correction for multiple testing
+tmp <- eBayes(tmp)
+
+top.table <- topTable(tmp,  sort.by = "logFC", n=Inf)
+DEGenes <- top.table
+ndegs=20
+```
+
+
+```{r, results='hide', warning=FALSE, message=FALSE}
+
+upmarkers <- as.data.frame(DEGenes[DEGenes$logFC>2 & DEGenes$B>150,] )
+downmarkers <- as.data.frame(DEGenes[DEGenes$logFC< -1.5 & DEGenes$B>150,] )
+
+ggplot(data=DEGenes,
+                 aes(x=logFC,
+                     y=  B)) +
+  geom_point(color="#DDDDDD")+
+  theme_bw() +
+  theme(axis.line = element_line(colour = "black"),
+        panel.grid.minor = element_blank(),
+        panel.border = element_blank(),
+        panel.background = element_blank()) +
+  ggtitle("Pellet vs Supernatant")+
+  theme(plot.title = element_text(hjust = 0.5)) +
+  geom_label_repel(upmarkers[1:ndegs,] , mapping=aes(label=row.names(upmarkers)[1:ndegs]),size=4,point.padding=-0.5, color="#de425b",max.overlaps = 200, fontface="italic")+
+  geom_label_repel(downmarkers[1:ndegs,] , mapping=aes(label=row.names(downmarkers)[1:ndegs]),size=4,point.padding=-0.5, color="#769fca",max.overlaps = 200, fontface="italic")+
+  geom_point(data=upmarkers, aes(x=logFC, y=  B), color="#de425b", size=3)+
+  geom_point(data=downmarkers, aes(x=logFC, y=  B), color="#769fca", size=3) + xlab(expression(Log[2] ~ Fold ~ Change)) + ylab("B-Statistic") + theme(text=element_text(family = "Arial", size = 20))
+```
+
+
+### Expression Graphs (Extra QC)
+
+As an added control, let's plot these genes in regard to their expression. 
+
+
+```{r, fig.height=12, fig.width=12}
+finagenes <- rbind(upmarkers, downmarkers)
+
+custom_palette <- qualitative_hcl(22, palette = "Pastel")
+custom_palette <- sample(custom_palette,22, FALSE)
+
+dfforexpression <- y$E
+dfforexpression <- as.data.frame(dfforexpression)
+
+sampletype <- data.frame(samples=colnames(dfforexpression), sampletype=metaTable$Type)
+genesforexp <- dfforexpression[row.names(dfforexpression)%in%row.names(finagenes),]
+genesforexp$Genes <- row.names(genesforexp)
+genesforexp <- reshape2::melt(genesforexp)
+colnames(genesforexp) <- c("Gene", "samples", "expression")
+genesforexp <- merge(genesforexp, sampletype, by="samples")
+stresstype <- data.frame(samples=colnames(dfforexpression), stress=metaTable$Simple)
+genesforexp <- merge(genesforexp, stresstype, by="samples")
+
+winnyplot <- ggplot(genesforexp, aes(x=sampletype, y=expression))  + geom_jitter(aes(colour=stress), size=1) + facet_wrap(.~ Gene, ncol=5, scales = "free")+ geom_violin(colour="black", alpha=0.3)
+winnyplot <- winnyplot + 
+  scale_colour_manual(name = "Sample Type", values = custom_palette, breaks = c(unique(metaTable$Simple))) 
+winnyplot <- winnyplot + theme_bw() + xlab("Sample Type") + ylab("Gene Expression (Log2 CPM)") + theme(
+      strip.text.x = element_text(
+        size = 12, face="italic"
+        )) +
+ theme(
+   strip.background = element_rect(
+     color="black", fill="#FFFFFF", size=1, linetype="solid"
+     )
+   ) + theme(
+    #legend.position = c(.95, .40),
+    legend.justification = c("right", "top"),
+    legend.box.just = "right",
+    ) + theme(legend.title = element_text(size = 12)) + ggtitle("Expression of DEA genes") + theme(plot.title = element_text(hjust = 0.5, size=14, face="bold"))
+winnyplot
+```
+
+Directly checking the lenght:
+
+```{r, message=FALSE, warning=FALSE, results='hide'}
+genelength <- fread("../Yeast_length.txt")[,c(2,1)]
+
+
+DEGenes$Gene <- row.names(DEGenes)
+colnames(genelength) <- c("Length","Gene")
+DEGenes <- merge(DEGenes, genelength, by="Gene")
+
+#Now, I repeat the volcano plot, instead this times circles are coloured by gene lenght.
+ggplot(data=DEGenes,
+                 aes(x=logFC,
+                     y=  B)) +
+  geom_point(aes(color=log10(Length)))+
+  theme_bw() +
+  theme(axis.line = element_line(colour = "black"),
+        panel.grid.minor = element_blank(),
+        panel.border = element_blank(),
+        panel.background = element_blank()) +
+  ggtitle("Pellet vs Supernatant")+ xlab(expression(Log[2] ~ Fold ~ Change)) + ylab("B-Statistic") +
+  theme(plot.title = element_text(hjust = 0.5))  +
+  scale_colour_gradient(low = "black", high = "red")+ theme(text=element_text(family = "MS Arial"))
+
+
+smooth.SG <- lm(t~log10(Length), DEGenes)
+
+
+ggplot(DEGenes, aes(y=t, x=log10(Length))) + geom_point(color="#CCCCCC", alpha=1) +   theme_bw()+ geom_density_2d()+
+ ylab("Pellet Enrichment (t-stat)") + xlab(expression(RNA ~ Length ~ Log[10] ~ Base ~ Pairs)) +
+  theme(axis.line = element_line(colour = "black"),
+        panel.grid.minor = element_blank(),
+        panel.border = element_blank(),
+        panel.background = element_blank()) + 
+  theme(plot.title = element_text(hjust = 0.5))  +
+  geom_abline(slope=smooth.SG$coefficients[2], intercept = smooth.SG$coefficients[1], linetype = "dashed")+ stat_cor(method = "spearman", cor.coef.name = "rho", size=5)
+
+
+
+
+```
+ 
+And once more, we see the same pattern as with the pellet comparison with total. 
+
+# Formula Modulation for S
+
+In this section, I show the results from the reverse engineering process to obtain "experimentally determined" sedimentation coefficients. To assess this, herein I simulate SG samples starting from yeast Whole-Cell samples, simulating the centrifugation in silico, using these abovementioned sedimentation coefficients.
+
+## Comparison with other Yeast Data
+
+### Preparation of Khong Data
+
+```{r}
+#Loading up the data from A. Khong 2017
+KhongYeast <- fread("../Projects/StressGranules/SG_Transcriptome/RP_Data_2017/alignment_STAR/featureCounts_results.txt")[,c(1,7:12)]
+
+
+colnames(KhongYeast)[1] <- "ensembl_gene_id" #this is simply to be able to apply the function
+eltable <- merge(KhongYeast,biomart,by = "ensembl_gene_id", all= TRUE) #this creates a table with both ensemble ids and yeast gene names.
+
+eltable <- subset(eltable, external_gene_name!="") #this removes reads that dont have a corresponding yeast gene names.
+
+eltable$ensembl_gene_id <- NULL # We no longer need this column
+
+read.counts <- eltable %>%
+  group_by(external_gene_name) %>%
+  summarise(across(everything(), sum, na.rm = TRUE))
+
+read.counts <- as.data.frame(read.counts)
+
+row.names(read.counts) <- read.counts$external_gene_name #changes rownames into yeast gene names
+read.counts$external_gene_name <- NULL
+
+KhongYeastCounts <- read.counts
+
+KhongYeastCounts$Gene <- row.names(KhongYeastCounts)
+
+KhongYeastCounts <- merge(KhongYeastCounts, genelength, by="Gene")
+
+
+#My SpinSim pipeline works with TPMs, so we first convert read counts to TPMs. Bear in mind this is an example for one sample. You must repeat this step for each of the 3 samples.
+
+# stress.tpm <- KhongYeastCounts[,c(7,1,8)]
+# stress.tpm <- as.data.frame(stress.tpm)
+# colnames(stress.tpm) <- c("Counts", "ID", "Length")
+# stress.tpm$TPM <- (stress.tpm$Counts)/stress.tpm$Length
+# stress.tpm$TPM <- (stress.tpm$TPM * 1e6)
+# stress.tpm$TPM <- stress.tpm$TPM / sum(stress.tpm$TPM)
+# stress.tpm <- stress.tpm[,-1]
+# stress.tpm <- merge(stress.tpm, SAzide, by="ID")
+#write.table(x = stress.tpm,
+#            file = "~/Projects/StressGranules/Simulator/OriginalSamples/SG2017/YEAST_Bulk_3.txt",
+#            sep="\t", col.names = TRUE, row.names = FALSE, quote=FALSE)
+```
+
+### After Simulation 
+
+
+```{r, message=FALSE, warning=FALSE}
+#To make sure read depth is comparible, we use the original SG samples as basis.
+goalsum_SG1 <- sum(KhongYeastCounts$SRR5605169Aligned.sortedByCoord.out.bam)
+goalsum_SG2 <- sum(KhongYeastCounts$SRR5605170Aligned.sortedByCoord.out.bam)
+goalsum_SG3 <- sum(KhongYeastCounts$SRR5605171Aligned.sortedByCoord.out.bam)
+
+#For the old samples
+sim_sg1 <- read.table("../Projects/StressGranules/Simulator/SimulatedSamples/SG2017/SG1_Yeast.csv", sep = ",")[-1,c(1,3)]
+colnames(sim_sg1) <- c("Gene", "SSG1")
+sim_sg2 <- read.table("../Projects/StressGranules/Simulator/SimulatedSamples/SG2017/SG2_Yeast.csv", sep = ",")[-1,c(1,3)]
+colnames(sim_sg2) <- c("Gene", "SSG2")
+sim_sg3 <- read.table("../Projects/StressGranules/Simulator/SimulatedSamples/SG2017/SG3_Yeast.csv", sep = ",")[-1,c(1,3)]
+colnames(sim_sg3) <- c("Gene", "SSG3")
+
+
+#merging old samples up
+simsamples <- merge(sim_sg1, sim_sg2, by="Gene")
+simsamples <- merge(simsamples, sim_sg3, by="Gene")
+simsamples <- merge(simsamples, genelength, by="Gene")
+
+
+#making columns numeric
+simsamples[ , 2:ncol(simsamples)] <- lapply(simsamples[ , 2:ncol(simsamples)], function(x) as.numeric(as.character(x)))
+
+# Remove rows where any value is Inf
+simsamples <- simsamples[!apply(simsamples, 1, function(x) any(is.infinite(as.numeric(x)))), ]
+simsamples <- simsamples[complete.cases(simsamples), ]
+simsamples <- as.data.frame(simsamples)
+
+#De-Tpming old samples
+simsamples$Counts_SSG1 <- simsamples$SSG1*simsamples$Length
+simsamples$Counts_SSG1 <- simsamples$Counts_SSG1/sum(simsamples$Counts_SSG1)*goalsum_SG1
+simsamples$Counts_SSG2 <- simsamples$SSG2*simsamples$Length
+simsamples$Counts_SSG2 <- simsamples$Counts_SSG2/sum(simsamples$Counts_SSG2)*goalsum_SG2
+simsamples$Counts_SSG3 <- simsamples$SSG3*simsamples$Length
+simsamples$Counts_SSG3 <- simsamples$Counts_SSG3/sum(simsamples$Counts_SSG3)*goalsum_SG3
+simsamples <- simsamples[,c(1,6:8)] 
+
+
+OGsamples <- KhongYeastCounts[,-8]
+
+SG_City <- merge(OGsamples, simsamples, by="Gene")
+row.names(SG_City) <- SG_City$Gene
+SG_City$Gene <- NULL
+```
+
+
+## Filtration
+
+### ***Before Filtration***
+
+Moving on to the filtration:
+
+```{r, warning=FALSE}
+alternew.bu <- log10(rowSums(SG_City[,4:6]))
+alternew.bu <- as.data.frame(alternew.bu)
+
+alternew.rsg <- log10(rowSums(SG_City[,1:3]))
+alternew.rsg <- as.data.frame(alternew.rsg)
+
+alternew.ssg <- log10(rowSums(SG_City[,7:9]))
+alternew.ssg <- as.data.frame(alternew.ssg)
+
+alternew <- log10(rowSums(SG_City))
+alternew <- as.data.frame(alternew)
+
+ggplot(alternew, aes(x=alternew)) + geom_density() + theme_bw() + geom_vline(xintercept = 3.5, linetype = "dashed") + ylab("Events") + xlab("Number of Reads (log10)") +
+  theme(axis.line = element_line(colour = "black"),
+        panel.grid.minor = element_blank(),
+        panel.border = element_blank(),
+        panel.background = element_blank()) + ggtitle("Density of Reads - All Samples")
+
+ggplot(alternew.bu, aes(x=alternew.bu)) + geom_density(fill="#B0D9B1", alpha=0.5) + theme_bw() + geom_vline(xintercept = 2.75, linetype = "dashed") + ylab("Events") + xlab("Number of Reads (log10)") +
+  theme(axis.line = element_line(colour = "black"),
+        panel.grid.minor = element_blank(),
+        panel.border = element_blank(),
+        panel.background = element_blank()) + ggtitle("Density of Reads - Bulk Sample")
+
+ggplot(alternew.rsg, aes(x=alternew.rsg)) + geom_density(fill="#618264", alpha=0.5) + theme_bw() + geom_vline(xintercept = 2.75, linetype = "dashed") + ylab("Events") + xlab("Number of Reads (log10)") +
+  theme(axis.line = element_line(colour = "black"),
+        panel.grid.minor = element_blank(),
+        panel.border = element_blank(),
+        panel.background = element_blank()) + ggtitle("Density of Reads - Real SG")
+
+ggplot(alternew.ssg, aes(x=alternew.ssg)) + geom_density(fill="#EA4848", alpha=0.5) + theme_bw() + geom_vline(xintercept = 2.75, linetype = "dashed") + ylab("Events") + xlab("Number of Reads (log10)") +
+  theme(axis.line = element_line(colour = "black"),
+        panel.grid.minor = element_blank(),
+        panel.border = element_blank(),
+        panel.background = element_blank()) + ggtitle("Density of Reads - Sim SG")
+
+dffordensy <- SG_City
+sampy <- c(rep("RSG",3), rep("BU",3), rep("SSG",3))
+names(sampy) <- colnames(dffordensy)
+dffordensy <- reshape2::melt(t(dffordensy))
+colnames(dffordensy) <- c("Sample", "Gene", "Expression")
+
+densyplot <- ggplot(dffordensy, aes(x=log10(Expression), group=Sample, fill=Sample)) + geom_density(alpha=0.5) + facet_wrap(.~Sample, ncol=3, labeller = labeller(Sample=sampy))
+densyplot <- densyplot + scale_fill_manual(name = "Sample Type", values = c("#B0D9B1", "#B0D9B1", "#B0D9B1", "#618264", "#618264", "#618264", "#EA4848", "#EA4848", "#EA4848", "#3BABBA", "#3BABBA", "#3BABBA"))
+densyplot <- densyplot + theme_bw() + xlab("Number of Reads (log10)") + ylab("Events") + theme(legend.position = "none") 
+densyplot + geom_vline(xintercept = 2, linetype = "dashed") + theme(
+      strip.text.x = element_text(
+        size = 12
+        )) +
+ theme(
+   strip.background = element_rect(
+     color="black", fill="#FFFFFF", size=1, linetype="solid"
+     )
+   )
+```
+
+### ***After Filtration***
+
+```{r}
+filterednew <- subset(SG_City, alternew>3.5)
+filterednew.bu <- subset(SG_City, alternew.bu>3)
+filterednew.rsg <- subset(SG_City, alternew.rsg>3)
+filterednew.ssg <- subset(SG_City, alternew.ssg>2.75)
+
+
+#after cutting, its a good idea to visualize again
+falternew <- log10(rowSums(filterednew))
+falternew <- as.data.frame(falternew)
+ggplot(falternew, aes(x=falternew)) + geom_density() + theme_bw() + ylab("Events") + xlab("Number of Reads (log10)") +
+  theme(axis.line = element_line(colour = "black"),
+        panel.grid.minor = element_blank(),
+        panel.border = element_blank(),
+        panel.background = element_blank())
+
+#lets save the genes which we maintain
+impgenes <- c(row.names(falternew))
+impgenes.bu <- c(row.names(filterednew.bu))
+impgenes.rsg <- c(row.names(filterednew.rsg))
+impgenes.ssg <- c(row.names(filterednew.ssg))
+
+
+#Now we need to select only the rows which have those genes.
+finaltable <- SG_City[row.names(SG_City)%in%impgenes,]
+finaltable <- finaltable[row.names(finaltable)%in%impgenes.bu,]
+finaltable <- finaltable[row.names(finaltable)%in%impgenes.rsg,]
+finaltable <- finaltable[row.names(finaltable)%in%impgenes.ssg,]
+```
+
+
+## Matrices
+
+Good! Now we can proceed by designing our matrices. 
+
+```{r}
+#To be able to use Voom, we must first convert our read count table into a special DGE object.
+D0 <- DGEList(finaltable)
+
+#Then we calculate the normalisation factors.
+#Bear in mind this step calculates the normalisation factors, but does not normalise itself.
+D0 <- calcNormFactors(D0)
+
+
+#Now we do our matrix itself. In this case I want to see direct differences between samples, so the "samplenames" suffice.
+mm <- model.matrix(~0+sampy)
+
+#and now we normalize. This step also turns our counts into log2-counts per million.
+y <- voom(D0, mm, plot = T)
+```
+
+
+## Normalisation
+
+For normalisation I convert the read counts into log2CPMs. Its a good way to visualise how the reads are. 
+
+```{r}
+
+dfforboxy <- finaltable
+coolors <-c("#B0D9B1", "#B0D9B1", "#B0D9B1", "#618264", "#618264", "#618264", "#EA4848", "#EA4848", "#EA4848", "#3BABBA", "#3BABBA", "#3BABBA")
+
+
+orderforplots <- sampy
+colouring <- data.frame(Sample=colnames(dfforboxy), Types=orderforplots)
+dfforboxy <- reshape2::melt(dfforboxy)
+colnames(dfforboxy) <- c("Sample", "Expression")
+dfforboxy <- merge(dfforboxy, colouring, by="Sample")
+prenorm <- ggplot(dfforboxy, aes(x=Sample, y=(log2(Expression+1)), fill=Types)) + geom_boxplot(alpha=0.6) + theme_bw() + ylab("Read Counts (Log2)") + xlab("Samples") + scale_fill_manual(name = "Sample Type", values = unique(coolors), labels=unique(sampy), breaks =unique(sampy)) +
+  theme(axis.line = element_line(colour = "black"),
+        panel.grid.minor = element_blank(),
+        panel.border = element_blank(),
+        panel.background = element_blank(),
+        axis.text.x=element_blank(),
+        axis.ticks.x=element_blank(),
+        legend.position = "None") + ggtitle("Prior to Normalization")
+
+dfforboxy <- y$E
+dfforboxy <- reshape2::melt(dfforboxy)
+dfforboxy <- dfforboxy[,-1]
+colnames(dfforboxy) <- c("Sample", "Expression")
+dfforboxy <- merge(dfforboxy, colouring, by="Sample")
+postnorm <- ggplot(dfforboxy, aes(x=Sample, y=Expression, fill=Types)) + geom_boxplot(alpha=0.6) + theme_bw() + ylab("Read Counts (Log2CPM)") + xlab("Samples") + scale_fill_manual(name = "Sample Type", values = unique(coolors), labels=unique(sampy), breaks =unique(sampy)) +
+  theme(axis.line = element_line(colour = "black"),
+        panel.grid.minor = element_blank(),
+        panel.border = element_blank(),
+        panel.background = element_blank(),
+        axis.text.x=element_blank(),
+        axis.ticks.x=element_blank(),
+        legend.position = "None") + ggtitle("After Normalization")
+
+ggarrange(prenorm, postnorm, nrow=1)
+
+```
+
+
+
+## PCA
+
+```{r}
+#this is done to be able to do traditional PCA
+dfforpca <- y$E
+dfforpca <- rbind(dfforpca, sampy)
+row.names(dfforpca)[nrow(dfforpca)] <- "sampy"
+dfforpca <- t(dfforpca)
+numcol <- c(1:(ncol(dfforpca)-1))
+dfforpca <- as.data.frame(dfforpca) #for some reason I can only change colum type if its a dataframe
+
+dfforpca[ ,numcol] <- apply(dfforpca[ , numcol], 2,            # to turn our columns into numeric
+                            function(x) as.numeric(as.character(x)))
+
+#sapply(dfforpca, class) #to check class
+
+# Or specify the factor levels in the order you want
+dfforpca$forall <- factor(dfforpca$sampy, levels = unique(sampy))
+
+pca_res <- prcomp(dfforpca[,numcol], scale=FALSE) #prepare the pca
+
+#to make everything pretty
+p <- autoplot(pca_res, data = dfforpca, x=1, y=2, colour = "sampy", size=8, alpha=0.7)
+p <- p + theme_bw() + scale_colour_manual((name = "Samples"), values = unique(coolors), labels=unique(sampy))
+p <- p + ggtitle("PCA Plot") + theme(plot.title = element_text(hjust = 0.5)) +
+  theme(axis.line = element_line(colour = "black"),
+        panel.grid.minor = element_blank(),
+        panel.border = element_blank(),
+        panel.background = element_blank())
+p
+
+
+#in case you want to see them yourself
+contribs1 <- pca_res$rotation[,1]
+contribs2 <- pca_res$rotation[,2]
+
+#These are the biggest contributors to the PCA1 (right side)
+(pos1genes <- sort(contribs1, decreasing=T)[1:10])
+#These are the biggest contributors to the PCA1 (left side)
+(neg1genes <- sort(contribs1, decreasing=F)[1:10])
+
+#These are the biggest contributors to the PCA2 (up side)
+(pos2genes <- sort(contribs2, decreasing=T)[1:10])
+#These are the biggest contributors to the PCA2 (down side)
+(neg2genes <- sort(contribs2, decreasing=F)[1:10])
+```
+
+# Real SGs vs Whole-Cell
+
+## Linear Models
+
+Now we must perform linear model fitting. 
+
+```{r}
+fitted <- lmFit(y, mm)
+
+head(coef(fitted))
+
+#next we measure contrasts between groups (log-fold change is obtained from these fitted linear models)
+#This one to obtain the differences between "real" SGs and bulk samples
+contr <- makeContrasts(sampyRSG  - sampyBU, levels = colnames(coef(fitted)))
+
+#next we estimate the contrast for each gene
+tmp <- contrasts.fit(fitted, contr)
+
+
+#use empirical bayes smoothing of standard erros (shrinks extreme standard erros)
+tmp <- eBayes(tmp)
+
+top.table <- topTable(tmp, sort.by = "logFC", n = Inf)
+
+DEGenes <- top.table
+
+ndegs <- 20
+```
+
+
+##  SG vs Whole-Cell
+
+```{r, results='hide', warning=FALSE, message=FALSE}
+
+upmarkers <- as.data.frame(DEGenes[DEGenes$logFC>2 & DEGenes$B>0,] )
+downmarkers <- as.data.frame(DEGenes[DEGenes$logFC< -2 & DEGenes$B>0,] )
+
+ggplot(data=DEGenes,
+                 aes(x=logFC,
+                     y=  B)) +
+  geom_point(color="#CCCCCC")+
+  theme_bw() +
+  theme(axis.line = element_line(colour = "black"),
+        panel.grid.minor = element_blank(),
+        panel.border = element_blank(),
+        panel.background = element_blank()) +
+  ggtitle("Real SG vs Whole-Cell")+
+  theme(plot.title = element_text(hjust = 0.5)) +
+  geom_label_repel(upmarkers[1:ndegs,] , mapping=aes(label=row.names(upmarkers)[1:ndegs]),size=3,point.padding=-0.5, color="#769fca",max.overlaps = 20)+
+  geom_label_repel(downmarkers[1:ndegs,] , mapping=aes(label=row.names(downmarkers)[1:ndegs]),size=3,point.padding=-0.5, color="#a2d1e6",max.overlaps = 20)+
+  geom_point(data=upmarkers, aes(x=logFC, y=  B), color="#769fca")+
+  geom_point(data=downmarkers, aes(x=logFC, y=  B), color="#a2d1e6")
+
+#This one to save real SG signal
+realsig <- data.frame(Gene=row.names(DEGenes), real_t=DEGenes$t)
+```
+```{r, message=FALSE, warning=FALSE, results='hide'}
+genelength <- fread("../Yeast_length.txt")[,c(2,1)]
+Chromossomes <- fread("../Yeast_Chromossomes.txt")
+
+DEGenes$Gene <- row.names(DEGenes)
+colnames(genelength) <- c("Length","Gene")
+DEGenes <- merge(DEGenes, genelength, by="Gene")
+
+ggplot(data=DEGenes,
+                 aes(x=logFC,
+                     y=  B)) +
+  geom_point(aes(color=log10(Length)))+
+  theme_bw() +
+  theme(axis.line = element_line(colour = "black"),
+        panel.grid.minor = element_blank(),
+        panel.border = element_blank(),
+        panel.background = element_blank()) +
+  ggtitle("Real SG vs Whole-Cell")+ xlab(expression(Log[2] ~ Fold ~ Change)) + ylab("B-Statistic") +
+  theme(plot.title = element_text(hjust = 0.5))  +
+  scale_colour_gradient(low = "black", high = "red")+ theme(text=element_text(family = "Quicksand"))
+
+
+smooth.SG <- lm(t~log10(Length), DEGenes)
+liner.SG <- rstandard(smooth.SG)
+DEGenes <-cbind(DEGenes, liner.SG)
+colnames(DEGenes)[9] <- "Residuals"
+row.names(DEGenes) <- DEGenes$Gene
+linemarkers <- as.data.frame(DEGenes[abs(DEGenes$Residuals)>4,])
+
+# Calculate the Spearman correlation coefficient
+spearman_corr <- cor(DEGenes$t, log10(DEGenes$Length), method = "pearson")
+
+
+
+ggplot(DEGenes, aes(y=t, x=log10(Length))) + geom_point(color="#CCCCCC", alpha=1) +   theme_bw()+ geom_density_2d()+
+ ylab("SG-Enrichment (t-stat)") + xlab(expression(RNA ~ Length ~ Log[10] ~ Base ~ Pairs)) +
+  theme(axis.line = element_line(colour = "black"),
+        panel.grid.minor = element_blank(),
+        panel.border = element_blank(),
+        panel.background = element_blank()) + 
+  theme(plot.title = element_text(hjust = 0.5))  +
+  geom_abline(slope=smooth.SG$coefficients[2], intercept = smooth.SG$coefficients[1], linetype = "dashed")+ stat_cor(method = "spearman", cor.coef.name = "rho", size=5)
+
+```
+
+# Simulated SGs vs Whole-Cell
+
+## Linear Models
+
+Now we must perform linear model fitting. 
+
+```{r}
+fitted <- lmFit(y, mm)
+
+head(coef(fitted))
+
+#next we measure contrasts between groups (log-fold change is obtained from these fitted linear models)
+#This one to obtain the differences between "real" SGs and bulk samples
+contr <- makeContrasts(sampySSG  - sampyBU, levels = colnames(coef(fitted)))
+
+#next we estimate the contrast for each gene
+tmp <- contrasts.fit(fitted, contr)
+
+
+#use empirical bayes smoothing of standard erros (shrinks extreme standard erros)
+tmp <- eBayes(tmp)
+
+top.table <- topTable(tmp, sort.by = "logFC", n = Inf)
+
+DEGenes <- top.table
+
+ndegs <- 20
+```
+
+
+##  SG vs Whole-Cell
+
+```{r, results='hide', warning=FALSE, message=FALSE}
+
+upmarkers <- as.data.frame(DEGenes[DEGenes$logFC>2 & DEGenes$B>0,] )
+downmarkers <- as.data.frame(DEGenes[DEGenes$logFC< -2 & DEGenes$B>0,] )
+
+ggplot(data=DEGenes,
+                 aes(x=logFC,
+                     y=  B)) +
+  geom_point(color="#CCCCCC")+
+  theme_bw() +
+  theme(axis.line = element_line(colour = "black"),
+        panel.grid.minor = element_blank(),
+        panel.border = element_blank(),
+        panel.background = element_blank()) +
+  ggtitle("Simulated SG vs Whole-Cell")+
+  theme(plot.title = element_text(hjust = 0.5)) +
+  geom_label_repel(upmarkers[1:ndegs,] , mapping=aes(label=row.names(upmarkers)[1:ndegs]),size=3,point.padding=-0.5, color="#769fca",max.overlaps = 20)+
+  geom_label_repel(downmarkers[1:ndegs,] , mapping=aes(label=row.names(downmarkers)[1:ndegs]),size=3,point.padding=-0.5, color="#a2d1e6",max.overlaps = 20)+
+  geom_point(data=upmarkers, aes(x=logFC, y=  B), color="#769fca")+
+  geom_point(data=downmarkers, aes(x=logFC, y=  B), color="#a2d1e6")
+
+#This one to save real SG signal
+simsig <- data.frame(Gene=row.names(DEGenes), sim_t=DEGenes$t)
+```
+
+```{r, message=FALSE, warning=FALSE, results='hide'}
+genelength <- fread("../Yeast_length.txt")[,c(2,1)]
+Chromossomes <- fread("../Yeast_Chromossomes.txt")
+
+DEGenes$Gene <- row.names(DEGenes)
+colnames(genelength) <- c("Length","Gene")
+DEGenes <- merge(DEGenes, genelength, by="Gene")
+
+ggplot(data=DEGenes,
+                 aes(x=logFC,
+                     y=  B)) +
+  geom_point(aes(color=log10(Length)))+
+  theme_bw() +
+  theme(axis.line = element_line(colour = "black"),
+        panel.grid.minor = element_blank(),
+        panel.border = element_blank(),
+        panel.background = element_blank()) +
+  ggtitle("Simulated SG vs Whole-Cell")+ xlab(expression(Log[2] ~ Fold ~ Change)) + ylab("B-Statistic") +
+  theme(plot.title = element_text(hjust = 0.5))  +
+  scale_colour_gradient(low = "black", high = "red")+ theme(text=element_text(family = "Quicksand"))
+
+
+smooth.SG <- lm(t~log10(Length), DEGenes)
+liner.SG <- rstandard(smooth.SG)
+DEGenes <-cbind(DEGenes, liner.SG)
+colnames(DEGenes)[9] <- "Residuals"
+row.names(DEGenes) <- DEGenes$Gene
+linemarkers <- as.data.frame(DEGenes[abs(DEGenes$Residuals)>4,])
+
+# Calculate the Spearman correlation coefficient
+spearman_corr <- cor(DEGenes$t, log10(DEGenes$Length), method = "pearson")
+
+
+
+ggplot(DEGenes, aes(y=t, x=log10(Length))) + geom_point(color="#CCCCCC", alpha=1) +   theme_bw()+ geom_density_2d()+
+ ylab("SG-Enrichment (t-stat)") + xlab(expression(RNA ~ Length ~ Log[10] ~ Base ~ Pairs)) +
+  theme(axis.line = element_line(colour = "black"),
+        panel.grid.minor = element_blank(),
+        panel.border = element_blank(),
+        panel.background = element_blank()) + 
+  theme(plot.title = element_text(hjust = 0.5))  +
+  geom_abline(slope=smooth.SG$coefficients[2], intercept = smooth.SG$coefficients[1], linetype = "dashed")+ stat_cor(method = "spearman", cor.coef.name = "rho", size=5)
+
+```
+
+
+
+# Comparison Between Methods
+
+Now, I check how well my simulation, which just depends on the inherent centrifugation signal, recapitulates the real SGs.
+
+```{r fig.height=7, fig.width=10}
+cor_sim_df <- merge(realsig, simsig, by="Gene")
+cor_sim_df <- merge(cor_sim_df, genelength, by="Gene")
+
+
+smooth.SG <- lm(sim_t ~ real_t, cor_sim_df)
+
+SimCorrel <- ggplot(cor_sim_df, aes(x=real_t, y=sim_t)) + geom_point(aes(colour=log10(Length)),alpha=0.5, size=5) +   theme_bw()+
+ xlab("Original SG Enrichment") + ylab("Simulated SG Enrichment") +   
+  geom_density2d(color="#800020", size=1.2)+
+  theme(axis.line = element_line(colour = "black"),
+        panel.grid.minor = element_blank(),
+        panel.border = element_blank(),
+        panel.background = element_blank()) + ggtitle("Simulation Results")+
+  theme(plot.title = element_text(hjust = 0.5))  +
+  geom_abline(slope=smooth.SG$coefficients[2], intercept = smooth.SG$coefficients[1], linetype = "dashed")+
+  theme(text=element_text(size=15,  family="Arial MS")) + stat_cor(method = "spearman", cor.coef.name = "rho", size=5) + theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank())+
+  scale_colour_gradient(low="#729EA1", high = "#DB5375")+
+  labs(colour = "RNA Length")
+
+SimCorrel
+
+# tiff("../Projects/StressGranules/SGPAPER/SimCorrel.tiff", width = 8, height=6, units = "in", res=300)
+# SimCorrel
+# dev.off()
+```
+
+From the strong correlation, in my opinion, one cannot exclude that the SG enrichment is in reality simply because of centrifugation. I obtained similar results with my original SpinSim pipeline. Nevertheless, when I use these experimentally determined sedimentation coefficients from SedSeq, this correlation is even higher.
+
+# Human Adaptation
+
+## Nuclear Encoded Transcripts
+
+Now, by seeing how RNA behaves in Yeast, and how each RNA relates to its length and weight, I derive equations that I will then use to simulate centrifugation in human samples. 
+
+```{r, message=FALSE, warning=FALSE}
+#As "sedimentation  coeficcients" seemingly change in accordance to stress, we can choose which one we use to modulate it. In this case, I use Azide as an example.
+Stressed_S <- fread("../Projects/StressGranules/Simulator/New/SEDSEQ_S/Azide0.5_processed.txt")[,c(1,5)]
+colnames(Stressed_S) <- c("Gene","Scof_St")
+
+#In this file, I previously calculated the weight of every yeast transcript
+WeightyBoy <- fread("../Projects/StressGranules/SG_Transcriptome/Sed-Seq/Yeast_Weight.txt")
+
+#To remove infinite values that may have occured with the simulation
+Stressed_S <- Stressed_S[!apply(Stressed_S, 1, function(x) any(is.infinite(as.numeric(x)))), ]
+Stressed_S <- Stressed_S[complete.cases(Stressed_S), ]
+Stressed_S <- as.data.frame(Stressed_S)
+
+#Just merging length and weight with the S table
+dfforformula <- merge(genelength, WeightyBoy, by="Gene")
+dfforformula <- merge(dfforformula, Stressed_S, by="Gene")
+
+#So that I am able to identify mitochondrial genes
+cromos <- fread("../Yeast_Chromossomes.txt")
+colnames(cromos) <- c("Cromo","Gene")
+dfforformula <- merge(dfforformula, cromos, by="Gene")
+
+#Creating the linear models I will use. For simplicity, I will beforehand transform each variable into its cubic root.
+dfforformula$Length <- ((dfforformula$Length)^(1/3))
+dfforformula$MW <- ((dfforformula$MW)^(1/3))
+
+#Starting with the model with RNA Length
+smooth.SG <- lm(Scof_St~((Length)), dfforformula)
+#This gives me the "b" and "a" for the equation where y=ax+b, respectively.
+print(smooth.SG$coefficients)
+liner.SG <- rstandard(smooth.SG)
+dfforformula_length <- cbind(dfforformula, liner.SG)
+
+#To individually look at Mito RNAs
+upmarkers <- as.data.frame(dfforformula_length[dfforformula_length$Cromo=="Mito",] )
+
+ggplot(dfforformula_length, aes(y=Scof_St, x=(Length))) + 
+  geom_point(aes(colour=(Length)^(1/3)), alpha = 0.3, size=5) +   
+  geom_density_2d(colour="#FFFFFF", size=1.2)+  theme_bw()+xlab("RNA Length")+
+  ylab("Stressed S")+ scale_colour_gradient(low="black", high="red")+
+  theme(axis.line = element_line(colour = "black"),
+        panel.grid.minor = element_blank(),
+        panel.border = element_blank(),
+        panel.background = element_blank()) + 
+  theme(plot.title = element_text(hjust = 0.5)) + 
+  theme(text=element_text(size=15,  family="Arial MS")) + stat_cor(method = "spearman", cor.coef.name = "rho", size=5)+ theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank()) +
+  geom_abline(slope=smooth.SG$coefficients[2], intercept = smooth.SG$coefficients[1], linetype = "dashed")+
+  geom_label_repel(upmarkers[1:ndegs,] , mapping=aes(label=(upmarkers$Gene)[1:ndegs]),size=3,point.padding=-0.5, color="#03256C",max.overlaps = 20)+
+  geom_point(data=upmarkers, aes(y=Scof_St, x=  Length), color="blue", alpha = 1, size=5)+ ggtitle("Model with Length")
+
+
+smooth.SG <- lm(Scof_St~((MW)), dfforformula)
+#This gives me the "b" and "a" for the equation where y=ax+b, respectively.
+print(smooth.SG$coefficients)
+liner.SG <- rstandard(smooth.SG)
+dfforformula_mw <- cbind(dfforformula, liner.SG)
+
+#To individually look at Mito RNAs
+upmarkers <- as.data.frame(dfforformula_mw[dfforformula_mw$Cromo=="Mito",] )
+
+ggplot(dfforformula_mw, aes(y=Scof_St, x=(MW))) + 
+  geom_point(aes(colour=(MW)^(1/3)), alpha = 0.3, size=5) +   
+  geom_density_2d(colour="#FFFFFF", size=1.2)+  theme_bw()+xlab("Molecular Weight")+
+  ylab("Stressed S")+ scale_colour_gradient(low="black", high="red")+
+  theme(axis.line = element_line(colour = "black"),
+        panel.grid.minor = element_blank(),
+        panel.border = element_blank(),
+        panel.background = element_blank()) + 
+  theme(plot.title = element_text(hjust = 0.5)) + 
+  theme(text=element_text(size=15,  family="Arial MS")) + stat_cor(method = "spearman", cor.coef.name = "rho", size=5)+ theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank()) +
+  geom_abline(slope=smooth.SG$coefficients[2], intercept = smooth.SG$coefficients[1], linetype = "dashed")+
+  geom_label_repel(upmarkers[1:ndegs,] , mapping=aes(label=(upmarkers$Gene)[1:ndegs]),size=3,point.padding=-0.5, color="#03256C",max.overlaps = 20)+
+  geom_point(data=upmarkers, aes(y=Scof_St, x=  MW), color="blue", alpha = 1, size=5)+ ggtitle("Model with Molecular Weight")
+
+#dfforformula <- subset(dfforformula, Cromo=="Mito")
+
+```
+
+## Mitochondrial Encoded Transcripts
+
+From the previous plots, we can see that mitochondrial encoded transcripts seem to have bigger sedimentation coefficients than what would be expected by their length and weight. As such, I derive particular equations for these transcripts. 
+
+```{r}
+dfforformula_mito <- subset(dfforformula, Cromo=="Mito")
+smooth.SG <- lm(Scof_St~((Length)), dfforformula)
+print(smooth.SG$coefficients)
+smooth.SG <- lm(Scof_St~((MW)), dfforformula)
+print(smooth.SG$coefficients)
+```
+
+
+# Session Info
+
+```{r}
+sessionInfo()
+```
+
