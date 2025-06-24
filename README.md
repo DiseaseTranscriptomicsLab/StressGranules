@@ -2,15 +2,14 @@
 
 This repository contains all analyses and code associated with our study on stress granule signatures, as described in [DOI placeholder].
 
-**DISCLAIMER: The code and analyses are commented, but in an informal manner. Sometimes I even put some jokes in. Insane, I know.**
+**DISCLAIMER: The code and analyses are commented, but in an informal manner.**
 
 ## Repository Structure
 
 - **`Datasets/`**  
-  Contains all publicly available datasets used in the study. Each dataset includes:
+  Contains all publicly available datasets used in the study, as well as scripts for SG signature development. Each dataset includes:
   - An `.Rmd` file with the analysis
   - A corresponding `.html` output
-  - Scripts for SG signature development
 
 - **`Scripts/`**  
   Bash scripts used for preprocessing datasets prior to downstream analyses.
