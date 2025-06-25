@@ -15,6 +15,19 @@ In this folder, I present all analyses pertaining to the dataset by **H. Glaunin
   - **`Azide0.5_processed.txt`**: **`Control_processed.txt`**; **`Ethanol_processed.txt`**; **`HSStress_processed.txt`**
   These files contain the calculated average sedimentation coefficients for yeast, in the corresponding experimental condition.
 
+### PBodies 
+
+Analyses related to the PBody datasets used, 
+
+- **`PBodies/`**
+In this folder, I present all analyses pertaining to the datasets by **T. Matheny, 2019** and **S. Kodali, 2024**
+**GSE138988** ([NCBI GEO Link](https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=GSE138988))
+**GSE224858** ([NCBI GEO Link](https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=GSE224858))
+**GSE224752** ([NCBI GEO Link](https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=GSE224752))
+
+  - **`SGcontrolledbyPB.txt`**
+  This file contains the SG signal compared to the stressed PB signal. Thus, theoritically controlled for the DC Method.
+
 
 ### Senescence 
 
