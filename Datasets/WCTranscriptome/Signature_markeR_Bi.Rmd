@@ -1,0 +1,434 @@
+---
+title: "markeR Based Signature Usage"
+subtitle: "Creation of SGScore and Simulated Signatures"
+author: 
+  - name: "Alexandre Kaizeler^[Disease Transcriptomics Group, Gulbenkian Institute of Molecular Medicine]"
+    email: alexandreafonso@gimm.pt
+date: "`r format(Sys.time(), '%d %B %Y')`"
+output: 
+  rmdformats::downcute:
+    downcute_theme: "chaos"
+---
+
+# Introduction
+
+In this document, I use the markeR package (in development) to calculate the SGScore and Simulate Random Signatures as control. For more information, please refer to the original package developed by **Martins-Silva, R.** ([GitHub Link](https://github.com/DiseaseTranscriptomicsLab/markeR))
+
+ 
+```{r}
+library(markeR)
+library(data.table)
+library(msigdbr)
+library(ggplot2)
+library(ggpubr)
+library(ggExtra)
+```
+
+ 
+# Preparation of TCGA data
+
+First, I load the TCGA data. Please refer to the original resource in case of need, at the **GDC Portal** ([TCGA Link](https://portal.gdc.cancer.gov/)).
+
+```{r}
+#This object contains both counts and metadata. For preprocessing, please refer to markdown file "SIGNATURE_TCGA.Rmd". 
+TCGAobj_tissue <- readRDS("~/Projects/TCGA/TCGAobj_tissue.RDS")
+
+#Not all TCGA tissues have enough number of tumour and normal samples to warrant a direct comparsion. Herein, I select only those that do (at least 5 samples of each)
+tissuestocheck <- c("BLCA", "BRCA", "CHOL", "COAD", "ESCA", "HNSC", "READ", "STAD", "UCEC", "KICH", "KIRC", "KIRP", "LIHC", "LUAD", "LUSC", "PRAD", "THCA")
+
+TCGAobj_tissue_TvsN <- TCGAobj_tissue[names(TCGAobj_tissue) %in% tissuestocheck]
+
+
+#Preprocessing of the TCGA data. For simplicity, I keep only either tumour or normal samples, discarding only sample types. 
+for (tissue in names(TCGAobj_tissue_TvsN)) {
+
+  # Retrieve metadata and logCPM for the tissue
+  metadata <- as.character(TCGAobj_tissue_TvsN[[tissue]]$metadata)
+  logCPM <- TCGAobj_tissue_TvsN[[tissue]]$logCPM
+  
+  # Replace "01" with "Tumor" and "11" with "Normal"
+  metadata[metadata == "01"] <- "Tumor"
+  metadata[metadata == "11"] <- "Normal"
+
+  # Find the two most common tumour types (now updated to "Tumor" and "Normal")
+  top_events <- names(sort(table(metadata), decreasing = TRUE))[1:2]
+
+  # Filter metadata and logCPM to include only the two most common events
+  keep_indices <- which(metadata %in% top_events)
+  TCGAobj_tissue_TvsN[[tissue]]$metadata <- metadata[keep_indices]
+  TCGAobj_tissue_TvsN[[tissue]]$logCPM <- logCPM[, keep_indices, drop = FALSE]
+}
+
+
+
+```
+
+# Signatures
+
+```{r}
+# I load both of my signatures
+Signature1 <- fread("~/SG_SIGNATURE_LASSOISH.txt")
+Signature2 <- fread("~/SG_SIGNATURE_ELASTICNET.txt")
+
+# Since my signature is bidirectional, I convert Pos or Neg signal to either 1 or -1
+Signature1[, Signal := ifelse(Signal == "Pos", 1, -1)]
+Signature2[, Signal := ifelse(Signal == "Pos", 1, -1)]
+
+
+#In case I want to compare, I load some gene sets which may be interesting to compare my signature to
+hallmarks.gs <- msigdbr(species = "Homo sapiens", collection = "H")
+
+hallmarks.gsets <- hallmarks.gs %>% split(x = .$gene_symbol, f = .$gs_name)
+
+for (set in names(hallmarks.gsets)){
+  hallmarks.gsets[[set]] <- toupper(hallmarks.gsets[[set]])
+}
+
+
+
+InflammatoryResponse <- data.frame(Gene=hallmarks.gsets$HALLMARK_INFLAMMATORY_RESPONSE, Signal=1)
+InterferonAlpha <- data.frame(Gene=hallmarks.gsets$HALLMARK_INTERFERON_ALPHA_RESPONSE, Signal=1)
+InterferonGamma <- data.frame(Gene=hallmarks.gsets$HALLMARK_INTERFERON_GAMMA_RESPONSE, Signal=1)
+TNFNFKB <- data.frame(Gene=hallmarks.gsets$HALLMARK_TNFA_SIGNALING_VIA_NFKB, Signal=1)
+IL2 <- data.frame(Gene=hallmarks.gsets$HALLMARK_IL2_STAT5_SIGNALING, Signal=1)
+IL6 <- data.frame(Gene=hallmarks.gsets$HALLMARK_IL6_JAK_STAT3_SIGNALING, Signal=1)
+OXPHOS <- data.frame(Gene=hallmarks.gsets$HALLMARK_OXIDATIVE_PHOSPHORYLATION, Signal=1)
+
+```
+ 
+
+
+## Running
+ 
+ 
+Here, I calculate the SGScore for both signatures, for all tumour types with enough sample types.
+
+```{r fig.height=14, fig.width=16, message=FALSE, warning=FALSE}
+library(ggplot2)
+library(patchwork)  # Install with install.packages("patchwork")
+
+plot_list <- list()  # Create an empty list to store plots
+plot_index <- 1  # Track the plot index
+
+for (tissue in names(TCGAobj_tissue_TvsN)) {
+  
+  counts <- 2^TCGAobj_tissue_TvsN[[tissue]]$logCPM
+  metadata <- data.frame(sample=colnames(counts), tumour = TCGAobj_tissue_TvsN[[tissue]]$metadata)
+  
+  # Check if there is more than one unique tumour type
+  if(length(unique(metadata$tumour)) == 1) {
+    message(paste("Skipping tissue", tissue, "because there is only one sample type"))
+    next
+  }
+
+  # Create frequency table for top 2 most frequent instances
+  freq_table <- sort(table(TCGAobj_tissue_TvsN[[tissue]]$metadata), decreasing = TRUE)
+  top_instances <- names(freq_table)[1:2]
+  cond_cohend <- list(A = top_instances[1], B = top_instances[2])
+
+  # Wrap in tryCatch to handle errors
+  tryCatch({
+    plot_logmedian <- PlotScores(data = counts, metadata = metadata, 
+                                 gene_sets = list(SG1=Signature1, SG2=Signature2),
+                                 ColorVariable = "tumour",
+                                 ColorValues = c("#779ECB", "#FFA071"),
+                                 Variable="tumour",  
+                                 method ="ranking",  
+                                 ConnectGroups=TRUE, 
+                                 ncol = NULL, 
+                                 nrow = NULL, 
+                                 widthTitle=20, 
+                                 legend_nrow = 1, 
+                                 pointSize=4,
+                                 cond_cohend=cond_cohend,
+                                 title=paste0(tissue),
+                                 labsize=7, 
+                                 titlesize = 10, 
+                                 pvalcalc = TRUE)  
+    
+    plot_list[[plot_index]] <- plot_logmedian  # Store the plot
+    plot_index <- plot_index + 1  # Increment the index
+    
+  }, error = function(e) {
+    message(paste("Error in tissue", tissue, ":", e$message))
+  })
+}
+
+# Combine all plots into a grid layout using patchwork
+if (length(plot_list) > 0) {
+  final_plot <- wrap_plots(plot_list, ncol = 5)  # Adjust ncol as needed
+  print(final_plot)
+}
+
+tiff("~/Projects/StressGranules/SGPAPER/Images/SignatureCancer.tiff", width = 16, height=14, units = "in", res=300)
+final_plot
+dev.off()
+
+```
+
+# Function for Simulation
+
+Since most gene signatures exhibit prognostic potential in cancer, I opted to compare both my signatures with random simulated signatures. If my signatures exhibit better prognostic potential than most random ones, they may therefore still hold potential. 
+
+```{r}
+# Helper function to compute Cohen's d
+cohen_d <- function(x, y) {
+  n1 <- length(x)
+  n2 <- length(y)
+  if(n1 < 2 || n2 < 2) return(NA)
+  m1 <- mean(x)
+  m2 <- mean(y)
+  s1 <- sd(x)
+  s2 <- sd(y)
+  pooled_sd <- sqrt(((n1 - 1) * s1^2 + (n2 - 1) * s2^2) / (n1 + n2 - 2))
+  if (pooled_sd == 0) return(NA)
+  d <- (m1 - m2) / pooled_sd
+  d <- abs(d) # dor this application we don't need the direction of the classification, just if it works
+  return(d)
+}
+
+compute_cohen_d <- function(dfScore, variable, quantitative_var="score") { 
+  
+  # Get unique group values
+  unique_groups <- unique(dfScore[[variable]])
+  
+  # Ensure there are at least two groups
+  if (length(unique_groups) < 2) {
+    stop("The grouping column must have at least two unique values.")
+  }
+  
+  
+  
+  # Store results
+  results <- data.frame(Group1 = character(), Group2 = character(), 
+                        CohenD = numeric(), PValue = numeric(), stringsAsFactors = FALSE)
+  
+  # Compute Cohen's d and p-value for all unique pairs
+  combs <- combn(unique_groups, 2, simplify = FALSE)
+  for (pair in combs) {
+    x <- dfScore[dfScore[[variable]] == pair[1], quantitative_var, drop = TRUE]
+    y <- dfScore[dfScore[[variable]] == pair[2], quantitative_var, drop = TRUE]
+    
+    d <- cohen_d(x, y)
+    p_val <- t.test(x, y, var.equal = TRUE)$p.value
+    
+    results <- rbind(results, data.frame(Group1 = pair[1], Group2 = pair[2], 
+                                         CohenD = d, PValue = p_val, stringsAsFactors = FALSE))
+  }
+  
+  return(results)
+}
+
+
+# Function to flatten the list of lists into a data frame
+flatten_results <- function(nested_list) {
+  # Create an empty list to store results
+  result_list <- list()
+  
+  # Iterate over methods (first level)
+  for (method in names(nested_list)) {
+    # Iterate over gene signatures (second level)
+    for (signature in names(nested_list[[method]])) {
+      # Extract the data frame (third level)
+      df <- nested_list[[method]][[signature]]
+      
+      # Add columns for method and signature
+      df$method <- method
+      df$signature <- signature
+      
+      # Store the modified data frame in the list
+      result_list[[paste(method, signature, sep = "_")]] <- df
+    }
+  }
+  
+  # Combine all data frames into one
+  final_df <- do.call(rbind, result_list)
+  
+  # Reset row names
+  rownames(final_df) <- NULL
+  
+  return(final_df)
+}
+
+
+CohenD_allConditions <- function(data, metadata, gene_sets, variable) {
+  
+  # Step 1: Check if variable exists in metadata
+  if (!variable %in% colnames(metadata)) {
+    stop(paste("Error: Variable", variable, "not found in metadata."))
+  }
+  
+  # Step 2: Compute scores for all methods and signatures
+  listScores <- CalculateScores(data = data, metadata = metadata, gene_sets = gene_sets, method = "all") 
+  
+  # Step 3: Flatten into a data frame with method & signature columns
+  dfScores <- flatten_results(listScores)
+  
+  # Step 4: Initialize result list
+  result_list <- list()
+  
+  # Step 5: Loop through each signature
+  for (signature in unique(dfScores$signature)) {
+    
+    # Filter for the specific signature
+    df_subset <- dfScores[dfScores$signature == signature, ]
+    
+    # Initialize storage for this signature
+    cohen_d_results <- list()
+    p_value_results <- list()
+    
+    # Step 6: Loop through each method
+    for (method in unique(df_subset$method)) {
+      
+      # Subset data for this method
+      df_method <- df_subset[df_subset$method == method, ]
+      
+      # Compute Cohen's d and p-values
+      cohen_results <- compute_cohen_d(df_method, variable)
+      
+      # Convert to named vectors (column names = comparisons)
+      cohen_d_results[[method]] <- setNames(cohen_results$CohenD, paste0(cohen_results$Group1, ":", cohen_results$Group2))
+      p_value_results[[method]] <- setNames(cohen_results$PValue, paste0(cohen_results$Group1, ":", cohen_results$Group2))
+    }
+    
+    # Convert lists to data frames
+    cohen_d_df <- as.data.frame(do.call(rbind, cohen_d_results))
+    p_value_df <- as.data.frame(do.call(rbind, p_value_results))
+    
+    # Store results in the named list
+    result_list[[signature]] <- list(CohenD = cohen_d_df, PValue = p_value_df)
+  }
+  
+  # Step 7: Return the list
+  return(result_list)
+}
+
+
+```
+
+## Running
+
+
+```{r fig.height=20, fig.width=20, warning=FALSE}
+
+original_signatures <- list(SG1=Signature1, SG2=Signature2)
+
+#original_signatures <- Senescence
+FDR_Simulation_alt <- function(data, metadata, original_signatures, gene_list, number_of_sims, title_for_plot) {
+  
+  # Combine original and simulated gene sets
+  all_signatures <- original_signatures
+  
+  for (sig in names(original_signatures)) {
+    cur_sig <- original_signatures[[sig]]
+    
+    # Convert vector to data frame if needed
+    if (is.vector(cur_sig)) {
+      cur_sig <- data.frame(Gene = cur_sig, Signal = 1)
+    }
+    
+    # Generate simulated signatures
+    for (sim in 1:number_of_sims) {
+      cur_model_sig <- cur_sig
+      cur_model_sig$Gene <- sample(gene_list, nrow(cur_sig))  # Randomly sample genes
+      all_signatures[[paste0(sig, "_sim", sim)]] <- cur_model_sig
+    }
+  }
+  
+  # Run CalculateScores on ALL signatures (original + simulated)
+  scores_df <- CalculateScores(data = data, metadata = metadata, 
+                               gene_sets = all_signatures, method = "ranking")
+  
+  return(scores_df)
+}
+
+
+
+simulationlist <- list()
+
+for (tissue in names(TCGAobj_tissue)) {
+  print(tissue)
+  counts <- 2^TCGAobj_tissue[[tissue]]$logCPM
+  metadata <- data.frame(sample=colnames(counts), tumour = TCGAobj_tissue[[tissue]]$metadata)
+
+simulationlist[[tissue]] <- FDR_Simulation_alt(data = counts,
+               metadata = metadata,
+               original_signatures = original_signatures,
+               gene_list = row.names(TCGAobj_tissue[["LAML"]]$logCPM),
+               number_of_sims = 100,
+               title_for_plot = paste0(tissue))
+}
+
+#I save the simulated signatures for future use
+saveRDS(simulationlist, "~/Projects/StressGranules/SGPAPER/Simulations/simulationlist.RDS")
+
+```
+
+# Validation Image
+
+This is a simple annex where I designed the image where I compare the behaviour of both my signatures on the discovery and validation datasets. 
+
+```{r eval=FALSE, echo=FALSE, fig.height=4, fig.width=10}
+cond_cohend <- list(A=c("YES"),  
+                    B=c("NO"))
+
+SG1 <- SG1 %>%
+  mutate(Signal = ifelse(Signal == "Pos", 1, -1))
+
+#I directly obtained the data directly from each datasets analysis. Please refer to the corresponding markdowns to get this information.
+
+#The information here is directly obtained from the discovery dataset
+Counts_Disc <- Counts
+Metadata_Disc <- Metadata
+Metadata_Disc$SGPres <- factor(Metadata_Disc$SGPres, levels = c("NO", "YES"))
+
+(discimage <- PlotScores(data = 2^Counts_Disc,metadata = Metadata_Disc, gene_sets = list(SG1=SG1, SG2=SG2),
+                             ColorVariable = "SGPres",
+                             ColorValues = c("#779ECB", "#FFA071"),
+                             GroupingVariable="SGPres",  
+                             method ="ranking",  
+                             ConnectGroups=TRUE, 
+                             ncol = NULL, 
+                             nrow = NULL, 
+                             widthTitle=20, 
+                             legend_nrow = 1, 
+                             pointSize=4,
+                             cond_cohend=cond_cohend,
+                             title=paste0("Discovery Dataset"),
+                             labsize=7, 
+                             titlesize = 10, pvalcalc = T))
+
+#The information here is directly obtained from the validation dataset
+Counts_Val <- Validation[-nrow(Validation),-1]
+Counts_Val[,1:22] <- lapply(Counts_Val[,1:22], as.numeric)
+
+Metadata_Val <- data.frame(sampleID=colnames(Counts_Val), SGPres=t(Validation[nrow(Validation),-1]))
+Metadata_Val$SGPres <- factor(Metadata_Val$SGPres, levels = c("NO", "YES"))
+(valimage <- PlotScores(data = 2^Counts_Val,metadata = Metadata_Val, gene_sets = list(SG1=SG1, SG2=SG2),
+                             ColorVariable = "SGPres",
+                             ColorValues = c("#779ECB", "#FFA071"),
+                             GroupingVariable="SGPres",  
+                             method ="ranking",  
+                             ConnectGroups=TRUE, 
+                             ncol = NULL, 
+                             nrow = NULL, 
+                             widthTitle=20, 
+                             legend_nrow = 1, 
+                             pointSize=4,
+                             cond_cohend=cond_cohend,
+                             title=paste0("Validation Dataset"),
+                             labsize=7, 
+                             titlesize = 10, pvalcalc = T))
+
+(Newgid <- ggarrange(discimage,valimage, ncol = 2,labels = c("A","B"), font.label = list(size=25)))
+
+tiff("~/Projects/StressGranules/SGPAPER/SignatureValidation.tiff", width = 12, height=4, units = "in", res=300)
+Newgid
+dev.off()
+```
+
+# Session Info
+
+```{r}
+sessionInfo()
+```

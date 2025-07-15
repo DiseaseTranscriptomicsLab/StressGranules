@@ -1,0 +1,797 @@
+---
+title: "Analyses of GSE173953"
+subtitle: "Stress granules are shock absorbers that prevent excessive innate immune responses to dsRNA"
+author: 
+  - name: "Alexandre Kaizeler^[Disease Transcriptomics Group, Gulbenkian Institute of Molecular Medicine]"
+    email: alexandreafonso@gimm.pt
+date: "`r format(Sys.time(), '%d %B %Y')`"
+output: 
+  rmdformats::downcute:
+    downcute_theme: "chaos"
+---
+
+# Introduction
+
+In this document, I present all analyses pertaining to the dataset **GSE173953**  
+([NCBI GEO Link](https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=GSE173953)),  
+originally published by **M. Paget, 2023**.
+
+## Methodology
+
+```{r, message=FALSE}
+# These are all the libraries I used throughout the analysis. Not all of them will be required on this guidebook
+library(Rsubread)
+library(limma)
+library(edgeR)
+library(DESeq2)
+library(magrittr)
+library(ggrepel)
+library(tidyverse)
+library(vsn)
+library(ggplot2)
+library(NMF)
+library(biomaRt)
+library(ggpubr)
+library(factoextra)
+library(ggfortify)
+library(plotly)
+library(reshape2)
+library(fgsea)
+library(msigdbr)
+library(data.table)
+library(colorspace)
+library(readxl)
+
+set.seed(1906)
+```
+
+```{r}
+raw.read.counts <- read.table("~/Projects/StressGranules/AS.WC_Transcriptome/GSE173953/TrimmedSamples/alignment_STAR/featureCounts_Results.txt", header = T)
+
+
+# Afterwards, I discard the columns which don't have read counts. These columns are only informations about the gene.
+raw.read.counts <- raw.read.counts[,-c(2:6)]
+
+#Loading up our biomart file, obtained from Ensembl, where we have the equivalence between Ensembl IDs and HGNC names
+biomart <- fread("~/biomart.txt")[,-1]
+
+
+colnames(raw.read.counts)[1] <- "ensembl_gene_id"
+colnames(biomart) <- c("ensembl_gene_id", "hgnc_symbol")
+
+eltable <- merge(raw.read.counts,biomart,by = "ensembl_gene_id", all= TRUE) #this creates a table with both ensemble ids and HGNC codes.
+
+eltable <- subset(eltable, hgnc_symbol!="") #this removes reads that dont have a corresponding hgnc symbol.
+
+eltable$ensembl_gene_id <- NULL # We no longer need this column
+
+read.counts <- eltable %>% # If two gene ids resulted in the same gene name, this will sum up their counts
+  group_by(hgnc_symbol) %>%
+  summarise(across(everything(), sum, na.rm = TRUE))
+
+read.counts <- as.data.frame(read.counts)
+
+row.names(read.counts) <- read.counts$hgnc_symbol #changes rownames into hgnc symbols
+read.counts$hgnc_symbol <- NULL #We no longer need this column, as we have the rownames.
+```
+
+## Extra Quality Control
+
+```{r}
+
+# Define color palette
+custom_palette <- qualitative_hcl(11, palette = "Pastel")
+custom_palette <- sample(custom_palette, 11)
+
+# Use SampleColouring from metadata
+SampleColouring <- c(rep("WT.U2.CT",2), rep("WT.U2.DS6",2), rep("KO.U2.CT",2),rep("KO.U2.DS4",2), rep("WT.A5.CT",2), rep("WT.A5.DS4",2), rep("KO.A5.CT",2), rep("KO.A5.DS4",2), rep("KO.U2.DS6",3), rep("KOKO.U2.DS6",3), rep("KO.U2.DS24",3))
+
+# Build cumulative counts
+final <- sapply(1:ncol(read.counts), function(i) {
+  sort_vals <- read.counts[order(read.counts[, i], decreasing = TRUE), i]
+  cumsum(sort_vals)
+})
+final <- as.data.frame(final)
+colnames(final) <- colnames(read.counts)
+
+# Melt and add gene position + sample info
+finalmelt <- reshape2::melt(final, variable.name = "Sample")
+finalmelt$genes <- rep(1:nrow(final), times = ncol(final))
+finalmelt$SampleColouring <- rep(SampleColouring, each = nrow(final))
+
+# Plot cumulative read coverage
+ggplot(data = finalmelt, aes(x = genes, y = log10(value), group = Sample, color = SampleColouring)) +
+  geom_line() +
+  scale_color_manual(values = custom_palette, name = "Cell Line") +
+  theme_bw() +
+  xlab("Number of Genes Covered") +
+  ylab("Number of Reads (log10)") +
+  xlim(0, 20000) +
+  ylim(6, 8) +
+  theme(
+    axis.line = element_line(colour = "black"),
+    panel.grid.minor = element_blank(),
+    panel.border = element_blank(),
+    panel.background = element_blank()
+  )
+
+# Create percentage-based plot
+orderfinal <- subset(finalmelt, genes == max(finalmelt$genes))
+trial <- merge(orderfinal[, c("Sample", "value")], finalmelt, by = "Sample", suffixes = c(".total", ".current"))
+trial$percent <- (trial$value.current / trial$value.total) * 100
+trial$SampleColouring <- rep(SampleColouring, each = nrow(final))
+
+ggplot(data = trial, aes(x = genes, y = percent, group = Sample, color = SampleColouring)) +
+  geom_line() +
+  geom_hline(yintercept = 50, linetype = "dashed") +
+  scale_color_manual(values = custom_palette, name = "Cell Line") +
+  xlab("Number of Genes Covered") +
+  ylab("Number of Reads (%)") +
+  xlim(0, 20000) +
+  theme_bw() +
+  theme(
+    axis.line = element_line(colour = "black"),
+    panel.grid.minor = element_blank(),
+    panel.border = element_blank(),
+    panel.background = element_blank()
+  )
+```
+
+As we can see in these plots, even though there is a sample type with lower complexity, in this case there are no individual sample outliers in terms of complexity or read depth. Excellent!
+
+## Filtration
+
+Let us begin with the filtration. Personally, I find that its easier to do visually. I am aware that my filtration is more violent than most. Usually, from RNA-Seq experiments, we commonly obtain bi-modal distributions, with the first mode corresponding to lowly expressed genes. I remove these by cutting just before the second mode. This time, I opted to also observe every sample type by itself.
+
+```{r}
+
+#I found that the MAVS and G3BP1&2 KOs were not important for my own analyses so I don-t use them.
+read.counts <- read.counts[,-c(20:22)]
+
+
+alternew.WT.U2.CT <- log10(rowSums(read.counts[,1:2]))
+alternew.WT.U2.CT <- as.data.frame(alternew.WT.U2.CT)
+
+alternew.WT.U2.DS6 <- log10(rowSums(read.counts[,3:4]))
+alternew.WT.U2.DS6 <- as.data.frame(alternew.WT.U2.DS6)
+
+alternew.KO.U2.CT <- log10(rowSums(read.counts[,5:6]))
+alternew.KO.U2.CT <- as.data.frame(alternew.KO.U2.CT)
+
+alternew.KO.U2.DS4 <- log10(rowSums(read.counts[,7:8]))
+alternew.KO.U2.DS4 <- as.data.frame(alternew.KO.U2.DS4)
+
+alternew.WT.A5.CT <- log10(rowSums(read.counts[,9:10]))
+alternew.WT.A5.CT <- as.data.frame(alternew.WT.A5.CT)
+
+alternew.WT.A5.DS4 <- log10(rowSums(read.counts[,11:12]))
+alternew.WT.A5.DS4 <- as.data.frame(alternew.WT.A5.DS4)
+
+alternew.KO.A5.CT <- log10(rowSums(read.counts[,13:14]))
+alternew.KO.A5.CT <- as.data.frame(alternew.KO.A5.CT)
+
+alternew.KO.A5.DS4 <- log10(rowSums(read.counts[,15:16]))
+alternew.KO.A5.DS4 <- as.data.frame(alternew.KO.A5.DS4)
+
+alternew.KO.U2.DS6 <- log10(rowSums(read.counts[,17:19]))
+alternew.KO.U2.DS6 <- as.data.frame(alternew.KO.U2.DS6)
+
+alternew.KO.U2.DS24 <- log10(rowSums(read.counts[,20:22]))
+alternew.KO.U2.DS24 <- as.data.frame(alternew.KO.U2.DS24)
+
+
+alternew <- log10(rowSums(read.counts))
+alternew <- as.data.frame(alternew)
+
+ggplot(alternew, aes(x=alternew)) + geom_density() + theme_bw() + geom_vline(xintercept = 3.75, linetype = "dashed") + ylab("Events") + xlab("Number of Reads (log10)") +
+  theme(axis.line = element_line(colour = "black"),
+        panel.grid.minor = element_blank(),
+        panel.border = element_blank(),
+        panel.background = element_blank()) + ggtitle("Density of Reads - All Samples")
+
+ggplot(alternew.WT.U2.CT, aes(x=alternew.WT.U2.CT)) + geom_density(fill="#a2d1e6", alpha=0.5) + theme_bw() + geom_vline(xintercept = 2.75, linetype = "dashed") + ylab("Events") + xlab("Number of Reads (log10)") +
+  theme(axis.line = element_line(colour = "black"),
+        panel.grid.minor = element_blank(),
+        panel.border = element_blank(),
+        panel.background = element_blank()) + ggtitle("WT U2OS Control")
+
+ggplot(alternew.WT.U2.DS6, aes(x=alternew.WT.U2.DS6)) + geom_density(fill="#769fca", alpha=0.5) + theme_bw() + geom_vline(xintercept = 2.75, linetype = "dashed") + ylab("Events") + xlab("Number of Reads (log10)") +
+  theme(axis.line = element_line(colour = "black"),
+        panel.grid.minor = element_blank(),
+        panel.border = element_blank(),
+        panel.background = element_blank()) + ggtitle("WT U2OS dsRNA 6h")
+
+ggplot(alternew.KO.U2.CT, aes(x=alternew.KO.U2.CT)) + geom_density(fill="#e88184", alpha=0.5) + theme_bw() + geom_vline(xintercept = 2.75, linetype = "dashed") + ylab("Events") + xlab("Number of Reads (log10)") +
+  theme(axis.line = element_line(colour = "black"),
+        panel.grid.minor = element_blank(),
+        panel.border = element_blank(),
+        panel.background = element_blank()) + ggtitle("KO-G3BP U2OS Control")
+
+ggplot(alternew.KO.U2.DS4, aes(x=alternew.KO.U2.DS4)) + geom_density(fill="#de425b", alpha=0.5) + theme_bw() + geom_vline(xintercept = 2.5, linetype = "dashed") + ylab("Events") + xlab("Number of Reads (log10)") +
+  theme(axis.line = element_line(colour = "black"),
+        panel.grid.minor = element_blank(),
+        panel.border = element_blank(),
+        panel.background = element_blank()) + ggtitle("KO-G3BP U2OS dsRNA 4h")
+
+ggplot(alternew.WT.A5.CT, aes(x=alternew.WT.A5.CT)) + geom_density(fill="#4e9c81", alpha=0.5) + theme_bw() + geom_vline(xintercept = 2.75, linetype = "dashed") + ylab("Events") + xlab("Number of Reads (log10)") +
+  theme(axis.line = element_line(colour = "black"),
+        panel.grid.minor = element_blank(),
+        panel.border = element_blank(),
+        panel.background = element_blank()) + ggtitle("WT A549 Control")
+
+ggplot(alternew.WT.A5.DS4, aes(x=alternew.WT.A5.DS4)) + geom_density(fill="#207567", alpha=0.5) + theme_bw() + geom_vline(xintercept = 2.75, linetype = "dashed") + ylab("Events") + xlab("Number of Reads (log10)") +
+  theme(axis.line = element_line(colour = "black"),
+        panel.grid.minor = element_blank(),
+        panel.border = element_blank(),
+        panel.background = element_blank()) + ggtitle("WT A549 dsRNA 4h")
+
+ggplot(alternew.KO.A5.CT, aes(x=alternew.KO.A5.CT)) + geom_density(fill="#878787", alpha=0.5) + theme_bw() + geom_vline(xintercept = 2.5, linetype = "dashed") + ylab("Events") + xlab("Number of Reads (log10)") +
+  theme(axis.line = element_line(colour = "black"),
+        panel.grid.minor = element_blank(),
+        panel.border = element_blank(),
+        panel.background = element_blank()) + ggtitle("KO-G3BP A549 Control")
+
+ggplot(alternew.KO.A5.DS4, aes(x=alternew.KO.A5.DS4)) + geom_density(fill="#555555", alpha=0.5) + theme_bw() + geom_vline(xintercept = 2.75, linetype = "dashed") + ylab("Events") + xlab("Number of Reads (log10)") +
+  theme(axis.line = element_line(colour = "black"),
+        panel.grid.minor = element_blank(),
+        panel.border = element_blank(),
+        panel.background = element_blank()) + ggtitle("KO-G3BP A549 dsRNA 4h")
+
+ggplot(alternew.KO.U2.DS6, aes(x=alternew.KO.U2.DS6)) + geom_density(fill="yellow", alpha=0.5) + theme_bw() + geom_vline(xintercept = 2.75, linetype = "dashed") + ylab("Events") + xlab("Number of Reads (log10)") +
+  theme(axis.line = element_line(colour = "black"),
+        panel.grid.minor = element_blank(),
+        panel.border = element_blank(),
+        panel.background = element_blank()) + ggtitle("KO-G3BP U2OS dsRNA 6h")
+
+ggplot(alternew.KO.U2.DS24, aes(x=alternew.KO.U2.DS24)) + geom_density(fill="orange", alpha=0.5) + theme_bw() + geom_vline(xintercept = 2.75, linetype = "dashed") + ylab("Events") + xlab("Number of Reads (log10)") +
+  theme(axis.line = element_line(colour = "black"),
+        panel.grid.minor = element_blank(),
+        panel.border = element_blank(),
+        panel.background = element_blank()) + ggtitle("KO-G3BP U2OS dsRNA 24h")
+
+```
+I didn't do it this time, but I've maintained the code to filter by sample type. This time, I considered that it was more correct to filter all samples together.
+
+```{r}
+filterednew <- subset(read.counts, alternew>4)
+filterednew.WT.U2.CT <- subset(read.counts, alternew.WT.U2.CT>2.75)
+filterednew.WT.U2.DS6 <- subset(read.counts, alternew.WT.U2.DS6>2.75)
+filterednew.KO.U2.CT <- subset(read.counts, alternew.KO.U2.CT>2.75)
+filterednew.KO.U2.DS4 <- subset(read.counts, alternew.KO.U2.DS4>2.5)
+filterednew.WT.A5.CT <- subset(read.counts, alternew.WT.A5.CT>2.75)
+filterednew.WT.A5.DS4 <- subset(read.counts, alternew.WT.A5.DS4>2.75)
+filterednew.KO.A5.CT <- subset(read.counts, alternew.KO.A5.CT>2.5)
+filterednew.KO.A5.DS4 <- subset(read.counts, alternew.KO.A5.DS4>2.75)
+filterednew.KO.U2.DS6 <- subset(read.counts, alternew.KO.U2.DS6>2.75)
+filterednew.KO.U2.DS24 <- subset(read.counts, alternew.KO.U2.DS24>2.75)
+
+#after cutting, its a good idea to visualise again
+falternew <- log10(rowSums(filterednew))
+falternew <- as.data.frame(falternew)
+ggplot(falternew, aes(x=falternew)) + geom_density() + theme_bw() + ylab("Events") + xlab("Number of Reads (log10)") +
+  theme(axis.line = element_line(colour = "black"),
+        panel.grid.minor = element_blank(),
+        panel.border = element_blank(),
+        panel.background = element_blank())
+
+#lets save the genes which we maintain
+impgenes <- c(row.names(falternew))
+impgenes.WT.U2.CT <- c(row.names(filterednew.WT.U2.CT))
+impgenes.WT.U2.DS6 <- c(row.names(filterednew.WT.U2.DS6))
+impgenes.KO.U2.CT <- c(row.names(filterednew.KO.U2.CT))
+impgenes.KO.U2.DS4 <- c(row.names(filterednew.KO.U2.DS4))
+impgenes.WT.A5.CT <- c(row.names(filterednew.WT.A5.CT))
+impgenes.WT.A5.DS4 <- c(row.names(filterednew.WT.A5.DS4))
+impgenes.KO.A5.CT <- c(row.names(filterednew.KO.A5.CT))
+impgenes.KO.A5.DS4 <- c(row.names(filterednew.KO.A5.DS4))
+impgenes.KO.U2.DS6 <- c(row.names(filterednew.KO.U2.DS6))
+impgenes.KO.U2.DS24 <- c(row.names(filterednew.KO.U2.DS24))
+
+finaltable <- read.counts[row.names(read.counts)%in%impgenes,]
+# finaltable <- finaltable[row.names(finaltable)%in%impgenes.WT.U2.CT,]
+# finaltable <- finaltable[row.names(finaltable)%in%impgenes.WT.U2.DS6,]
+# finaltable <- finaltable[row.names(finaltable)%in%impgenes.KO.U2.CT,]
+# finaltable <- finaltable[row.names(finaltable)%in%impgenes.KO.U2.DS4,]
+# finaltable <- finaltable[row.names(finaltable)%in%impgenes.WT.A5.CT,]
+# finaltable <- finaltable[row.names(finaltable)%in%impgenes.WT.A5.DS4,]
+# finaltable <- finaltable[row.names(finaltable)%in%impgenes.KO.A5.CT,]
+# finaltable <- finaltable[row.names(finaltable)%in%impgenes.KO.A5.DS4,]
+# finaltable <- finaltable[row.names(finaltable)%in%impgenes.KO.U2.DS6,]
+# finaltable <- finaltable[row.names(finaltable)%in%impgenes.KO.U2.DS24,]
+```
+
+
+
+## Matrices
+
+Good! Now we can proceed by designing our matrices. 
+
+```{r}
+#To be able to use Voom, we must first convert our read count table into a special DGE object.
+D0 <- DGEList(finaltable) 
+
+#Then we calculate the normalisation factors for these new generated data frames
+#Bear in mind this step calculates the normalisation factors, but does not normalise itself.
+D0 <- calcNormFactors(D0)
+
+
+#Lets create a dataframe with all metadata
+#Just in case I end up needing it, this is the full name of every sample
+samplenaming <- c(rep("WT.U2.CT",2), rep("WT.U2.DS6",2), rep("KO.U2.CT",2),rep("KO.U2.DS4",2), rep("WT.A5.CT",2), rep("WT.A5.DS4",2), rep("KO.A5.CT",2), rep("KO.A5.DS4",2), rep("KO.U2.DS6",3), rep("KOKO.U2.DS6",3), rep("KO.U2.DS24",3))[-c(20:22)]
+
+#In this version of stress, I use the time of stress as a variable
+StressType <- c(rep("0",2), rep("6",2), rep("0",2),rep("4",2), rep("0",2), rep("4",2), rep("0",2), rep("4",2), rep("6",3), rep("6",3), rep("24",3))
+
+#In this version, I only consider if its stressed or not
+StressType_simple <- c(rep("NO",2), rep("YES",2), rep("NO",2),rep("YES",2), rep("NO",2), rep("YES",2), rep("NO",2), rep("YES",11))
+
+CellType <- c(rep("U2OS",8), rep("A549",8), rep("U2OS",9))
+
+KOStat <- c(rep("WT",4), rep("KO",4), rep("WT",4), rep("KO",7), rep("KOKO",3), rep("KO",3))
+
+SGPres <- c(rep("NO",2), rep("YES",2), rep("NO",6), rep("YES",2), rep("NO",13))
+
+StudyNum <- c(rep("Study1",8), rep("Study2",8), rep("Study3",9)) #I separate by study
+
+metadata <- data.frame(Stress=StressType, Cell=CellType, KO=KOStat, SG=SGPres, Study=StudyNum) #Once again, I remove the KOKO samples
+
+metadata <- metadata[-c(20:22),]
+
+mm <- model.matrix(~0+Cell+Stress+KO+SG+Study,metadata)
+
+
+#and now we normalize. This step also turns our counts into log2-counts per million.
+y <- voom(D0, mm, plot = T)
+```
+
+The Mean-Variance Trend graph from voom also allows to determine if the filtration was appropriate. In this case, it was.
+
+
+## Normalisation
+
+Now, we are almost ready to move on to the differential gene expression analysis. I will first check to see if any issues arose during the normalisation process, by looking at samples before and after this process.
+
+```{r}
+dfforboxy <- finaltable
+orderforplots <- samplenaming
+colouring <- data.frame(Sample=colnames(dfforboxy), Types=orderforplots)
+dfforboxy <- reshape2::melt(dfforboxy)
+colnames(dfforboxy) <- c("Sample", "Expression")
+dfforboxy <- merge(dfforboxy, colouring, by="Sample")
+# Convert 'Types' to factor with custom order
+dfforboxy$Types <- factor(dfforboxy$Types, levels = unique(samplenaming))
+
+prenorm <- ggplot(dfforboxy, aes(x=Sample, y=(log2(Expression+1)), fill=Types)) + geom_boxplot(alpha=0.6) + theme_bw() + ylab("Read Counts (Log2)") + xlab("Samples") + scale_fill_manual(name = "Sample Type",values = c("#FFB6C1", "#FFB6C1", "#FFDAB9", "#FFDAB9", "#E6E6FA", "#E6E6FA", "#98FB98", "#98FB98", "#87CEEB", "#87CEEB", "#FFFF99", "#FFFF99", "#F08080", "#F08080", "#98FB98", "#98FB98", "#D8BFD8", "#D8BFD8", "#D8BFD8", "#FFA07A", "#FFA07A", "#FFA07A","#6495ED","#6495ED","#6495ED"), labels=c(unique(orderforplots))) +
+  theme(axis.line = element_line(colour = "black"),
+        panel.grid.minor = element_blank(),
+        panel.border = element_blank(),
+        panel.background = element_blank(),
+        axis.text.x=element_blank(),
+        axis.ticks.x=element_blank(),
+        legend.position = "None") + ggtitle("Prior to Normalisation")
+
+#Using the Standard Matrix
+
+dfforboxy <- y$E
+dfforboxy <- reshape2::melt(dfforboxy)
+dfforboxy <- dfforboxy[,-1]
+colnames(dfforboxy) <- c("Sample", "Expression")
+dfforboxy <- merge(dfforboxy, colouring, by="Sample")
+# Convert 'Types' to factor with custom order
+dfforboxy$Types <- factor(dfforboxy$Types, levels = unique(samplenaming))
+postnorm <- ggplot(dfforboxy, aes(x=Sample, y=Expression, fill=Types)) + geom_boxplot(alpha=0.6) + theme_bw() + ylab("Read Counts (Log2CPM)") + xlab("Samples") + scale_fill_manual(name = "Sample Type", values = c("#FFB6C1", "#FFB6C1", "#FFDAB9", "#FFDAB9", "#E6E6FA", "#E6E6FA", "#98FB98", "#98FB98", "#87CEEB", "#87CEEB", "#FFFF99", "#FFFF99", "#F08080", "#F08080", "#98FB98", "#98FB98", "#D8BFD8", "#D8BFD8", "#D8BFD8", "#FFA07A", "#FFA07A", "#FFA07A","#6495ED","#6495ED","#6495ED"), labels=c(unique(orderforplots))) +
+  theme(axis.line = element_line(colour = "black"),
+        panel.grid.minor = element_blank(),
+        panel.border = element_blank(),
+        panel.background = element_blank(),
+        axis.text.x=element_blank(),
+        axis.ticks.x=element_blank(),
+        legend.position = "None") + ggtitle("After Normalisation")
+
+ggarrange(prenorm, postnorm, nrow=1)
+
+```
+
+In this case, from the boxplots, we can see that there no samples which can be considered outliers.
+
+## PCA
+
+I like to start with a Principal Component Analysis (PCA), which helps to identify what drives the largest variation in the data.
+
+
+```{r}
+#This prepares my data for the PCA
+dfforpca <- y$E
+dfforpca <- t(dfforpca)
+dfforpca <- as.data.frame(dfforpca) # needs to be a data.frame
+dfforpca <- apply(dfforpca, 2, as.numeric) # Ensure numeric
+dfforpca <- as.data.frame(dfforpca) # still needs to be a data.frame
+
+# Add metadata, which we will then use to plot
+dfforpca$StressType <- StressType_simple[-c(20:22)]
+dfforpca$CellType <- metadata$Cell
+dfforpca$SGPres <- metadata$SG
+dfforpca$KOStat <- metadata$KO
+dfforpca$StudyNum <- metadata$Study
+
+
+# PCA computation itself. I do one PCA for each variable I want to see.
+pca_res <- prcomp(dfforpca[, 1:(ncol(dfforpca)-5)], scale = FALSE)
+p_stress<- autoplot(pca_res, data = dfforpca, x = 1, y = 2, colour = "StressType", size = 8) +
+  theme_bw() +
+  scale_colour_manual(name = "StressType", values = custom_palette) +
+  ggtitle("PCA - Coloured by StressType") +
+  theme(plot.title = element_text(hjust = 0.5),
+        axis.line = element_line(colour = "black"),
+        panel.grid.minor = element_blank(),
+        panel.border = element_blank(),
+        panel.background = element_blank())
+
+p_sg <- autoplot(pca_res, data = dfforpca, x = 1, y = 2, colour = "SGPres", size = 8) +
+  theme_bw() +
+  scale_colour_manual(name = "SGPres", values = custom_palette) +
+  ggtitle("PCA - Coloured by SGPres") +
+  theme(plot.title = element_text(hjust = 0.5),
+        axis.line = element_line(colour = "black"),
+        panel.grid.minor = element_blank(),
+        panel.border = element_blank(),
+        panel.background = element_blank())
+
+p_cell <- autoplot(pca_res, data = dfforpca, x = 1, y = 2, colour = "CellType", size = 8) +
+  theme_bw() +
+  scale_colour_manual(name = "CellType", values = custom_palette) +
+  ggtitle("PCA - Coloured by CellType") +
+  theme(plot.title = element_text(hjust = 0.5),
+        axis.line = element_line(colour = "black"),
+        panel.grid.minor = element_blank(),
+        panel.border = element_blank(),
+        panel.background = element_blank())
+
+p_ko <- autoplot(pca_res, data = dfforpca, x = 1, y = 2, colour = "KOStat", size = 8) +
+  theme_bw() +
+  scale_colour_manual(name = "KOStat", values = custom_palette) +
+  ggtitle("PCA - Coloured by KOStat") +
+  theme(plot.title = element_text(hjust = 0.5),
+        axis.line = element_line(colour = "black"),
+        panel.grid.minor = element_blank(),
+        panel.border = element_blank(),
+        panel.background = element_blank())
+
+p_study <- autoplot(pca_res, data = dfforpca, x = 1, y = 2, colour = "StudyNum", size = 8) +
+  theme_bw() +
+  scale_colour_manual(name = "StudyNum", values = custom_palette) +
+  ggtitle("PCA - Coloured by StudyNum") +
+  theme(plot.title = element_text(hjust = 0.5),
+        axis.line = element_line(colour = "black"),
+        panel.grid.minor = element_blank(),
+        panel.border = element_blank(),
+        panel.background = element_blank())
+
+p_stress
+p_sg
+p_cell
+p_ko
+p_study
+
+
+#in case you want to see most important genes for PCA yourself
+contribs1 <- pca_res$rotation[,1]
+contribs2 <- pca_res$rotation[,2]
+
+#These are the biggest contributors to the PCA1 (right side)
+(pos1genes <- sort(contribs1, decreasing=T)[1:10])
+#These are the biggest contributors to the PCA1 (left side)
+(neg1genes <- sort(contribs1, decreasing=F)[1:10])
+
+#These are the biggest contributors to the PCA2 (up side)
+(pos2genes <- sort(contribs2, decreasing=T)[1:10])
+#These are the biggest contributors to the PCA2 (down side)
+(neg2genes <- sort(contribs2, decreasing=F)[1:10])
+
+```
+
+As one can observe from the PCAs, our PC1 is mostly explained by cell type.
+
+Now, in my opinion, cell type, as well as the other variables, are not really relevant in this case. Therefore, I will treat them as "batch-effect", and will remove them. This way, we can compare samples from different cells, as they were the same.
+
+
+## Batch Effect Correction
+
+
+```{r}
+batch_cols <- c("Cell", "Stress" ,"KO", "Study")
+metadata_cols <- c("SG")
+mmbatch <- model.matrix(reformulate(paste0("~0 + ",paste0( batch_cols,collapse = " + "))), data=metadata)
+mmkeep <- model.matrix(reformulate(paste0("~0 + ",paste0( metadata_cols,collapse =  "+" ))), data=metadata)
+mm <- cbind(mmkeep,mmbatch)
+D0 <- DGEList(2^y$E) 
+D0 <- calcNormFactors(D0)
+y <- voom(D0, mm, plot = F)
+fit <- lmFit(y, mm)
+beta <- fit$coefficients[,-(1:ncol(mmkeep)),drop=FALSE]
+beta[is.na(beta)] <- 0
+corrcounts_v1 <- as.matrix(y$E) - beta %*% t(mmbatch)
+offset <- apply(corrcounts_v1,1,min) - apply(y$E,1,min)
+corrcounts_v1 <- as.data.frame(corrcounts_v1-offset)
+corrcounts_v1 <- 2^corrcounts_v1
+
+mm <- model.matrix(~0+SG, metadata)
+y <- voom(corrcounts_v1, mm, plot = T)
+```
+
+## Batch Corrected PCA
+
+```{r}
+#This prepares my data for the PCA
+dfforpca <- y$E
+dfforpca <- t(dfforpca)
+dfforpca <- as.data.frame(dfforpca) # needs to be a data.frame
+dfforpca <- apply(dfforpca, 2, as.numeric) # Ensure numeric
+dfforpca <- as.data.frame(dfforpca) # still needs to be a data.frame
+
+# Add metadata, which we will then use to plot
+dfforpca$StressType <- StressType_simple[-c(20:22)]
+dfforpca$CellType <- metadata$Cell
+dfforpca$SGPres <- metadata$SG
+dfforpca$KOStat <- metadata$KO
+dfforpca$StudyNum <- metadata$Study
+
+
+# PCA computation itself. I do one PCA for each variable I want to see.
+pca_res <- prcomp(dfforpca[, 1:(ncol(dfforpca)-5)], scale = FALSE)
+p_stress<- autoplot(pca_res, data = dfforpca, x = 1, y = 2, colour = "StressType", size = 8) +
+  theme_bw() +
+  scale_colour_manual(name = "StressType", values = custom_palette) +
+  ggtitle("PCA - Coloured by StressType") +
+  theme(plot.title = element_text(hjust = 0.5),
+        axis.line = element_line(colour = "black"),
+        panel.grid.minor = element_blank(),
+        panel.border = element_blank(),
+        panel.background = element_blank())
+
+p_sg <- autoplot(pca_res, data = dfforpca, x = 1, y = 2, colour = "SGPres", size = 8) +
+  theme_bw() +
+  scale_colour_manual(name = "SGPres", values = custom_palette) +
+  ggtitle("PCA - Coloured by SGPres") +
+  theme(plot.title = element_text(hjust = 0.5),
+        axis.line = element_line(colour = "black"),
+        panel.grid.minor = element_blank(),
+        panel.border = element_blank(),
+        panel.background = element_blank())
+
+p_cell <- autoplot(pca_res, data = dfforpca, x = 1, y = 2, colour = "CellType", size = 8) +
+  theme_bw() +
+  scale_colour_manual(name = "CellType", values = custom_palette) +
+  ggtitle("PCA - Coloured by CellType") +
+  theme(plot.title = element_text(hjust = 0.5),
+        axis.line = element_line(colour = "black"),
+        panel.grid.minor = element_blank(),
+        panel.border = element_blank(),
+        panel.background = element_blank())
+
+p_ko <- autoplot(pca_res, data = dfforpca, x = 1, y = 2, colour = "KOStat", size = 8) +
+  theme_bw() +
+  scale_colour_manual(name = "KOStat", values = custom_palette) +
+  ggtitle("PCA - Coloured by KOStat") +
+  theme(plot.title = element_text(hjust = 0.5),
+        axis.line = element_line(colour = "black"),
+        panel.grid.minor = element_blank(),
+        panel.border = element_blank(),
+        panel.background = element_blank())
+
+p_study <- autoplot(pca_res, data = dfforpca, x = 1, y = 2, colour = "StudyNum", size = 8) +
+  theme_bw() +
+  scale_colour_manual(name = "StudyNum", values = custom_palette) +
+  ggtitle("PCA - Coloured by StudyNum") +
+  theme(plot.title = element_text(hjust = 0.5),
+        axis.line = element_line(colour = "black"),
+        panel.grid.minor = element_blank(),
+        panel.border = element_blank(),
+        panel.background = element_blank())
+
+p_stress
+p_sg
+p_cell
+p_ko
+p_study
+
+
+#in case you want to see most important genes for PCA yourself
+contribs1 <- pca_res$rotation[,1]
+contribs2 <- pca_res$rotation[,2]
+
+#These are the biggest contributors to the PCA1 (right side)
+(pos1genes <- sort(contribs1, decreasing=T)[1:10])
+#These are the biggest contributors to the PCA1 (left side)
+(neg1genes <- sort(contribs1, decreasing=F)[1:10])
+
+#These are the biggest contributors to the PCA2 (up side)
+(pos2genes <- sort(contribs2, decreasing=T)[1:10])
+#These are the biggest contributors to the PCA2 (down side)
+(neg2genes <- sort(contribs2, decreasing=F)[1:10])
+
+#These are my corrected normalised counts, which I then use as this serves as my validation dataset for the signature
+write.table(t(dfforpca), "~/Projects/StressGranules/SGPAPER/ValidationDataset.txt")
+```
+
+## Linear Modelling
+
+Finally, we move on to differential gene expression! In this chunk, I define the linear model I will actually use for my analyses. 
+
+```{r}
+#Now I simply create the linear model that isolates the SG signal
+fitted <- lmFit(y$E, mm)
+
+head(coef(fitted))
+
+contr <- makeContrasts(SGYES - SGNO , levels = colnames(coef(fitted)))
+
+tmp_contr <- contrasts.fit(fitted, contr)
+
+tmp <- eBayes(tmp_contr)
+top.table <- topTable(tmp, sort.by = "logFC", n=Inf)
+DEGenes <- top.table
+ndegs=20
+```
+
+
+## SG vs Non-SG
+
+```{r, results='hide', warning=FALSE, message=FALSE}
+
+upmarkers <- as.data.frame(DEGenes[DEGenes$logFC>1.5 & DEGenes$B>10,] )
+
+downmarkers <- as.data.frame(DEGenes[DEGenes$logFC< -1.5 & DEGenes$B>10,] )
+
+
+
+ggplot(data=DEGenes,
+                 aes(x=logFC,
+                     y=  B)) +
+  geom_point(color="#CCCCCC")+ geom_vline(xintercept = -0.5, linetype="dashed")+geom_vline(xintercept = 0.5, linetype="dashed")+
+  theme_bw() + ylab("B-Statistic")+xlab("Log Fold-Change")+
+  theme(axis.line = element_line(colour = "black"),
+        panel.grid.minor = element_blank(),
+        panel.border = element_blank(),
+        panel.background = element_blank()) +
+  ggtitle("SG vs No-SG")+
+  theme(plot.title = element_text(hjust = 0.5), plot.subtitle = element_text(hjust = 0.5)) +
+  geom_label_repel(upmarkers[1:ndegs,] , mapping=aes(label=row.names(upmarkers)[1:ndegs]),size=4,point.padding=-0.5, color="#A10702",max.overlaps = 20)+
+  geom_label_repel(downmarkers[1:ndegs,] , mapping=aes(label=row.names(downmarkers)[1:ndegs]),size=4,point.padding=-0.5, color="#A10702",max.overlaps = 20)+
+  geom_point(data=upmarkers, aes(x=logFC, y=  B), color="#A10702",size=4)+
+  geom_point(data=downmarkers, aes(x=logFC, y=  B), color="#A10702",size=4)+
+  theme(text=element_text(size=15,  family="Arial MS"))
+
+write.table(DEGenes, "~/Projects/StressGranules/SGPAPER/RealSGs/WCdsRNA.txt", row.names=T, col.names = T)
+```
+From the volcano, we can see downregulation of EGR transcripts, which are important in inflammation and stress signalling. 
+
+## Expression Graphs (Extra QC)
+
+As an added control, lets plot these genes in regard to their expression.
+
+```{r, fig.height=12, fig.width=12}
+finagenes <- rbind(upmarkers, downmarkers)
+
+dfforexpression <- y$E
+
+samplecodes <- data.frame(samples=colnames(dfforexpression)[c(1:25)], purity=c(1:25))
+sampletype <- data.frame(samples=colnames(dfforexpression), sampletype=samplenaming)
+genesforexp <- dfforexpression[row.names(dfforexpression)%in%row.names(finagenes),]
+genesforexp <- as.data.frame(genesforexp)
+
+genesforexp$Genes <- row.names(genesforexp)
+
+genesforexp <- reshape2::melt(genesforexp)
+colnames(genesforexp) <- c("Gene", "samples", "expression")
+genesforexp <- merge(genesforexp, samplecodes, by="samples")
+genesforexp <- merge(genesforexp, sampletype, by="samples")
+genesforexp <- genesforexp[,-1]
+genesforexp[,2] <- as.numeric(genesforexp[,2])
+genesforexp[,1] <- as.character(genesforexp[,1])
+genesforexp <- genesforexp[order(genesforexp$Gene),]
+
+codesforsgpres <- data.frame(sampletype=samplenaming, sgpresence=SGPres[-c(22:24)])
+genesforexp <- merge(genesforexp, codesforsgpres, by="sampletype")
+
+winnyplot <- ggplot(genesforexp, aes(x=sgpresence, y=expression)) + geom_violin(colour="black", alpha=0.5) + geom_point(aes(colour=sampletype)) + facet_wrap(.~ Gene, ncol=5, scales = "free")
+winnyplot <- winnyplot + scale_fill_manual(name = "Sample Type", values = unique(c("#FFB6C1", "#FFB6C1", "#FFDAB9", "#FFDAB9", "#E6E6FA", "#E6E6FA", "#98FB98", "#98FB98", "#87CEEB", "#87CEEB", "#FFFF99", "#FFFF99", "#F08080", "#F08080", "#98FB98", "#98FB98", "#D8BFD8", "#D8BFD8", "#D8BFD8", "#FFA07A", "#FFA07A", "#FFA07A","#6495ED","#6495ED","#6495ED", "#CCCCCC")), labels=c(unique(sampletype)))  + scale_colour_manual(name = "Sample Type", values = unique(c("#FFB6C1", "#FFB6C1", "#FFDAB9", "#FFDAB9", "#E6E6FA", "#E6E6FA", "#98FB98", "#98FB98", "#87CEEB", "#87CEEB", "#FFFF99", "#FFFF99", "#F08080", "#F08080", "#98FB98", "#98FB98", "#D8BFD8", "#D8BFD8", "#D8BFD8", "#FFA07A", "#FFA07A", "#FFA07A","#6495ED","#6495ED","#6495ED", "#CCCCCC")), labels=c(unique(sampletype))) 
+winnyplot <- winnyplot + theme_bw() + xlab("Stress State") + ylab("Gene Expression (Log2 CPM)") + theme(
+      strip.text.x = element_text(
+        size = 12, face="italic"
+        )) +
+ theme(
+   strip.background = element_rect(
+     color="black", fill="#FFFFFF", size=1, linetype="solid"
+     )
+   ) + theme(
+    #legend.position = c(.95, .40),
+    legend.justification = c("right", "top"),
+    legend.box.just = "right",
+    ) + theme(legend.title = element_text(size = 12)) + ggtitle("Expression of DEA genes") + theme(plot.title = element_text(hjust = 0.5, size=14, face="bold"))
+winnyplot
+```
+
+
+## GSEA Enrichment
+
+Now that we have our genes of interest, it would also be interesting to see what are the **altered gene sets** between upregulated and downregulated transcripts from the above comparison. Therefore, lets perform a *Gene Set Enrichment Analysis*
+
+```{r, fig.height=20, fig.width=30, results=FALSE}
+#for all genes
+DEGenes <- DEGenes[order(DEGenes[,3]),]
+gseatool <- DEGenes[,3]
+gseatool <- as.data.frame(gseatool)
+colnames(gseatool)[1] <- "t" 
+gseatool[,2] <- row.names(DEGenes)
+colnames(gseatool)[2] <- "Symbol" 
+gseatool <- gseatool[,c(2,1)]
+
+#for only the genes without the contamination
+
+
+vectorranks <- gseatool$t
+names(vectorranks) <- gseatool$Symbol
+
+
+#to load our pathways
+hallmarks.gs <- msigdbr(species = "Homo sapiens", collection = "H")
+
+hallmarks.gsets <- hallmarks.gs %>% split(x = .$gene_symbol, f = .$gs_name)
+
+for (set in names(hallmarks.gsets)){
+  hallmarks.gsets[[set]] <- toupper(hallmarks.gsets[[set]])
+}
+
+hallmarks.res <- fgsea(pathways = hallmarks.gsets, 
+                       stats = vectorranks)
+
+hallmarks.res.tidy <- hallmarks.res %>%
+  as_tibble() %>%
+  arrange(desc(NES))
+
+hallmarks.res.tidy %>% 
+  dplyr::select(-leadingEdge, -ES) %>% 
+  arrange(padj)
+
+hallmark.sg.t <- hallmarks.res.tidy[,c(1,6)]
+hallmark.sg.t <- as.data.frame(hallmark.sg.t)
+
+#this small part is generic
+thresh <- 0.05
+
+#this one is no longer generic
+data_to_plot <- hallmarks.res.tidy %>% filter(padj < thresh)
+
+statvec <- c()
+for (i in 1:nrow(data_to_plot)){
+  if (data_to_plot[i,6] > 0){
+    status <- "Upregulated"
+  }
+ else {
+   status <- "Downregulated"
+ }   
+statvec <- c(statvec, status)
+}
+
+data_to_plot$Status <- statvec
+
+##-----HALMARK-----
+gsea_plot_hall <- ggplot(data_to_plot, aes(reorder(pathway, NES), NES)) +
+  geom_col(aes(fill= Status), alpha=0.75) + scale_fill_manual(values = c("#53A2BE","#BA3B46"), name = "Regulation Status", labels = c("Downregulated", "Upregulated"), breaks = c("Downregulated", "Upregulated")) +
+  coord_flip() +
+  labs(x="Pathway", y="Normalized Enrichment Score (NES)",
+       title= "Hallmark Pathways",
+       caption = paste0("p-value < ", thresh)) + theme(plot.title = element_text(hjust = 1)) +
+  theme_bw() + theme(text=element_text(family = "Quicksand")) + theme(legend.position = "none")
+
+gsea_plot_hall
+```
+
+This shows the importance of GSEA. Even though we have a downregulation of EGR, we still have an increase in inflammation pathways, even though we have downregulation of NFKB-signalling.
+
+# Session Info
+
+```{r}
+sessionInfo()
+```
