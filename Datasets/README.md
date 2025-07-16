@@ -64,6 +64,14 @@ In this file, I present all analyses pertaining to the development of the SGScor
 In this file, I present all analyses pertaining to the usage of the SGScore signatures, testing them on **GDC TCGA Data**. Due to the long knitting duration, only markdown format is available.
 **TCGA** ([GDC Portal Link](https://portal.gdc.cancer.gov/)))
 
+### SGTranscriptome 
+
+Analyses related to isolated SG transcriptome datasets used. 
+
+- **`GSE99304`**
+In these files, I present all analyses pertaining to the dataset by **A. Khong, 2017**.
+**GSE99304** ([NCBI GEO Link](https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=GSE99304))
+
 ## Citation
 
 If you use this repository or any of its contents, please cite our associated publication and the relevant original studies referenced above:
