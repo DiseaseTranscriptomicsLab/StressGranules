@@ -549,8 +549,6 @@ ggplot(data=DEGenes,
   geom_point(data=downmarkers, aes(x=logFC, y=  B), color="#769fca", size=3) + xlab(expression(Log[2] ~ Fold ~ Change)) + ylab("B-Statistic") + theme(text=element_text(family = "Arial", size = 20))
 
 stress_t <- data.frame(Gene=row.names(DEGenes), s_t=DEGenes$t, s_logFC=DEGenes$logFC)
-
-write.table(stress_t, "~/Projects/StressGranules/SG_Transcriptome/P_Bodies/SG.txt")
 ```
 
 ### Stress Granule vs Whole Cell RNA (Volcano Plot with Gene Lenght)
@@ -560,8 +558,6 @@ write.table(stress_t, "~/Projects/StressGranules/SG_Transcriptome/P_Bodies/SG.tx
 DEGenes$Gene <- row.names(DEGenes)
 colnames(genelength) <- c("Length","Gene")
 DEGenes <- merge(DEGenes, genelength, by="Gene")
-
-Pbody <- DEGenes[,c(1,2,4,8)]
 
 ggplot(data=DEGenes,
                  aes(x=logFC,
