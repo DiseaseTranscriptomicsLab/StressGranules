@@ -928,7 +928,7 @@ SG_City$Gene <- NULL
 
 ### ***Before Filtration***
 
-Let us begin with the filtration. Before moving on, it is important to note that according to the authors, these RNA granules are not pure and contain several contaminants. 
+Let us begin with the filtration.
 
 ```{r, warning=FALSE}
 alternew.bu <- log10(rowSums(SG_City[,4:6]))
@@ -1217,7 +1217,7 @@ ggplot(data=DEGenes,
 correctedsignal <- data.frame(Gene=row.names(DEGenes), cor_t=DEGenes$t, cor_logFC=DEGenes$logFC)
 ```
 
-## Volcano Lenght
+## Volcano Length
 
 ```{r, message=FALSE, warning=FALSE, results='hide'}
 
