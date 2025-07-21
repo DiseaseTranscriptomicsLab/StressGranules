@@ -84,6 +84,10 @@ In these files, I present all analyses pertaining to the dataset by **A. Padrón
 In these files, I present all analyses pertaining to the dataset by **SP. Somasekharan, 2020**.
 **GSE138058** ([NCBI GEO Link](https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=GSE138058))
 
+- **`GSE119977`**
+In these files, I present all analyses pertaining to the dataset by **T. Matheny, 2021**.
+**GSE119977** ([NCBI GEO Link](https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=GSE119977))
+
 ## Citation
 
 If you use this repository or any of its contents, please cite our associated publication and the relevant original studies referenced above:
