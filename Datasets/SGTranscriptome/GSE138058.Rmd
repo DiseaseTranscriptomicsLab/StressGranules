@@ -395,7 +395,7 @@ dfforpca$Stress <- forstress
 dfforpca$SG <- forsg
 
 # PCA computation itself. I do one PCA for each variable I want to see.
-pca_res <- prcomp(dfforpca[, 1:(ncol(dfforpca)-4)], scale = FALSE)
+pca_res <- prcomp(dfforpca[, 1:(ncol(dfforpca)-3)], scale = FALSE)
 
 p_Sample <- autoplot(pca_res, data = dfforpca, x = 1, y = 2, colour = "Sample", size = 8) +
   theme_bw() +
