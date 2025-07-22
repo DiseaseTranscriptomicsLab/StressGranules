@@ -168,7 +168,7 @@ As we can see in these plots, the control samples for no UV have a very low comp
 
 ### ***Before Filtration***
 
-Let us begin with the filtration. Before moving on, it is important to note that according to the authors, these RNA granules are not pure and contain several contaminants. 
+Let us begin with the filtration. 
 
 ```{r , warning=FALSE}
 read.counts <- read.counts[,-c(1,5)]
@@ -188,6 +188,8 @@ fordescriptive <- c("NS", "NU", "NU", "SG", "WC", "WC")
 By seeing the shape of the graph, we can see where we should cut. We have a **binomial distribution** (low reads and noise vs actual biological meaningful reads). The ideal place to cut them is right before the wedge.
 
 ### ***After Filtration***
+
+I didn't do it this time, but I've maintained the code to filter by sample type. This time, I considered that it was more correct to filter all samples together.
 
 ```{r}
 filterednew <- subset(read.counts, alternew> 1.75)

@@ -6,7 +6,7 @@
     <meta name="generator" content="pandoc" />
 
     
-        <meta name="date" content="2025-07-21" />
+        <meta name="date" content="2025-07-22" />
     
     <title>Analyses of GSE143413</title>
 
@@ -167,7 +167,7 @@
                 - <a href="mailto:alexandreafonso@gimm.pt" class="email">alexandreafonso@gimm.pt</a>&lt;
           <br>
       </p>
-         <p class="date"><span class="glyphicon glyphicon-calendar"></span> 21 July 2025</p>
+         <p class="date"><span class="glyphicon glyphicon-calendar"></span> 22 July 2025</p>
            
 
    
@@ -332,7 +332,7 @@ ggplot(data = trial, aes(x = genes, y = percent, group = Sample, color = SampleC
 <h2>Filtration</h2>
 <div id="before-filtration" class="section level3">
 <h3><strong><em>Before Filtration</em></strong></h3>
-<p>Let us begin with the filtration. Before moving on, it is important to note that according to the authors, these RNA granules are not pure and contain several contaminants.</p>
+<p>Let us begin with the filtration.</p>
 <pre class="r"><code>read.counts &lt;- read.counts[,-c(1,5)]
 
 alternew &lt;- log10(rowSums(read.counts))
@@ -349,6 +349,7 @@ ggplot(alternew, aes(x=alternew)) + geom_density() + theme_bw() + geom_vline(xin
 </div>
 <div id="after-filtration" class="section level3">
 <h3><strong><em>After Filtration</em></strong></h3>
+<p>I didn’t do it this time, but I’ve maintained the code to filter by sample type. This time, I considered that it was more correct to filter all samples together.</p>
 <pre class="r"><code>filterednew &lt;- subset(read.counts, alternew&gt; 1.75)
 
 #after cutting, its a good idea to visualize again
