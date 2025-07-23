@@ -1,0 +1,1456 @@
+---
+title: "Analyses of GSE223295"
+subtitle: "Profiling stress-triggered RNA condensation with photocatalytic proximity labeling."
+author: 
+  - name: "Alexandre Kaizeler^[Disease Transcriptomics Group, Gulbenkian Institute of Molecular Medicine]"
+    email: alexandreafonso@gimm.pt
+date: "`r format(Sys.time(), '%d %B %Y')`"
+output: 
+  rmdformats::downcute:
+    downcute_theme: "chaos"
+---
+
+# Introduction
+
+In this document, I present all analyses pertaining to the dataset **GSE223295**  
+([NCBI GEO Link](https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=GSE223295)),  
+originally published by **Z. Ren, 2023**.
+
+## Methodology
+
+
+```{r, message=FALSE}
+# These are all the libraries I used throughout the analysis. Not all of them will be required on this guidebook
+library(Rsubread)
+library(limma)
+library(edgeR)
+library(DESeq2)
+library(magrittr)
+library(ggrepel)
+library(tidyverse)
+library(vsn)
+library(ggplot2)
+library(NMF)
+library(biomaRt)
+library(ggpubr)
+library(factoextra)
+library(ggfortify)
+library(plotly)
+library(reshape2)
+library(fgsea)
+library(msigdbr)
+library(data.table)
+library(colorspace)
+library(readxl)
+
+
+set.seed(1906)
+```
+
+
+## First Steps
+
+```{r }
+#This section here is to load up the genelenght file I will be using throughout the analyses.
+genelength <- read.csv("~/Projects/StressGranules/SG_Transcriptome/RP_Data_2021/TrimmedSamples/alignment_STAR/TranscriptLenght.txt", header=T)
+
+genelength <- subset(genelength, Ensembl.Canonical==1)
+genelength <- subset(genelength, Gene.name!="")
+
+genelength <- genelength %>%
+  group_by(Gene.name) %>%
+  slice(which.max(Transcript.length..including.UTRs.and.CDS.)) %>%
+  ungroup()
+
+genelength <- genelength[,-c(2,3)]
+colnames(genelength) <- c("Length", "Gene")
+
+
+
+#Get the table of read counts by indicating the path to the file. These files were obtained from the GEO dataset itself.
+
+sg.read.counts_U2OS <- read_excel("~/Projects/StressGranules/SG_Transcriptome/CAP_Seq/GSE223295_U2OS_allcounts.xlsx")[,-1]
+sg.read.counts_HEK <- read_excel("~/Projects/StressGranules/SG_Transcriptome/CAP_Seq/GSE223295_HEK293T_allcounts.xlsx")[,-1]
+
+raw.read.counts <- merge(sg.read.counts_U2OS, sg.read.counts_HEK, by="geneId")
+
+
+biomart <- fread("~/biomart.txt")[,-2]
+
+
+colnames(raw.read.counts)[1] <- "ensembl_gene_id"
+colnames(biomart) <- c("ensembl_gene_id", "hgnc_symbol")
+
+eltable <- merge(raw.read.counts,biomart,by = "ensembl_gene_id", all= TRUE) #this creates a table with both ensemble ids and HGNC codes.
+
+eltable <- subset(eltable, hgnc_symbol!="") #this removes reads that dont have a corresponding hgnc symbol.
+
+eltable$ensembl_gene_id <- NULL
+
+read.counts <- eltable %>% # If two gene ids resulted in the same gene name, this will sum up their counts
+  group_by(hgnc_symbol) %>%
+  summarise(across(everything(), sum, na.rm = TRUE))
+
+read.counts <- as.data.frame(read.counts)
+
+row.names(read.counts) <- read.counts$hgnc_symbol #changes rownames into hgnc symbols
+read.counts$hgnc_symbol <- NULL #We no longer need this column, as we have the rownames.
+
+```
+
+
+## Extra Quality Control
+
+Let's check for sample complexity. It is possible that one or more samples have different complexity. In specific, I am going to check if enough reads have been obtained from every sample. If not, we should have a great bias to housekeeping genes. Another way to put it, is to say that even with all reads, we won't obtain a great deal of different genes.
+
+```{r, warning=FALSE, message=FALSE, results='hide'}
+
+# Define color palette
+custom_palette <- qualitative_hcl(24, palette = "Pastel")
+custom_palette <- sample(custom_palette, 24)
+
+# Use SampleColouring from metadata
+SampleColouring <- c(rep("U2G3AsLabEn",2), rep("U2G3AsLabIn",2),rep("U2G3AsNoLabEn",2),rep("U2CtAsLabEn",2),rep("HekG3AsLabEn",2), rep("HekG3AsLabIn",2),rep("HekG3AsNoLabEn",2),rep("HekCtAsLabEn",4),rep("HekG3UnLabEn",2), rep("HekG3UnLabIn",2),rep("HekG3UnNoLabEn",2),rep("HekCtUnLabEn",4),rep("HekG3SoLabEn",2), rep("HekG3SoLabIn",2),rep("HekG3SoNoLabEn",2),rep("HekCtSoLabEn",4),rep("HekG3T1LabEn",3), rep("HekG3T1LabIn",3),rep("HekG3T1NoLabEn",3),rep("HekCtT1LabEn",4),rep("HekG3T3LabEn",2), rep("HekG3T3LabIn",2),rep("HekG3T3NoLabEn",2),rep("HekCtT3LabEn",4))
+# Build cumulative counts
+final <- sapply(1:ncol(read.counts), function(i) {
+  sort_vals <- read.counts[order(read.counts[, i], decreasing = TRUE), i]
+  cumsum(sort_vals)
+})
+final <- as.data.frame(final)
+colnames(final) <- colnames(read.counts)
+
+# Melt and add gene position + sample info
+finalmelt <- reshape2::melt(final, variable.name = "Sample")
+finalmelt$genes <- rep(1:nrow(final), times = ncol(final))
+finalmelt$SampleColouring <- rep(SampleColouring, each = nrow(final))
+
+# Plot cumulative read coverage
+ggplot(data = finalmelt, aes(x = genes, y = log10(value), group = Sample, color = SampleColouring)) +
+  geom_line() +
+  scale_color_manual(values = custom_palette, name = "Cell Line") +
+  theme_bw() +
+  xlab("Number of Genes Covered") +
+  ylab("Number of Reads (log10)") +
+  xlim(0, 20000) +
+  ylim(4, 8) +
+  theme(
+    axis.line = element_line(colour = "black"),
+    panel.grid.minor = element_blank(),
+    panel.border = element_blank(),
+    panel.background = element_blank()
+  )
+
+# Create percentage-based plot
+orderfinal <- subset(finalmelt, genes == max(finalmelt$genes))
+trial <- merge(orderfinal[, c("Sample", "value")], finalmelt, by = "Sample", suffixes = c(".total", ".current"))
+trial$percent <- (trial$value.current / trial$value.total) * 100
+trial$SampleColouring <- rep(SampleColouring, each = nrow(final))
+
+ggplot(data = trial, aes(x = genes, y = percent, group = Sample, color = SampleColouring)) +
+  geom_line() +
+  geom_hline(yintercept = 50, linetype = "dashed") +
+  scale_color_manual(values = custom_palette, name = "Cell Line") +
+  xlab("Number of Genes Covered") +
+  ylab("Number of Reads (%)") +
+  xlim(0, 20000) +
+  theme_bw() +
+  theme(
+    axis.line = element_line(colour = "black"),
+    panel.grid.minor = element_blank(),
+    panel.border = element_blank(),
+    panel.background = element_blank()
+  )
+```
+
+As we can see in these plots, similar samples have similar complexity. As in, they achieve roughly the same amount of genes covered using 50% of their reads. There is one sample with a lower read depth though.
+
+# Differential Expression Analysis
+
+## Filtration
+
+### ***Before Filtration***
+
+Let us begin with the filtration.
+
+```{r, warning=FALSE}
+
+alternew.U2G3AsLabEn <- log10(rowSums(read.counts[,1:2]))
+alternew.U2G3AsLabEn <- as.data.frame(alternew.U2G3AsLabEn)
+
+alternew.U2G3AsLabIn <- log10(rowSums(read.counts[,3:4]))
+alternew.U2G3AsLabIn <- as.data.frame(alternew.U2G3AsLabIn)
+
+alternew.U2G3AsNoLabEn <- log10(rowSums(read.counts[,5:6]))
+alternew.U2G3AsNoLabEn <- as.data.frame(alternew.U2G3AsNoLabEn)
+
+alternew.U2CtAsLabEn <- log10(rowSums(read.counts[,7:8]))
+alternew.U2CtAsLabEn <- as.data.frame(alternew.U2CtAsLabEn)
+
+alternew.HekG3AsLabEn <- log10(rowSums(read.counts[,9:10]))
+alternew.HekG3AsLabEn <- as.data.frame(alternew.HekG3AsLabEn)
+
+alternew.HekG3AsLabIn <- log10(rowSums(read.counts[,11:12]))
+alternew.HekG3AsLabIn <- as.data.frame(alternew.HekG3AsLabIn)
+
+alternew.HekG3AsNoLabEn <- log10(rowSums(read.counts[,13:14]))
+alternew.HekG3AsNoLabEn <- as.data.frame(alternew.HekG3AsNoLabEn)
+
+alternew.HekCtAsLabEn <- log10(rowSums(read.counts[,15:18]))
+alternew.HekCtAsLabEn <- as.data.frame(alternew.HekCtAsLabEn)
+
+alternew.HekG3UnLabEn <- log10(rowSums(read.counts[,19:20]))
+alternew.HekG3UnLabEn <- as.data.frame(alternew.HekG3UnLabEn)
+
+alternew.HekG3UnLabIn <- log10(rowSums(read.counts[,21:22]))
+alternew.HekG3UnLabIn <- as.data.frame(alternew.HekG3UnLabIn)
+
+alternew.HekG3UnNoLabEn <- log10(rowSums(read.counts[,23:24]))
+alternew.HekG3UnNoLabEn <- as.data.frame(alternew.HekG3UnNoLabEn)
+
+alternew.HekCtUnLabEn <- log10(rowSums(read.counts[,25:28]))
+alternew.HekCtUnLabEn <- as.data.frame(alternew.HekCtUnLabEn)
+
+alternew.HekG3SoLabEn <- log10(rowSums(read.counts[,29:30]))
+alternew.HekG3SoLabEn <- as.data.frame(alternew.HekG3SoLabEn)
+
+alternew.HekG3SoLabIn <- log10(rowSums(read.counts[,31:32]))
+alternew.HekG3SoLabIn <- as.data.frame(alternew.HekG3SoLabIn)
+
+alternew.HekG3SoNoLabEn <- log10(rowSums(read.counts[,33:34]))
+alternew.HekG3SoNoLabEn <- as.data.frame(alternew.HekG3SoNoLabEn)
+
+alternew.HekCtSoLabEn <- log10(rowSums(read.counts[,35:38]))
+alternew.HekCtSoLabEn <- as.data.frame(alternew.HekCtSoLabEn)
+
+alternew.HekG3T1LabEn <- log10(rowSums(read.counts[,39:41]))
+alternew.HekG3T1LabEn <- as.data.frame(alternew.HekG3T1LabEn)
+
+alternew.HekG3T1LabIn <- log10(rowSums(read.counts[,42:44]))
+alternew.HekG3T1LabIn <- as.data.frame(alternew.HekG3T1LabIn)
+
+alternew.HekG3T1NoLabEn <- log10(rowSums(read.counts[,45:47]))
+alternew.HekG3T1NoLabEn <- as.data.frame(alternew.HekG3T1NoLabEn)
+
+alternew.HekCtT1LabEn <- log10(rowSums(read.counts[,48:51]))
+alternew.HekCtT1LabEn <- as.data.frame(alternew.HekCtT1LabEn)
+
+alternew.HekG3T3LabEn <- log10(rowSums(read.counts[,52:53]))
+alternew.HekG3T3LabEn <- as.data.frame(alternew.HekG3T3LabEn)
+
+alternew.HekG3T3LabIn <- log10(rowSums(read.counts[,54:55]))
+alternew.HekG3T3LabIn <- as.data.frame(alternew.HekG3T3LabIn)
+
+alternew.HekG3T3NoLabEn <- log10(rowSums(read.counts[,56:57]))
+alternew.HekG3T3NoLabEn <- as.data.frame(alternew.HekG3T3NoLabEn)
+
+alternew.HekCtT3LabEn <- log10(rowSums(read.counts[,58:61]))
+alternew.HekCtT3LabEn <- as.data.frame(alternew.HekCtT3LabEn)
+
+alternew <- log10(rowSums(read.counts))
+alternew <- as.data.frame(alternew)
+
+
+ggplot(alternew, aes(x=alternew)) + geom_density() + theme_bw() + geom_vline(xintercept = 3.25, linetype = "dashed") + ylab("Events") + xlab("Number of Reads (log10)") +
+  theme(axis.line = element_line(colour = "black"),
+        panel.grid.minor = element_blank(),
+        panel.border = element_blank(),
+        panel.background = element_blank()) + ggtitle("Density of Reads - All Samples")
+
+# U2OS Cells
+ggplot(alternew.U2G3AsLabEn, aes(x=alternew.U2G3AsLabEn)) + geom_density(fill="#e88184", alpha=0.5) + theme_bw() + geom_vline(xintercept = 2, linetype = "dashed") + ylab("Events") + xlab("Number of Reads (log10)") +
+  theme(axis.line = element_line(colour = "black"),
+        panel.grid.minor = element_blank(),
+        panel.border = element_blank(),
+        panel.background = element_blank()) + ggtitle("Density of Reads - U2OS G3BP1 Arsenite Label Enriched")
+
+ggplot(alternew.U2G3AsLabIn, aes(x=alternew.U2G3AsLabIn)) + geom_density(fill="#e88184", alpha=0.5) + theme_bw() + geom_vline(xintercept = 2, linetype = "dashed") + ylab("Events") + xlab("Number of Reads (log10)") +
+  theme(axis.line = element_line(colour = "black"),
+        panel.grid.minor = element_blank(),
+        panel.border = element_blank(),
+        panel.background = element_blank()) + ggtitle("Density of Reads - U2OS G3BP1 Arsenite Label Input")
+
+ggplot(alternew.U2G3AsNoLabEn, aes(x=alternew.U2G3AsNoLabEn)) + geom_density(fill="#e88184", alpha=0.5) + theme_bw() + geom_vline(xintercept = 2, linetype = "dashed") + ylab("Events") + xlab("Number of Reads (log10)") +
+  theme(axis.line = element_line(colour = "black"),
+        panel.grid.minor = element_blank(),
+        panel.border = element_blank(),
+        panel.background = element_blank()) + ggtitle("Density of Reads - U2OS G3BP1 Arsenite NoLabel Enriched")
+
+ggplot(alternew.U2CtAsLabEn, aes(x=alternew.U2CtAsLabEn)) + geom_density(fill="#e88184", alpha=0.5) + theme_bw() + geom_vline(xintercept = 2, linetype = "dashed") + ylab("Events") + xlab("Number of Reads (log10)") +
+  theme(axis.line = element_line(colour = "black"),
+        panel.grid.minor = element_blank(),
+        panel.border = element_blank(),
+        panel.background = element_blank()) + ggtitle("Density of Reads - U2OS Control Arsenite Label Enriched")
+
+# HEK ARSENITE STRESS
+
+ggplot(alternew.HekG3AsLabEn, aes(x=alternew.HekG3AsLabEn)) + geom_density(fill="#e88184", alpha=0.5) + theme_bw() + geom_vline(xintercept = 2, linetype = "dashed") + ylab("Events") + xlab("Number of Reads (log10)") +
+  theme(axis.line = element_line(colour = "black"),
+        panel.grid.minor = element_blank(),
+        panel.border = element_blank(),
+        panel.background = element_blank()) + ggtitle("Density of Reads - Hek293 G3BP1 Arsenite Label Enriched")
+
+ggplot(alternew.HekG3AsLabIn, aes(x=alternew.HekG3AsLabIn)) + geom_density(fill="#e88184", alpha=0.5) + theme_bw() + geom_vline(xintercept = 2, linetype = "dashed") + ylab("Events") + xlab("Number of Reads (log10)") +
+  theme(axis.line = element_line(colour = "black"),
+        panel.grid.minor = element_blank(),
+        panel.border = element_blank(),
+        panel.background = element_blank()) + ggtitle("Density of Reads - Hek293 G3BP1 Arsenite Label Input")
+
+ggplot(alternew.HekG3AsNoLabEn, aes(x=alternew.HekG3AsNoLabEn)) + geom_density(fill="#e88184", alpha=0.5) + theme_bw() + geom_vline(xintercept = 2, linetype = "dashed") + ylab("Events") + xlab("Number of Reads (log10)") +
+  theme(axis.line = element_line(colour = "black"),
+        panel.grid.minor = element_blank(),
+        panel.border = element_blank(),
+        panel.background = element_blank()) + ggtitle("Density of Reads - Hek293 G3BP1 Arsenite NoLabel Enriched")
+
+ggplot(alternew.HekCtAsLabEn, aes(x=alternew.HekCtAsLabEn)) + geom_density(fill="#e88184", alpha=0.5) + theme_bw() + geom_vline(xintercept = 2, linetype = "dashed") + ylab("Events") + xlab("Number of Reads (log10)") +
+  theme(axis.line = element_line(colour = "black"),
+        panel.grid.minor = element_blank(),
+        panel.border = element_blank(),
+        panel.background = element_blank()) + ggtitle("Density of Reads - Hek293 Control Arsenite Label Enriched")
+
+
+# HEK NO STRESS
+
+ggplot(alternew.HekG3UnLabEn, aes(x=alternew.HekG3UnLabEn)) + geom_density(fill="#e88184", alpha=0.5) + theme_bw() + geom_vline(xintercept = 2, linetype = "dashed") + ylab("Events") + xlab("Number of Reads (log10)") +
+  theme(axis.line = element_line(colour = "black"),
+        panel.grid.minor = element_blank(),
+        panel.border = element_blank(),
+        panel.background = element_blank()) + ggtitle("Density of Reads - Hek293 G3BP1 Unstressed Label Enriched")
+
+ggplot(alternew.HekG3UnLabIn, aes(x=alternew.HekG3UnLabIn)) + geom_density(fill="#e88184", alpha=0.5) + theme_bw() + geom_vline(xintercept = 2, linetype = "dashed") + ylab("Events") + xlab("Number of Reads (log10)") +
+  theme(axis.line = element_line(colour = "black"),
+        panel.grid.minor = element_blank(),
+        panel.border = element_blank(),
+        panel.background = element_blank()) + ggtitle("Density of Reads - Hek293 G3BP1 Unstressed Label Input")
+
+ggplot(alternew.HekG3UnNoLabEn, aes(x=alternew.HekG3UnNoLabEn)) + geom_density(fill="#e88184", alpha=0.5) + theme_bw() + geom_vline(xintercept = 2, linetype = "dashed") + ylab("Events") + xlab("Number of Reads (log10)") +
+  theme(axis.line = element_line(colour = "black"),
+        panel.grid.minor = element_blank(),
+        panel.border = element_blank(),
+        panel.background = element_blank()) + ggtitle("Density of Reads - Hek293 G3BP1 Unstressed NoLabel Enriched")
+
+ggplot(alternew.HekCtUnLabEn, aes(x=alternew.HekCtUnLabEn)) + geom_density(fill="#e88184", alpha=0.5) + theme_bw() + geom_vline(xintercept = 2, linetype = "dashed") + ylab("Events") + xlab("Number of Reads (log10)") +
+  theme(axis.line = element_line(colour = "black"),
+        panel.grid.minor = element_blank(),
+        panel.border = element_blank(),
+        panel.background = element_blank()) + ggtitle("Density of Reads - Hek293 Control Unstressed Label Enriched")
+
+
+# HEK SORBITOL
+
+ggplot(alternew.HekG3SoLabEn, aes(x=alternew.HekG3SoLabEn)) + geom_density(fill="#e88184", alpha=0.5) + theme_bw() + geom_vline(xintercept = 2, linetype = "dashed") + ylab("Events") + xlab("Number of Reads (log10)") +
+  theme(axis.line = element_line(colour = "black"),
+        panel.grid.minor = element_blank(),
+        panel.border = element_blank(),
+        panel.background = element_blank()) + ggtitle("Density of Reads - Hek293 G3BP1 Sorbitol Label Enriched")
+
+ggplot(alternew.HekG3SoLabIn, aes(x=alternew.HekG3SoLabIn)) + geom_density(fill="#e88184", alpha=0.5) + theme_bw() + geom_vline(xintercept = 2, linetype = "dashed") + ylab("Events") + xlab("Number of Reads (log10)") +
+  theme(axis.line = element_line(colour = "black"),
+        panel.grid.minor = element_blank(),
+        panel.border = element_blank(),
+        panel.background = element_blank()) + ggtitle("Density of Reads - Hek293 G3BP1 Sorbitol Label Input")
+
+ggplot(alternew.HekG3SoNoLabEn, aes(x=alternew.HekG3SoNoLabEn)) + geom_density(fill="#e88184", alpha=0.5) + theme_bw() + geom_vline(xintercept = 2, linetype = "dashed") + ylab("Events") + xlab("Number of Reads (log10)") +
+  theme(axis.line = element_line(colour = "black"),
+        panel.grid.minor = element_blank(),
+        panel.border = element_blank(),
+        panel.background = element_blank()) + ggtitle("Density of Reads - Hek293 G3BP1 Sorbitol NoLabel Enriched")
+
+ggplot(alternew.HekCtSoLabEn, aes(x=alternew.HekCtSoLabEn)) + geom_density(fill="#e88184", alpha=0.5) + theme_bw() + geom_vline(xintercept = 2, linetype = "dashed") + ylab("Events") + xlab("Number of Reads (log10)") +
+  theme(axis.line = element_line(colour = "black"),
+        panel.grid.minor = element_blank(),
+        panel.border = element_blank(),
+        panel.background = element_blank()) + ggtitle("Density of Reads - Hek293 Control Sorbitol Label Enriched")
+
+
+# HEK 1H RECOVERY
+
+ggplot(alternew.HekG3T1LabEn, aes(x=alternew.HekG3T1LabEn)) + geom_density(fill="#e88184", alpha=0.5) + theme_bw() + geom_vline(xintercept = 2, linetype = "dashed") + ylab("Events") + xlab("Number of Reads (log10)") +
+  theme(axis.line = element_line(colour = "black"),
+        panel.grid.minor = element_blank(),
+        panel.border = element_blank(),
+        panel.background = element_blank()) + ggtitle("Density of Reads - Hek293 G3BP1 1H Recovery Label Enriched")
+
+ggplot(alternew.HekG3T1LabIn, aes(x=alternew.HekG3T1LabIn)) + geom_density(fill="#e88184", alpha=0.5) + theme_bw() + geom_vline(xintercept = 2, linetype = "dashed") + ylab("Events") + xlab("Number of Reads (log10)") +
+  theme(axis.line = element_line(colour = "black"),
+        panel.grid.minor = element_blank(),
+        panel.border = element_blank(),
+        panel.background = element_blank()) + ggtitle("Density of Reads - Hek293 G3BP1 1H Recovery Label Input")
+
+ggplot(alternew.HekG3T1NoLabEn, aes(x=alternew.HekG3T1NoLabEn)) + geom_density(fill="#e88184", alpha=0.5) + theme_bw() + geom_vline(xintercept = 2, linetype = "dashed") + ylab("Events") + xlab("Number of Reads (log10)") +
+  theme(axis.line = element_line(colour = "black"),
+        panel.grid.minor = element_blank(),
+        panel.border = element_blank(),
+        panel.background = element_blank()) + ggtitle("Density of Reads - Hek293 G3BP1 1H Recovery NoLabel Enriched")
+
+ggplot(alternew.HekCtT1LabEn, aes(x=alternew.HekCtT1LabEn)) + geom_density(fill="#e88184", alpha=0.5) + theme_bw() + geom_vline(xintercept = 2, linetype = "dashed") + ylab("Events") + xlab("Number of Reads (log10)") +
+  theme(axis.line = element_line(colour = "black"),
+        panel.grid.minor = element_blank(),
+        panel.border = element_blank(),
+        panel.background = element_blank()) + ggtitle("Density of Reads - Hek293 Control 1H Recovery Label Enriched")
+
+
+# HEK 3H RECOVERY
+
+ggplot(alternew.HekG3T3LabEn, aes(x=alternew.HekG3T3LabEn)) + geom_density(fill="#e88184", alpha=0.5) + theme_bw() + geom_vline(xintercept = 2, linetype = "dashed") + ylab("Events") + xlab("Number of Reads (log10)") +
+  theme(axis.line = element_line(colour = "black"),
+        panel.grid.minor = element_blank(),
+        panel.border = element_blank(),
+        panel.background = element_blank()) + ggtitle("Density of Reads - Hek293 G3BP1 3H Recovery Label Enriched")
+
+ggplot(alternew.HekG3T3LabIn, aes(x=alternew.HekG3T3LabIn)) + geom_density(fill="#e88184", alpha=0.5) + theme_bw() + geom_vline(xintercept = 2, linetype = "dashed") + ylab("Events") + xlab("Number of Reads (log10)") +
+  theme(axis.line = element_line(colour = "black"),
+        panel.grid.minor = element_blank(),
+        panel.border = element_blank(),
+        panel.background = element_blank()) + ggtitle("Density of Reads - Hek293 G3BP1 3H Recovery Label Input")
+
+ggplot(alternew.HekG3T3NoLabEn, aes(x=alternew.HekG3T3NoLabEn)) + geom_density(fill="#e88184", alpha=0.5) + theme_bw() + geom_vline(xintercept = 2, linetype = "dashed") + ylab("Events") + xlab("Number of Reads (log10)") +
+  theme(axis.line = element_line(colour = "black"),
+        panel.grid.minor = element_blank(),
+        panel.border = element_blank(),
+        panel.background = element_blank()) + ggtitle("Density of Reads - Hek293 G3BP1 3H Recovery NoLabel Enriched")
+
+ggplot(alternew.HekCtT3LabEn, aes(x=alternew.HekCtT3LabEn)) + geom_density(fill="#e88184", alpha=0.5) + theme_bw() + geom_vline(xintercept = 2, linetype = "dashed") + ylab("Events") + xlab("Number of Reads (log10)") +
+  theme(axis.line = element_line(colour = "black"),
+        panel.grid.minor = element_blank(),
+        panel.border = element_blank(),
+        panel.background = element_blank()) + ggtitle("Density of Reads - Hek293 Control 3H Recovery Label Enriched")
+```
+
+By seeing the shape of the graph, we can see where we should cut. We have a **binomial distribution** (low reads and noise vs actual biological meaningful reads). The ideal place to cut them is right before the wedge.
+
+### ***After Filtration***
+
+This time, I considered that it was more correct to filter all samples together.
+
+
+```{r}
+filterednew <- subset(read.counts, alternew>3.25)
+
+
+#after cutting, its a good idea to visualize again
+falternew <- log10(rowSums(filterednew))
+falternew <- as.data.frame(falternew)
+ggplot(falternew, aes(x=falternew)) + geom_density() + theme_bw() + ylab("Events") + xlab("Number of Reads (log10)") +
+  theme(axis.line = element_line(colour = "black"),
+        panel.grid.minor = element_blank(),
+        panel.border = element_blank(),
+        panel.background = element_blank())
+
+#lets save the genes which we maintain
+impgenes <- c(row.names(falternew))
+
+
+#Now we need to select only the rows which have those genes.
+finaltable <- read.counts[row.names(read.counts)%in%impgenes,]
+```
+
+
+## Matrices
+
+Good! Now we can proceed by designing our matrices. 
+
+```{r}
+#To be able to use Voom, we must first convert our read count table into a special DGE object.
+D0 <- DGEList(finaltable)
+
+
+#Then we calculate the normalization factors for these new generated data frames
+#Bear in mind this step calculates the normalization factors, but does not normalize itself.
+D0 <- calcNormFactors(D0)
+
+
+#Lets create a dataframe with all of the medatata information
+CellType <- c(rep("U2",8), rep("Hek",53))
+ProbeType <- c(rep("G3",6), rep("Ct",2),rep("G3",6), rep("Ct",4),rep("G3",6), rep("Ct",4),rep("G3",6), rep("Ct",4),rep("G3",9), rep("Ct",4),rep("G3",6), rep("Ct",4))
+StressType <- c(rep("Arsenite",18),rep("Unstressed",10),rep("Sorbitol",10),rep("H1",13),rep("H3",10))
+LabType <- c(rep("Yes",4),rep("No",2),rep("Yes",2), #U2
+             rep("Yes",4),rep("No",2),rep("Yes",4), #HekAs
+             rep("Yes",4),rep("No",2),rep("Yes",4), #HekUn
+             rep("Yes",4),rep("No",2),rep("Yes",4), #HekSo
+             rep("Yes",6),rep("No",3),rep("Yes",4), 
+             rep("Yes",4),rep("No",2),rep("Yes",4))
+SampleType <- c(rep("Enriched",2),rep("Input",2),rep("Enriched",4), #U2
+             rep("Enriched",2),rep("Input",2),rep("Enriched",6), #HekAs
+             rep("Enriched",2),rep("Input",2),rep("Enriched",6), #HekUn
+             rep("Enriched",2),rep("Input",2),rep("Enriched",6), #HekSo
+             rep("Enriched",3),rep("Input",3),rep("Enriched",7), 
+             rep("Enriched",2),rep("Input",2),rep("Enriched",6))
+Biotype <- c(rep("SG",2),rep("WC",4),rep("Vec",2), #U2
+             rep("SG",2),rep("WC",4),rep("Vec",4), #HekAs
+             rep("SG",2),rep("WC",4),rep("Vec",4), #HekUn
+             rep("SG",2),rep("WC",4),rep("Vec",4), #HekSo
+             rep("SG",3),rep("WC",6),rep("Vec",4), 
+             rep("SG",2),rep("WC",4),rep("Vec",4))
+
+
+metadata <- data.frame(Cell=CellType, Stress=StressType, Bio=Biotype)
+
+
+#Now we do the matrixes
+
+mm <- model.matrix(~0+CellType+StressType+Biotype)
+
+
+#and now we normalize. This step also turns our counts into log2-counts per million.
+#The object with all simple
+y <- voom(D0, mm, plot = T)
+```
+
+
+## Normalisation
+
+For normalisation I convert the read counts into log2CPMs. Its a good way to visualize how the reads are. 
+
+```{r fig.height=6, fig.width=12}
+custom_palette <- qualitative_hcl(24, palette = "Dark3")
+
+dfforboxy <- finaltable
+orderforplots <- SampleColouring
+colouring <- data.frame(Sample=colnames(dfforboxy), Types=orderforplots)
+dfforboxy <- reshape2::melt(dfforboxy)
+colnames(dfforboxy) <- c("Sample", "Expression")
+dfforboxy <- merge(dfforboxy, colouring, by="Sample")
+# Convert 'Types' to factor with custom order
+dfforboxy$Types <- factor(dfforboxy$Types, levels = unique(SampleColouring))
+
+prenorm <- ggplot(dfforboxy, aes(x=Sample, y=(log2(Expression+1)), fill=Types)) + geom_boxplot(alpha=0.6) + theme_bw() + ylab("Read Counts (Log2)") + xlab("Samples") + scale_fill_manual(name = "Sample Type", values = custom_palette, labels=c(unique(orderforplots))) +
+  theme(axis.line = element_line(colour = "black"),
+        panel.grid.minor = element_blank(),
+        panel.border = element_blank(),
+        panel.background = element_blank(),
+        axis.text.x=element_blank(),
+        axis.ticks.x=element_blank(),
+        legend.position = "None") + ggtitle("Prior to Normalisation")
+
+#Using the Standard Matrix
+
+dfforboxy <- y$E
+dfforboxy <- reshape2::melt(dfforboxy)
+dfforboxy <- dfforboxy[,-1]
+colnames(dfforboxy) <- c("Sample", "Expression")
+dfforboxy <- merge(dfforboxy, colouring, by="Sample")
+# Convert 'Types' to factor with custom order
+dfforboxy$Types <- factor(dfforboxy$Types, levels = unique(SampleColouring))
+postnorm <- ggplot(dfforboxy, aes(x=Sample, y=Expression, fill=Types)) + geom_boxplot(alpha=0.6) + theme_bw() + ylab("Read Counts (Log2CPM)") + xlab("Samples") + scale_fill_manual(name = "Sample Type", values = custom_palette, labels=c(unique(orderforplots))) +
+  theme(axis.line = element_line(colour = "black"),
+        panel.grid.minor = element_blank(),
+        panel.border = element_blank(),
+        panel.background = element_blank(),
+        axis.text.x=element_blank(),
+        axis.ticks.x=element_blank(),
+        legend.position = "None") + ggtitle("After Normalisation")
+
+ggarrange(prenorm, postnorm, nrow=1)
+
+```
+In this case, from the boxplots, we can see that there no samples which can be considered outliers.
+
+## PCA
+
+Before we move on, lets do a **Principal Component analysis**. It is a good exploratory tool to find out how our samples relate to each other and if there are any obvious outliers. We would expect our replicates to be nearer to one another than to other samples, and more different samples should be further away. 
+
+```{r, fig.height=7, fig.width=9}
+# Define color palette
+custom_palette <- qualitative_hcl(6, palette = "Pastel")
+custom_palette <- sample(custom_palette, 6)
+
+
+#This prepares my data for the PCA
+dfforpca <- y$E
+dfforpca <- t(dfforpca)
+dfforpca <- as.data.frame(dfforpca) # needs to be a data.frame
+dfforpca <- apply(dfforpca, 2, as.numeric) # Ensure numeric
+dfforpca <- as.data.frame(dfforpca) # still needs to be a data.frame
+
+# Add metadata, which we will then use to plot
+dfforpca$Sample <- Biotype
+dfforpca$Stress <- StressType
+dfforpca$Cell <- CellType
+
+# PCA computation itself. I do one PCA for each variable I want to see.
+pca_res <- prcomp(dfforpca[, 1:(ncol(dfforpca)-3)], scale = FALSE)
+
+p_Sample <- autoplot(pca_res, data = dfforpca, x = 1, y = 2, colour = "Sample", size = 8) +
+  theme_bw() +
+  scale_colour_manual(name = "Sample", values = custom_palette) +
+  ggtitle("PCA - Coloured by Sample") +
+  theme(plot.title = element_text(hjust = 0.5),
+        axis.line = element_line(colour = "black"),
+        panel.grid.minor = element_blank(),
+        panel.border = element_blank(),
+        panel.background = element_blank())
+
+p_Stress <- autoplot(pca_res, data = dfforpca, x = 1, y = 2, colour = "Stress", size = 8) +
+  theme_bw() +
+  scale_colour_manual(name = "Stress", values = custom_palette) +
+  ggtitle("PCA - Coloured by Stress") +
+  theme(plot.title = element_text(hjust = 0.5),
+        axis.line = element_line(colour = "black"),
+        panel.grid.minor = element_blank(),
+        panel.border = element_blank(),
+        panel.background = element_blank())
+
+p_Cell <- autoplot(pca_res, data = dfforpca, x = 1, y = 2, colour = "Cell", size = 8) +
+  theme_bw() +
+  scale_colour_manual(name = "Cell", values = custom_palette) +
+  ggtitle("PCA - Coloured by Cell") +
+  theme(plot.title = element_text(hjust = 0.5),
+        axis.line = element_line(colour = "black"),
+        panel.grid.minor = element_blank(),
+        panel.border = element_blank(),
+        panel.background = element_blank())
+
+p_Sample
+p_Stress
+p_Cell
+
+#in case you want to see most important genes for PCA yourself
+contribs1 <- pca_res$rotation[,1]
+contribs2 <- pca_res$rotation[,2]
+
+#These are the biggest contributors to the PCA1 (right side)
+(pos1genes <- sort(contribs1, decreasing=T)[1:10])
+#These are the biggest contributors to the PCA1 (left side)
+(neg1genes <- sort(contribs1, decreasing=F)[1:10])
+
+#These are the biggest contributors to the PCA2 (up side)
+(pos2genes <- sort(contribs2, decreasing=T)[1:10])
+#These are the biggest contributors to the PCA2 (down side)
+(neg2genes <- sort(contribs2, decreasing=F)[1:10])
+
+
+```
+As one can observe from the PCAs, our PC1 is mostly explained by sample type, and PC2 by if a sample is WC or not.
+
+
+## Batch Effect Correction
+
+Looking at the PCA I considered there was a clear batch effect owing to the cell type. I opted to remove this batch effect.
+
+```{r}
+batch_cols <- c("Cell")
+metadata_cols <- c("Stress", "Bio")
+mmbatch <- model.matrix(reformulate(paste0("~0 + ",paste0( batch_cols,collapse = " + "))), data=metadata)
+mmkeep <- model.matrix(reformulate(paste0("~0 + ",paste0( metadata_cols,collapse =  "+" ))), data=metadata)
+mm <- cbind(mmkeep,mmbatch)
+D0 <- DGEList(2^y$E) #senescence_normcounts
+D0 <- calcNormFactors(D0)
+y <- voom(D0, mm, plot = F)
+fit <- lmFit(y, mm)
+beta <- fit$coefficients[,-(1:ncol(mmkeep)),drop=FALSE]
+#beta <- fit$coefficients
+beta[is.na(beta)] <- 0
+corrcounts_v1 <- as.matrix(y$E) - beta %*% t(mmbatch)
+offset <- apply(corrcounts_v1,1,min) - apply(y$E,1,min)
+corrcounts_v1 <- as.data.frame(corrcounts_v1-offset)
+corrcounts_v1 <- 2^corrcounts_v1
+y <- voom(corrcounts_v1, mm)
+```
+
+
+## Batch Corrected PCA
+
+```{r fig.height=8, fig.width=12}
+# Define color palette
+custom_palette <- qualitative_hcl(6, palette = "Pastel")
+custom_palette <- sample(custom_palette, 6)
+
+
+#This prepares my data for the PCA
+dfforpca <- y$E
+dfforpca <- t(dfforpca)
+dfforpca <- as.data.frame(dfforpca) # needs to be a data.frame
+dfforpca <- apply(dfforpca, 2, as.numeric) # Ensure numeric
+dfforpca <- as.data.frame(dfforpca) # still needs to be a data.frame
+
+# Add metadata, which we will then use to plot
+dfforpca$Sample <- Biotype
+dfforpca$Stress <- StressType
+dfforpca$Cell <- CellType
+
+# PCA computation itself. I do one PCA for each variable I want to see.
+pca_res <- prcomp(dfforpca[, 1:(ncol(dfforpca)-3)], scale = FALSE)
+
+p_Sample <- autoplot(pca_res, data = dfforpca, x = 1, y = 2, colour = "Sample", size = 8) +
+  theme_bw() +
+  scale_colour_manual(name = "Sample", values = custom_palette) +
+  ggtitle("PCA - Coloured by Sample") +
+  theme(plot.title = element_text(hjust = 0.5),
+        axis.line = element_line(colour = "black"),
+        panel.grid.minor = element_blank(),
+        panel.border = element_blank(),
+        panel.background = element_blank())
+
+p_Stress <- autoplot(pca_res, data = dfforpca, x = 1, y = 2, colour = "Stress", size = 8) +
+  theme_bw() +
+  scale_colour_manual(name = "Stress", values = custom_palette) +
+  ggtitle("PCA - Coloured by Stress") +
+  theme(plot.title = element_text(hjust = 0.5),
+        axis.line = element_line(colour = "black"),
+        panel.grid.minor = element_blank(),
+        panel.border = element_blank(),
+        panel.background = element_blank())
+
+p_Cell <- autoplot(pca_res, data = dfforpca, x = 1, y = 2, colour = "Cell", size = 8) +
+  theme_bw() +
+  scale_colour_manual(name = "Cell", values = custom_palette) +
+  ggtitle("PCA - Coloured by Cell") +
+  theme(plot.title = element_text(hjust = 0.5),
+        axis.line = element_line(colour = "black"),
+        panel.grid.minor = element_blank(),
+        panel.border = element_blank(),
+        panel.background = element_blank())
+
+p_Sample
+p_Stress
+p_Cell
+
+#in case you want to see most important genes for PCA yourself
+contribs1 <- pca_res$rotation[,1]
+contribs2 <- pca_res$rotation[,2]
+
+#These are the biggest contributors to the PCA1 (right side)
+(pos1genes <- sort(contribs1, decreasing=T)[1:10])
+#These are the biggest contributors to the PCA1 (left side)
+(neg1genes <- sort(contribs1, decreasing=F)[1:10])
+
+#These are the biggest contributors to the PCA2 (up side)
+(pos2genes <- sort(contribs2, decreasing=T)[1:10])
+#These are the biggest contributors to the PCA2 (down side)
+(neg2genes <- sort(contribs2, decreasing=F)[1:10])
+
+```
+Now PC1 is driven by sample type instead.
+
+## Linear Models
+
+Now we must perform linear model fitting.
+
+```{r}
+mm <- model.matrix(~0+Biotype+StressType)
+y <- voom(corrcounts_v1, mm)
+fitted <- lmFit(y$E, mm)
+
+head(coef(fitted))
+
+#next we measure contrasts between groups (log-fold change is obtained from these fitted linear models)
+SG.vs.WC <- makeContrasts(BiotypeSG - BiotypeWC, levels = (colnames(coef(fitted))))
+SG.vs.VEC <- makeContrasts(BiotypeSG - BiotypeVec, levels = (colnames(coef(fitted))))
+
+#next we estimate the contrast for each gene
+tmp.SG.vs.WC  <- contrasts.fit(fitted, SG.vs.WC )
+tmp.SG.vs.VEC <- contrasts.fit(fitted, SG.vs.VEC)
+
+#use empirical bayes smoothing of standard erros (shrinks extreme standard erros)
+tmp.SG.vs.WC <- eBayes(tmp.SG.vs.WC)
+tmp.SG.vs.VEC <- eBayes(tmp.SG.vs.VEC)
+
+top.table.SG.vs.WC <- topTable(tmp.SG.vs.WC, sort.by = "logFC", n=Inf)
+top.table.SG.vs.VEC <- topTable(tmp.SG.vs.VEC, sort.by = "logFC", n=Inf)
+
+DEGenes.SG.vs.WC <- top.table.SG.vs.WC
+DEGenes.SG.vs.VEC <- top.table.SG.vs.VEC
+
+
+
+
+ndegs=20
+```
+
+
+# SG vs WC
+
+## Volcano Plot
+
+```{r, results='hide', warning=FALSE, message=FALSE}
+write.table(x = DEGenes.SG.vs.WC,
+          file = "~/Projects/StressGranules/SGPAPER/SGvsWC/CapSeq.txt", sep="\t", col.names = TRUE, row.names = TRUE, quote=FALSE)
+
+upmarkers <- as.data.frame(DEGenes.SG.vs.WC[DEGenes.SG.vs.WC$logFC>2 & DEGenes.SG.vs.WC$adj.P.Val<0.05,] )
+downmarkers <- as.data.frame(DEGenes.SG.vs.WC[DEGenes.SG.vs.WC$logFC< -2 & DEGenes.SG.vs.WC$adj.P.Val<0.05,] )
+
+
+ggplot(data=DEGenes.SG.vs.WC,
+                 aes(x=logFC,
+                     y=  B)) +
+  geom_point(color="#DDDDDD")+
+  theme_bw() +
+  theme(axis.line = element_line(colour = "black"),
+        panel.grid.minor = element_blank(),
+        panel.border = element_blank(),
+        panel.background = element_blank()) +
+  ggtitle("SG vs Whole-Cell")+
+  theme(plot.title = element_text(hjust = 0.5)) +
+  geom_label_repel(upmarkers[1:ndegs,] , mapping=aes(label=row.names(upmarkers)[1:ndegs]),size=4,point.padding=-0.5, color="#de425b",max.overlaps = 200, fontface="italic")+
+  geom_label_repel(downmarkers[1:ndegs,] , mapping=aes(label=row.names(downmarkers)[1:ndegs]),size=4,point.padding=-0.5, color="#769fca",max.overlaps = 200, fontface="italic")+
+  geom_point(data=upmarkers, aes(x=logFC, y=  B), color="#de425b", size=3)+
+  geom_point(data=downmarkers, aes(x=logFC, y=  B), color="#769fca", size=3) + xlab(expression(Log[2] ~ Fold ~ Change)) + ylab("B-Statistic") + theme(text=element_text(family = "Arial", size = 20))
+
+```
+## Volcano Plot with Gene Lenght
+
+```{r, message=FALSE, warning=FALSE, results='hide'}
+
+DEGenes.SG.vs.WC$Gene <- row.names(DEGenes.SG.vs.WC)
+colnames(genelength) <- c("Length","Gene")
+DEGenes.SG.vs.WC <- merge(DEGenes.SG.vs.WC, genelength, by="Gene")
+
+ggplot(data=DEGenes.SG.vs.WC,
+                 aes(x=logFC,
+                     y=  B)) +
+  geom_point(aes(color=log10(Length)))+
+  theme_bw() +
+  theme(axis.line = element_line(colour = "black"),
+        panel.grid.minor = element_blank(),
+        panel.border = element_blank(),
+        panel.background = element_blank()) +
+  ggtitle("SG")+ xlab(expression(Log[2] ~ Fold ~ Change)) + ylab("B-Statistic") +
+  theme(plot.title = element_text(hjust = 0.5))  +
+  scale_colour_gradient(low = "black", high = "red")+ theme(text=element_text(family = "Quicksand"))
+
+
+smooth.SG <- lm(t~log10(Length), DEGenes.SG.vs.WC)
+liner.SG <- rstandard(smooth.SG)
+DEGenes.SG.vs.WC <-cbind(DEGenes.SG.vs.WC, liner.SG)
+colnames(DEGenes.SG.vs.WC)[9] <- "Residuals"
+row.names(DEGenes.SG.vs.WC) <- DEGenes.SG.vs.WC$Gene
+linemarkers <- as.data.frame(DEGenes.SG.vs.WC[abs(DEGenes.SG.vs.WC$Residuals)>4,])
+
+# Calculate the Spearman correlation coefficient
+spearman_corr <- cor(DEGenes.SG.vs.WC$t, log10(DEGenes.SG.vs.WC$Length), method = "pearson")
+
+
+
+ggplot(DEGenes.SG.vs.WC, aes(y=t, x=log10(Length))) + geom_point(color="#CCCCCC", alpha=1) +   theme_bw()+ geom_density_2d()+
+ ylab("SG Enrichment (t-stat)") + xlab(expression(RNA ~ Length ~ Log[10] ~ Base ~ Pairs)) +
+  theme(axis.line = element_line(colour = "black"),
+        panel.grid.minor = element_blank(),
+        panel.border = element_blank(),
+        panel.background = element_blank()) + 
+  theme(plot.title = element_text(hjust = 0.5))  +
+  geom_abline(slope=smooth.SG$coefficients[2], intercept = smooth.SG$coefficients[1], linetype = "dashed")+ stat_cor(method = "spearman", cor.coef.name = "rho",size=7)
+```
+We see a positive lenght bias.
+
+## Expression Graphs (Extra QC)
+
+As an added control, lets plot these genes in regard to their expression. This helps to see if the expression differences are robust, and not just driven by one sample.
+
+```{r, fig.height=12, fig.width=12}
+# Define color palette
+custom_palette <- qualitative_hcl(24, palette = "Pastel")
+custom_palette <- sample(custom_palette, 24)
+
+finagenes <- rbind(upmarkers, downmarkers)
+
+
+dfforexpression <- dfforpca
+samplecodes <- data.frame(samples=row.names(dfforexpression), purity=c(1:61))
+sampletype <- data.frame(samples=row.names(dfforexpression), sampletype=SampleColouring)
+dfforexpression <- t(dfforexpression)
+genesforexp <- dfforexpression[row.names(dfforexpression)%in%row.names(finagenes),]
+genesforexp <- reshape2::melt(genesforexp)
+colnames(genesforexp) <- c("Gene", "samples", "expression")
+genesforexp <- merge(genesforexp, samplecodes, by="samples")
+genesforexp <- merge(genesforexp, sampletype, by="samples")
+genesforexp <- genesforexp[,-1]
+genesforexp[,2] <- as.numeric(genesforexp[,2])
+genesforexp[,1] <- as.character(genesforexp[,1])
+genesforexp <- genesforexp[order(genesforexp$Gene),]
+
+
+winnyplot <- ggplot(genesforexp, aes(x=purity, y=expression, fill=sampletype, colour=sampletype)) + geom_bar(position="dodge", stat="identity", alpha=0.5) + facet_wrap(.~ Gene, ncol=5)
+winnyplot <- winnyplot + scale_fill_manual(name = "Sample Type", values = custom_palette, breaks = unique(SampleColouring)) + scale_colour_manual(name = "Sample Type", values = custom_palette, breaks = unique(SampleColouring)) 
+winnyplot <- winnyplot + theme_bw() + xlab("Samples (SG to Bulk Rna)") + ylab("Gene Expression (Log2 CPM)") + theme(
+      strip.text.x = element_text(
+        size = 12, face="italic"
+        )) +
+ theme(
+   strip.background = element_rect(
+     color="black", fill="#FFFFFF", size=1, linetype="solid"
+     )
+   ) + theme(
+    #legend.position = c(.95, .40),
+    legend.justification = c("right", "top"),
+    legend.box.just = "right",
+    ) + theme(legend.title = element_text(size = 12)) + ggtitle("Expression of DEA genes") + theme(plot.title = element_text(hjust = 0.5, size=14, face="bold"))
+winnyplot
+```
+
+
+## GSEA Enrichment
+
+Now that we have our genes of interest, it would also be interesting to see what are the **altered gene sets** between upregulated and downregulated transcripts from the above comparison. Therefore, lets perform a *Gene Set Enrichment Analysis*
+
+```{r, fig.height=20, fig.width=30, results=FALSE}
+#for all genes
+DEGenes.SG.vs.WC <- DEGenes.SG.vs.WC[order(DEGenes.SG.vs.WC[,4]),]
+gseatool <- DEGenes.SG.vs.WC[,4]
+gseatool <- as.data.frame(gseatool)
+colnames(gseatool)[1] <- "t" 
+gseatool[,2] <- DEGenes.SG.vs.WC$Gene
+colnames(gseatool)[2] <- "Symbol" 
+gseatool <- gseatool[,c(2,1)]
+
+vectorranks <- gseatool$t
+names(vectorranks) <- gseatool$Symbol
+
+
+#to load our pathways
+hallmarks.gs <- msigdbr(species = "Homo sapiens", collection =  "H")
+
+hallmarks.gsets <- hallmarks.gs %>% split(x = .$gene_symbol, f = .$gs_name)
+
+for (set in names(hallmarks.gsets)){
+  hallmarks.gsets[[set]] <- toupper(hallmarks.gsets[[set]])
+}
+
+hallmarks.res <- fgsea(pathways = hallmarks.gsets, 
+                       stats = vectorranks)
+
+hallmarks.res.tidy <- hallmarks.res %>%
+  as_tibble() %>%
+  arrange(desc(NES))
+
+hallmarks.res.tidy %>% 
+  dplyr::select(-leadingEdge, -ES) %>% 
+  arrange(padj)
+
+hallmark.sg.t <- hallmarks.res.tidy[,c(1,3,6)]
+hallmark.sg.t <- as.data.frame(hallmark.sg.t)
+
+#this small part is generic
+thresh <- 0.001
+
+#this one is no longer generic
+data_to_plot <- hallmarks.res.tidy %>% filter(padj < thresh)
+
+statvec <- c()
+for (i in 1:nrow(data_to_plot)){
+  if (data_to_plot[i,6] > 0){
+    status <- "Upregulated"
+  }
+ else {
+   status <- "Downregulated"
+ }   
+statvec <- c(statvec, status)
+}
+
+data_to_plot$Status <- statvec
+
+##-----HALMARK-----
+gsea_plot_hall <- ggplot(data_to_plot, aes(reorder(pathway, NES), NES)) +
+  geom_col(aes(fill= Status), alpha=0.75) + scale_fill_manual(values = c("#53A2BE","#BA3B46"), name = "Regulation Status", labels = c("Downregulated", "Upregulated"), breaks = c("Downregulated", "Upregulated")) +
+  coord_flip() +
+  labs(x="Pathway", y="Normalised Enrichment Score (NES)",
+       title= "Hallmark Gene Sets",
+       caption = paste0("p-value < ", thresh)) + theme(plot.title = element_text(hjust = 1)) +
+  theme_bw() + theme(text=element_text(family = "Quicksand")) + theme(legend.position = "none")
+
+
+gsea_plot_hall+
+  theme(text=element_text(size=25,  family="Arial MS"))
+```
+
+
+## GSEA Length
+
+Now, since SGs are enriched for longer transcripts, these pathways may simply be the ones which are tipically enriched in longer transcripts. Therefore, I will repeat the analysis, but using transcript lenght instead of t-statistic. 
+
+```{r, results=FALSE}
+#for all genes
+DEGenes.SG.vs.WC <- DEGenes.SG.vs.WC[order(DEGenes.SG.vs.WC[,8]),]
+gseatool <- DEGenes.SG.vs.WC[,8]
+gseatool <- as.data.frame(gseatool)
+colnames(gseatool)[1] <- "t" 
+gseatool[,2] <- DEGenes.SG.vs.WC$Gene
+colnames(gseatool)[2] <- "Symbol" 
+gseatool <- gseatool[,c(2,1)]
+
+#for only the genes without the contamination
+
+
+vectorranks <- log10(gseatool$t)
+vectorranks <- scale(vectorranks)
+names(vectorranks) <- gseatool$Symbol
+
+
+#to load our pathways
+
+##-----HALLMARK-----
+hallmarks.gs <- msigdbr(species = "Homo sapiens", collection = "H")
+
+hallmarks.gsets <- hallmarks.gs %>% split(x = .$gene_symbol, f = .$gs_name)
+
+for (set in names(hallmarks.gsets)){
+  hallmarks.gsets[[set]] <- toupper(hallmarks.gsets[[set]])
+}
+
+hallmarks.res <- fgsea(pathways = hallmarks.gsets, 
+                       stats = vectorranks)
+
+hallmarks.res.tidy <- hallmarks.res %>%
+  as_tibble() %>%
+  arrange(desc(NES))
+
+hallmarks.res.tidy %>% 
+  dplyr::select(-leadingEdge, -ES) %>% 
+  arrange(padj)
+
+hallmark.size.t <- hallmarks.res.tidy[,c(1,3,6)]
+hallmark.size.t <- as.data.frame(hallmark.size.t)
+
+
+#HALLMARK
+hallmark.scatter_ak <- merge(hallmark.sg.t, hallmark.size.t, by="pathway")
+colnames(hallmark.scatter_ak) <- c("pathway", "sg_pval", "sg", "size_pval", "size")
+hallmark.scatter_ak <- na.omit(hallmark.scatter_ak)
+res_hallmark <- lm(size ~ sg, hallmark.scatter_ak)
+
+vip.pathways_ak <- as.data.frame(hallmark.scatter_ak[(hallmark.scatter_ak$sg/hallmark.scatter_ak$size)<0,] )
+
+
+
+ggplot(hallmark.scatter_ak, aes(x=sg, y=size)) + geom_point(color="black", alpha=01) +   theme_bw()+
+ xlab("NES SG") + ylab("NES Size") +
+  theme(axis.line = element_line(colour = "black"),
+        panel.grid.minor = element_blank(),
+        panel.border = element_blank(),
+        panel.background = element_blank()) + ggtitle("hallmark SG vs Size")+
+  theme(plot.title = element_text(hjust = 0.5)) +
+  geom_abline(slope=res_hallmark$coefficients[2], intercept = res_hallmark$coefficients[1], linetype = "dashed") +
+  geom_label_repel(vip.pathways_ak[1:ndegs,] , mapping=aes(label=vip.pathways_ak$pathway[1:ndegs]),size=3,point.padding=-0.5, color="#399e5a",max.overlaps = 200)+
+  geom_point(data=vip.pathways_ak, aes(x=sg, y= size), color="#399e5a") + stat_cor(method = "spearman", cor.coef.name = "rho")
+
+```
+
+Even though there is some lenght bias in terms of enrichment, it does not seem to be linked in terms of gene set enrichment.
+
+## Most altered pathways
+
+I opted to see altered pathways as a whole. That is, ignoring bidirectionally and simply looking at what pathways are more altered as a whole (i.e, more expressed genes on either side).
+
+```{r, echo=FALSE, fig.height=20, fig.width=30, message=FALSE, warning=FALSE, results='hide'}
+#for all genes
+DEGenes.SG.vs.WC <- DEGenes.SG.vs.WC[order(DEGenes.SG.vs.WC[,4]),]
+gseatool <- DEGenes.SG.vs.WC[,4]
+gseatool <- as.data.frame(gseatool)
+colnames(gseatool)[1] <- "t" 
+gseatool[,2] <- row.names(DEGenes.SG.vs.WC)
+colnames(gseatool)[2] <- "Symbol" 
+gseatool <- gseatool[,c(2,1)]
+
+#for only the genes without the contamination
+
+
+vectorranks <- gseatool$t
+names(vectorranks) <- gseatool$Symbol
+forcorrel <- vectorranks
+vectorranks <- abs(vectorranks)
+
+
+#to load our pathways
+hallmarks.gs <- msigdbr(species = "Homo sapiens", collection = "H")
+
+hallmarks.gsets <- hallmarks.gs %>% split(x = .$gene_symbol, f = .$gs_name)
+
+for (set in names(hallmarks.gsets)){
+  hallmarks.gsets[[set]] <- toupper(hallmarks.gsets[[set]])
+}
+
+hallmarks.res <- fgsea(pathways = hallmarks.gsets, 
+                       stats = vectorranks)
+
+hallmarks.res.tidy <- hallmarks.res %>%
+  as_tibble() %>%
+  arrange(desc(NES))
+
+hallmarks.res.tidy %>% 
+  dplyr::select(-leadingEdge, -ES) %>% 
+  arrange(padj)
+
+#this small part is generic
+thresh <- 0.001
+
+#this one is no longer generic
+data_to_plot <- hallmarks.res.tidy %>% filter(padj < thresh)
+
+statvec <- c()
+for (i in 1:nrow(data_to_plot)){
+  if (data_to_plot[i,6] > 0){
+    status <- "Upregulated"
+  }
+ else {
+   status <- "Downregulated"
+ }   
+statvec <- c(statvec, status)
+}
+
+data_to_plot$Status <- statvec
+
+##-----HALMARK-----
+gsea_plot_hall <- ggplot(data_to_plot, aes(reorder(pathway, NES), NES)) +
+  geom_col(aes(fill= Status), alpha=0.75) + scale_fill_manual(values = c("#53A2BE","#BA3B46"), name = "Regulation Status", labels = c("Downregulated", "Upregulated"), breaks = c("Downregulated", "Upregulated")) +
+  coord_flip() +
+  labs(x="Pathway", y="Normalised Enrichment Score (NES)",
+       title= "Hallmark Gene Sets",
+       caption = paste0("p-value < ", thresh)) + theme(plot.title = element_text(hjust = 1)) +
+  theme_bw() + theme(text=element_text(family = "Quicksand")) + theme(legend.position = "none")
+
+
+
+gsea_plot_hall+
+  theme(text=element_text(size=25,  family="Arial MS"))
+
+```
+
+# SG vs VEC
+
+## Volcano Plot
+
+```{r, results='hide', warning=FALSE, message=FALSE}
+
+upmarkers <- as.data.frame(DEGenes.SG.vs.VEC[DEGenes.SG.vs.VEC$logFC>1 & DEGenes.SG.vs.VEC$adj.P.Val<0.05,] )
+downmarkers <- as.data.frame(DEGenes.SG.vs.VEC[DEGenes.SG.vs.VEC$logFC< -1 & DEGenes.SG.vs.VEC$adj.P.Val<0.05,] )
+
+
+ggplot(data=DEGenes.SG.vs.VEC,
+                 aes(x=logFC,
+                     y=  B)) +
+  geom_point(color="#DDDDDD")+
+  theme_bw() +
+  theme(axis.line = element_line(colour = "black"),
+        panel.grid.minor = element_blank(),
+        panel.border = element_blank(),
+        panel.background = element_blank()) +
+  ggtitle("SG vs VEC")+
+  theme(plot.title = element_text(hjust = 0.5)) +
+  geom_label_repel(upmarkers[1:ndegs,] , mapping=aes(label=row.names(upmarkers)[1:ndegs]),size=4,point.padding=-0.5, color="#de425b",max.overlaps = 200, fontface="italic")+
+  geom_label_repel(downmarkers[1:ndegs,] , mapping=aes(label=row.names(downmarkers)[1:ndegs]),size=4,point.padding=-0.5, color="#769fca",max.overlaps = 200, fontface="italic")+
+  geom_point(data=upmarkers, aes(x=logFC, y=  B), color="#de425b", size=3)+
+  geom_point(data=downmarkers, aes(x=logFC, y=  B), color="#769fca", size=3) + xlab(expression(Log[2] ~ Fold ~ Change)) + ylab("B-Statistic") + theme(text=element_text(family = "Arial", size = 20))
+
+```
+## Volcano Plot with Gene Lenght
+
+```{r, message=FALSE, warning=FALSE, results='hide'}
+
+DEGenes.SG.vs.VEC$Gene <- row.names(DEGenes.SG.vs.VEC)
+colnames(genelength) <- c("Length","Gene")
+DEGenes.SG.vs.VEC <- merge(DEGenes.SG.vs.VEC, genelength, by="Gene")
+
+ggplot(data=DEGenes.SG.vs.VEC,
+                 aes(x=logFC,
+                     y=  B)) +
+  geom_point(aes(color=log10(Length)))+
+  theme_bw() +
+  theme(axis.line = element_line(colour = "black"),
+        panel.grid.minor = element_blank(),
+        panel.border = element_blank(),
+        panel.background = element_blank()) +
+  ggtitle("SG")+ xlab(expression(Log[2] ~ Fold ~ Change)) + ylab("B-Statistic") +
+  theme(plot.title = element_text(hjust = 0.5))  +
+  scale_colour_gradient(low = "black", high = "red")+ theme(text=element_text(family = "Quicksand"))
+
+
+smooth.SG <- lm(t~log10(Length), DEGenes.SG.vs.VEC)
+liner.SG <- rstandard(smooth.SG)
+DEGenes.SG.vs.VEC <-cbind(DEGenes.SG.vs.VEC, liner.SG)
+colnames(DEGenes.SG.vs.VEC)[9] <- "Residuals"
+row.names(DEGenes.SG.vs.VEC) <- DEGenes.SG.vs.VEC$Gene
+linemarkers <- as.data.frame(DEGenes.SG.vs.VEC[abs(DEGenes.SG.vs.VEC$Residuals)>4,])
+
+# Calculate the Spearman correlation coefficient
+spearman_corr <- cor(DEGenes.SG.vs.VEC$t, log10(DEGenes.SG.vs.VEC$Length), method = "pearson")
+
+
+
+ggplot(DEGenes.SG.vs.VEC, aes(y=t, x=log10(Length))) + geom_point(color="#CCCCCC", alpha=1) +   theme_bw()+ geom_density_2d()+
+ ylab("SG Enrichment (t-stat)") + xlab(expression(RNA ~ Length ~ Log[10] ~ Base ~ Pairs)) +
+  theme(axis.line = element_line(colour = "black"),
+        panel.grid.minor = element_blank(),
+        panel.border = element_blank(),
+        panel.background = element_blank()) + 
+  theme(plot.title = element_text(hjust = 0.5))  +
+  geom_abline(slope=smooth.SG$coefficients[2], intercept = smooth.SG$coefficients[1], linetype = "dashed")+ stat_cor(method = "spearman", cor.coef.name = "rho",size=7)
+```
+We see a positive lenght bias.
+
+## Expression Graphs (Extra QC)
+
+As an added control, lets plot these genes in regard to their expression. This helps to see if the expression differences are robust, and not just driven by one sample.
+
+```{r, fig.height=12, fig.width=12}
+# Define color palette
+custom_palette <- qualitative_hcl(24, palette = "Pastel")
+custom_palette <- sample(custom_palette, 24)
+
+finagenes <- rbind(upmarkers, downmarkers)
+
+
+dfforexpression <- dfforpca
+samplecodes <- data.frame(samples=row.names(dfforexpression), purity=c(1:61))
+sampletype <- data.frame(samples=row.names(dfforexpression), sampletype=SampleColouring)
+dfforexpression <- t(dfforexpression)
+genesforexp <- dfforexpression[row.names(dfforexpression)%in%row.names(finagenes),]
+genesforexp <- reshape2::melt(genesforexp)
+colnames(genesforexp) <- c("Gene", "samples", "expression")
+genesforexp <- merge(genesforexp, samplecodes, by="samples")
+genesforexp <- merge(genesforexp, sampletype, by="samples")
+genesforexp <- genesforexp[,-1]
+genesforexp[,2] <- as.numeric(genesforexp[,2])
+genesforexp[,1] <- as.character(genesforexp[,1])
+genesforexp <- genesforexp[order(genesforexp$Gene),]
+
+
+winnyplot <- ggplot(genesforexp, aes(x=purity, y=expression, fill=sampletype, colour=sampletype)) + geom_bar(position="dodge", stat="identity", alpha=0.5) + facet_wrap(.~ Gene, ncol=5)
+winnyplot <- winnyplot + scale_fill_manual(name = "Sample Type", values = custom_palette, breaks = unique(SampleColouring)) + scale_colour_manual(name = "Sample Type", values = custom_palette, breaks = unique(SampleColouring)) 
+winnyplot <- winnyplot + theme_bw() + xlab("Samples (SG to Bulk Rna)") + ylab("Gene Expression (Log2 CPM)") + theme(
+      strip.text.x = element_text(
+        size = 12, face="italic"
+        )) +
+ theme(
+   strip.background = element_rect(
+     color="black", fill="#FFFFFF", size=1, linetype="solid"
+     )
+   ) + theme(
+    #legend.position = c(.95, .40),
+    legend.justification = c("right", "top"),
+    legend.box.just = "right",
+    ) + theme(legend.title = element_text(size = 12)) + ggtitle("Expression of DEA genes") + theme(plot.title = element_text(hjust = 0.5, size=14, face="bold"))
+winnyplot
+```
+
+
+## GSEA Enrichment
+
+Now that we have our genes of interest, it would also be interesting to see what are the **altered gene sets** between upregulated and downregulated transcripts from the above comparison. Therefore, lets perform a *Gene Set Enrichment Analysis*
+
+```{r, fig.height=20, fig.width=30, results=FALSE}
+#for all genes
+DEGenes.SG.vs.VEC <- DEGenes.SG.vs.VEC[order(DEGenes.SG.vs.VEC[,4]),]
+gseatool <- DEGenes.SG.vs.VEC[,4]
+gseatool <- as.data.frame(gseatool)
+colnames(gseatool)[1] <- "t" 
+gseatool[,2] <- DEGenes.SG.vs.VEC$Gene
+colnames(gseatool)[2] <- "Symbol" 
+gseatool <- gseatool[,c(2,1)]
+
+vectorranks <- gseatool$t
+names(vectorranks) <- gseatool$Symbol
+
+
+#to load our pathways
+hallmarks.gs <- msigdbr(species = "Homo sapiens", collection =  "H")
+
+hallmarks.gsets <- hallmarks.gs %>% split(x = .$gene_symbol, f = .$gs_name)
+
+for (set in names(hallmarks.gsets)){
+  hallmarks.gsets[[set]] <- toupper(hallmarks.gsets[[set]])
+}
+
+hallmarks.res <- fgsea(pathways = hallmarks.gsets, 
+                       stats = vectorranks)
+
+hallmarks.res.tidy <- hallmarks.res %>%
+  as_tibble() %>%
+  arrange(desc(NES))
+
+hallmarks.res.tidy %>% 
+  dplyr::select(-leadingEdge, -ES) %>% 
+  arrange(padj)
+
+hallmark.sg.t <- hallmarks.res.tidy[,c(1,3,6)]
+hallmark.sg.t <- as.data.frame(hallmark.sg.t)
+
+#this small part is generic
+thresh <- 0.001
+
+#this one is no longer generic
+data_to_plot <- hallmarks.res.tidy %>% filter(padj < thresh)
+
+statvec <- c()
+for (i in 1:nrow(data_to_plot)){
+  if (data_to_plot[i,6] > 0){
+    status <- "Upregulated"
+  }
+ else {
+   status <- "Downregulated"
+ }   
+statvec <- c(statvec, status)
+}
+
+data_to_plot$Status <- statvec
+
+##-----HALMARK-----
+gsea_plot_hall <- ggplot(data_to_plot, aes(reorder(pathway, NES), NES)) +
+  geom_col(aes(fill= Status), alpha=0.75) + scale_fill_manual(values = c("#53A2BE","#BA3B46"), name = "Regulation Status", labels = c("Downregulated", "Upregulated"), breaks = c("Downregulated", "Upregulated")) +
+  coord_flip() +
+  labs(x="Pathway", y="Normalised Enrichment Score (NES)",
+       title= "Hallmark Gene Sets",
+       caption = paste0("p-value < ", thresh)) + theme(plot.title = element_text(hjust = 1)) +
+  theme_bw() + theme(text=element_text(family = "Quicksand")) + theme(legend.position = "none")
+
+
+gsea_plot_hall+
+  theme(text=element_text(size=25,  family="Arial MS"))
+```
+
+
+## GSEA Length
+
+Now, since SGs are enriched for longer transcripts, these pathways may simply be the ones which are tipically enriched in longer transcripts. Therefore, I will repeat the analysis, but using transcript lenght instead of t-statistic. 
+
+```{r, results=FALSE}
+#for all genes
+DEGenes.SG.vs.VEC <- DEGenes.SG.vs.VEC[order(DEGenes.SG.vs.VEC[,8]),]
+gseatool <- DEGenes.SG.vs.VEC[,8]
+gseatool <- as.data.frame(gseatool)
+colnames(gseatool)[1] <- "t" 
+gseatool[,2] <- DEGenes.SG.vs.VEC$Gene
+colnames(gseatool)[2] <- "Symbol" 
+gseatool <- gseatool[,c(2,1)]
+
+#for only the genes without the contamination
+
+
+vectorranks <- log10(gseatool$t)
+vectorranks <- scale(vectorranks)
+names(vectorranks) <- gseatool$Symbol
+
+
+#to load our pathways
+
+##-----HALLMARK-----
+hallmarks.gs <- msigdbr(species = "Homo sapiens", collection = "H")
+
+hallmarks.gsets <- hallmarks.gs %>% split(x = .$gene_symbol, f = .$gs_name)
+
+for (set in names(hallmarks.gsets)){
+  hallmarks.gsets[[set]] <- toupper(hallmarks.gsets[[set]])
+}
+
+hallmarks.res <- fgsea(pathways = hallmarks.gsets, 
+                       stats = vectorranks)
+
+hallmarks.res.tidy <- hallmarks.res %>%
+  as_tibble() %>%
+  arrange(desc(NES))
+
+hallmarks.res.tidy %>% 
+  dplyr::select(-leadingEdge, -ES) %>% 
+  arrange(padj)
+
+hallmark.size.t <- hallmarks.res.tidy[,c(1,3,6)]
+hallmark.size.t <- as.data.frame(hallmark.size.t)
+
+
+#HALLMARK
+hallmark.scatter_ak <- merge(hallmark.sg.t, hallmark.size.t, by="pathway")
+colnames(hallmark.scatter_ak) <- c("pathway", "sg_pval", "sg", "size_pval", "size")
+hallmark.scatter_ak <- na.omit(hallmark.scatter_ak)
+res_hallmark <- lm(size ~ sg, hallmark.scatter_ak)
+
+vip.pathways_ak <- as.data.frame(hallmark.scatter_ak[(hallmark.scatter_ak$sg/hallmark.scatter_ak$size)<0,] )
+
+
+
+ggplot(hallmark.scatter_ak, aes(x=sg, y=size)) + geom_point(color="black", alpha=01) +   theme_bw()+
+ xlab("NES SG") + ylab("NES Size") +
+  theme(axis.line = element_line(colour = "black"),
+        panel.grid.minor = element_blank(),
+        panel.border = element_blank(),
+        panel.background = element_blank()) + ggtitle("hallmark SG vs Size")+
+  theme(plot.title = element_text(hjust = 0.5)) +
+  geom_abline(slope=res_hallmark$coefficients[2], intercept = res_hallmark$coefficients[1], linetype = "dashed") +
+  geom_label_repel(vip.pathways_ak[1:ndegs,] , mapping=aes(label=vip.pathways_ak$pathway[1:ndegs]),size=3,point.padding=-0.5, color="#399e5a",max.overlaps = 200)+
+  geom_point(data=vip.pathways_ak, aes(x=sg, y= size), color="#399e5a") + stat_cor(method = "spearman", cor.coef.name = "rho")
+
+```
+
+Even though there is some lenght bias in terms of enrichment, this time it does seem to be linked with gene set enrichment
+
+## Most altered pathways
+
+I opted to see altered pathways as a whole. That is, ignoring bidirectionally and simply looking at what pathways are more altered as a whole (i.e, more expressed genes on either side).
+
+```{r, echo=FALSE, fig.height=20, fig.width=30, message=FALSE, warning=FALSE, results='hide'}
+#for all genes
+DEGenes.SG.vs.VEC <- DEGenes.SG.vs.VEC[order(DEGenes.SG.vs.VEC[,4]),]
+gseatool <- DEGenes.SG.vs.VEC[,4]
+gseatool <- as.data.frame(gseatool)
+colnames(gseatool)[1] <- "t" 
+gseatool[,2] <- row.names(DEGenes.SG.vs.VEC)
+colnames(gseatool)[2] <- "Symbol" 
+gseatool <- gseatool[,c(2,1)]
+
+#for only the genes without the contamination
+
+
+vectorranks <- gseatool$t
+names(vectorranks) <- gseatool$Symbol
+forcorrel <- vectorranks
+vectorranks <- abs(vectorranks)
+
+
+#to load our pathways
+hallmarks.gs <- msigdbr(species = "Homo sapiens", collection = "H")
+
+hallmarks.gsets <- hallmarks.gs %>% split(x = .$gene_symbol, f = .$gs_name)
+
+for (set in names(hallmarks.gsets)){
+  hallmarks.gsets[[set]] <- toupper(hallmarks.gsets[[set]])
+}
+
+hallmarks.res <- fgsea(pathways = hallmarks.gsets, 
+                       stats = vectorranks)
+
+hallmarks.res.tidy <- hallmarks.res %>%
+  as_tibble() %>%
+  arrange(desc(NES))
+
+hallmarks.res.tidy %>% 
+  dplyr::select(-leadingEdge, -ES) %>% 
+  arrange(padj)
+
+#this small part is generic
+thresh <- 0.05
+
+#this one is no longer generic
+data_to_plot <- hallmarks.res.tidy %>% filter(padj < thresh)
+
+statvec <- c()
+for (i in 1:nrow(data_to_plot)){
+  if (data_to_plot[i,6] > 0){
+    status <- "Upregulated"
+  }
+ else {
+   status <- "Downregulated"
+ }   
+statvec <- c(statvec, status)
+}
+
+data_to_plot$Status <- statvec
+
+##-----HALMARK-----
+gsea_plot_hall <- ggplot(data_to_plot, aes(reorder(pathway, NES), NES)) +
+  geom_col(aes(fill= Status), alpha=0.75) + scale_fill_manual(values = c("#53A2BE","#BA3B46"), name = "Regulation Status", labels = c("Downregulated", "Upregulated"), breaks = c("Downregulated", "Upregulated")) +
+  coord_flip() +
+  labs(x="Pathway", y="Normalised Enrichment Score (NES)",
+       title= "Hallmark Gene Sets",
+       caption = paste0("p-value < ", thresh)) + theme(plot.title = element_text(hjust = 1)) +
+  theme_bw() + theme(text=element_text(family = "Quicksand")) + theme(legend.position = "none")
+
+
+
+gsea_plot_hall+
+  theme(text=element_text(size=25,  family="Arial MS"))
+
+```
+
+
+# Session Info
+
+```{r}
+sessionInfo()
+```

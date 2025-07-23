@@ -568,7 +568,7 @@ ggplot(data=DEGenes,
         panel.grid.minor = element_blank(),
         panel.border = element_blank(),
         panel.background = element_blank()) +
-  ggtitle("SG vs No-SG")+ xlab(expression(Log[2] ~ Fold ~ Change)) + ylab("B-Statistic") +
+  ggtitle("SG")+ xlab(expression(Log[2] ~ Fold ~ Change)) + ylab("B-Statistic") +
   theme(plot.title = element_text(hjust = 0.5))  +
   scale_colour_gradient(low = "black", high = "red")+ theme(text=element_text(family = "Quicksand"))
 
@@ -586,7 +586,7 @@ spearman_corr <- cor(DEGenes$t, log10(DEGenes$Length), method = "pearson")
 
 
 ggplot(DEGenes, aes(y=t, x=log10(Length))) + geom_point(color="#CCCCCC", alpha=1) +   theme_bw()+ geom_density_2d()+
- ylab("PBody Enrichment (t-stat)") + xlab(expression(RNA ~ Length ~ Log[10] ~ Base ~ Pairs)) +
+ ylab("SG Enrichment (t-stat)") + xlab(expression(RNA ~ Length ~ Log[10] ~ Base ~ Pairs)) +
   theme(axis.line = element_line(colour = "black"),
         panel.grid.minor = element_blank(),
         panel.border = element_blank(),
