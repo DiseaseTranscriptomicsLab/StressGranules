@@ -104,6 +104,10 @@ In these files, I present all analyses pertaining to the dataset by **K. Sato, 2
 In these files, I present all analyses pertaining to the dataset by **N. Curdy, 2023**.
 **GSE197001** ([NCBI GEO Link](https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=GSE197001))
 
+- **`GSE223295`**
+In these files, I present all analyses pertaining to the dataset by **Z. Ren, 2023**.
+**GSE223295** ([NCBI GEO Link](https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=GSE223295))
+
 If you use this repository or any of its contents, please cite our associated publication and the relevant original studies referenced above:
 
 > [Insert full citation and DOI once available]
