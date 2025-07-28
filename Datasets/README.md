@@ -96,6 +96,10 @@ In these files, I present all analyses pertaining to the dataset by **M. Honda, 
 In these files, I present all analyses pertaining to the dataset by **H. Shen, 2022**.
 **GSE171792** ([NCBI GEO Link](https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=GSE171792))
 
+- **`GSE171655`**
+In these files, I present all analyses pertaining to the dataset by **V. Iadevaia, 2022**.
+**GSE171655** ([NCBI GEO Link](https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=GSE171655))
+
 - **`GSE188397`**
 In these files, I present all analyses pertaining to the dataset by **K. Sato, 2023**.
 **GSE188397** ([NCBI GEO Link](https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=GSE188397))
