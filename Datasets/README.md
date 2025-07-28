@@ -116,6 +116,11 @@ In these files, I present all analyses pertaining to the dataset by **Y. Xiao, 2
 In these files, I present all analyses pertaining to the dataset by **Y. Zhou, 2024**.
 **GSE218180** ([NCBI GEO Link](https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=GSE218180))
 
+- **`GSE212380`**
+In these files, I present all analyses pertaining to the dataset by **P. Kudrin, 2024**.
+**GSE212380** ([NCBI GEO Link](https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=GSE212380))
+  
+
 If you use this repository or any of its contents, please cite our associated publication and the relevant original studies referenced above:
 
 > [Insert full citation and DOI once available]
