@@ -1,0 +1,1668 @@
+---
+title: "Analyses of GSE242766"
+subtitle: "M(6)A reduction relieves FUS-associated ALS granules."
+author: 
+  - name: "Alexandre Kaizeler^[Disease Transcriptomics Group, Gulbenkian Institute of Molecular Medicine]"
+    email: alexandreafonso@gimm.pt
+date: "`r format(Sys.time(), '%d %B %Y')`"
+output: 
+  rmdformats::downcute:
+    downcute_theme: "chaos"
+---
+
+# Introduction
+
+In this document, I present all analyses pertaining to the dataset **GSE242766**  
+([NCBI GEO Link](https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=GSE242766)),  
+originally published by **G. Di Timoteo, 2024**.
+
+
+```{r, message=FALSE}
+# These are all the libraries I used throughout the analysis. Not all of them will be required on this guidebook
+library(Rsubread)
+library(limma)
+library(edgeR)
+library(DESeq2)
+library(magrittr)
+library(ggrepel)
+library(tidyverse)
+library(vsn)
+library(ggplot2)
+library(NMF)
+library(biomaRt)
+library(ggpubr)
+library(factoextra)
+library(ggfortify)
+library(plotly)
+library(reshape2)
+library(fgsea)
+library(msigdbr)
+library(data.table)
+library(colorspace)
+
+set.seed(1906)
+```
+
+
+
+## First Steps
+
+```{r}
+#This section here is to load up the genelenght file I will be using throughout the analyses.
+genelength <- read.csv("~/Projects/StressGranules/SG_Transcriptome/RP_Data_2021/TrimmedSamples/alignment_STAR/TranscriptLenght.txt", header=T)
+
+genelength <- subset(genelength, Ensembl.Canonical==1)
+genelength <- subset(genelength, Gene.name!="")
+
+genelength <- genelength %>%
+  group_by(Gene.name) %>%
+  slice(which.max(Transcript.length..including.UTRs.and.CDS.)) %>%
+  ungroup()
+
+genelength <- genelength[,-c(2,3)]
+colnames(genelength) <- c("Length", "Gene")
+
+#Get the table of read counts by indicating the path to the file. This file is obtained from the GEO dataset site.
+raw.read.counts <- fread("~/Projects/StressGranules/SG_Transcriptome/m6A/GSE242766_counts_table.tsv")
+
+biomart <- fread("~/biomart.txt")[,-2]
+
+
+colnames(raw.read.counts)[1] <- "ensembl_gene_id"
+colnames(biomart) <- c("ensembl_gene_id", "hgnc_symbol")
+
+eltable <- merge(raw.read.counts,biomart,by = "ensembl_gene_id", all= TRUE) #this creates a table with both ensemble ids and HGNC codes.
+
+eltable <- subset(eltable, hgnc_symbol!="") #this removes reads that dont have a corresponding hgnc symbol.
+
+eltable$ensembl_gene_id <- NULL
+
+read.counts <- eltable %>% # If two gene ids resulted in the same gene name, this will sum up their counts
+  group_by(hgnc_symbol) %>%
+  summarise(across(everything(), sum, na.rm = TRUE))
+
+read.counts <- as.data.frame(read.counts)
+
+row.names(read.counts) <- read.counts$hgnc_symbol #changes rownames into hgnc symbols
+read.counts$hgnc_symbol <- NULL #We no longer need this column, as we have the rownames.
+
+```
+
+## Section for SPINSIM Preparation
+
+This serves as an example.
+
+```{r}
+mof <- fread("~/Projects/StressGranules/Simulator/MolecularWeights.csv")
+colnames(mof)[2] <- "GeneID" 
+mof <- mof[!duplicated(mof$GeneID), ]
+
+
+stress.tpm <- read.counts[,16]
+stress.tpm <- as.data.frame(stress.tpm)
+stress.tpm$GeneID <- row.names(read.counts)
+colnames(genelength) <- c("Length", "GeneID")
+stress.tpm <- merge(stress.tpm, genelength, by="GeneID")
+stress.tpm$TPM <- (stress.tpm$stress.tpm)/stress.tpm$Length
+stress.tpm$TPM <- (stress.tpm$TPM * 1e6)
+stress.tpm$TPM <- stress.tpm$TPM / sum(stress.tpm$TPM)
+stress.tpm <- stress.tpm[,-2]
+stress.tpm <- merge(stress.tpm, mof, by="GeneID")
+write.table(x = stress.tpm,
+            file = "~/Projects/StressGranules/Simulator/OriginalSamples/m6A/WTEX2.txt",
+            sep="\t", col.names = TRUE, row.names = FALSE, quote=FALSE)
+```
+
+## Extra Quality Control
+
+Let's check for sample complexity. It is possible that one or more samples have different complexity. In specific, I am going to check if enough reads have been obtained from every sample. If not, we should have a great bias to housekeeping genes. Another way to put it, is to say that even with all reads, we won't obtain a great deal of different genes.
+
+```{r, warning=FALSE, message=FALSE, results='hide'}
+
+# Define color palette
+custom_palette <- qualitative_hcl(8, palette = "Pastel")
+custom_palette <- sample(custom_palette, 8)
+
+# Use SampleColouring from metadata
+SampleColouring  <- c("ALWCCT","WTWCCT","ALWCEX","WTSGEX","WTSGCT","ALSGEX","ALSGCT","WTWCEX","WTWCCT","ALWCEX","ALWCCT","WTSGEX","WTSGCT","ALSGEX","ALSGCT","WTWCEX")
+
+# Build cumulative counts
+final <- sapply(1:ncol(read.counts), function(i) {
+  sort_vals <- read.counts[order(read.counts[, i], decreasing = TRUE), i]
+  cumsum(sort_vals)
+})
+final <- as.data.frame(final)
+colnames(final) <- colnames(read.counts)
+
+# Melt and add gene position + sample info
+finalmelt <- reshape2::melt(final, variable.name = "Sample")
+finalmelt$genes <- rep(1:nrow(final), times = ncol(final))
+finalmelt$SampleColouring <- rep(SampleColouring, each = nrow(final))
+
+# Plot cumulative read coverage
+ggplot(data = finalmelt, aes(x = genes, y = log10(value), group = Sample, color = SampleColouring)) +
+  geom_line() +
+  scale_color_manual(values = custom_palette, name = "Cell Line") +
+  theme_bw() +
+  xlab("Number of Genes Covered") +
+  ylab("Number of Reads (log10)") +
+  xlim(0, 20000) +
+  ylim(4, 8) +
+  theme(
+    axis.line = element_line(colour = "black"),
+    panel.grid.minor = element_blank(),
+    panel.border = element_blank(),
+    panel.background = element_blank()
+  )
+
+# Create percentage-based plot
+orderfinal <- subset(finalmelt, genes == max(finalmelt$genes))
+trial <- merge(orderfinal[, c("Sample", "value")], finalmelt, by = "Sample", suffixes = c(".total", ".current"))
+trial$percent <- (trial$value.current / trial$value.total) * 100
+trial$SampleColouring <- rep(SampleColouring, each = nrow(final))
+
+ggplot(data = trial, aes(x = genes, y = percent, group = Sample, color = SampleColouring)) +
+  geom_line() +
+  geom_hline(yintercept = 50, linetype = "dashed") +
+  scale_color_manual(values = custom_palette, name = "Cell Line") +
+  xlab("Number of Genes Covered") +
+  ylab("Number of Reads (%)") +
+  xlim(0, 20000) +
+  theme_bw() +
+  theme(
+    axis.line = element_line(colour = "black"),
+    panel.grid.minor = element_blank(),
+    panel.border = element_blank(),
+    panel.background = element_blank()
+  )
+```
+As we can see in these plots, in this case there are no individual sample outliers in terms of complexity or read depth. Excellent!
+
+
+# Differential Expression Analysis
+
+## Filtration
+
+### ***Before Filtration***
+
+Let us begin with the filtration. Personally, I find that its easier to do visually. I am aware that my filtration is more violent than most. Usually, from RNA-Seq experiments, we commonly obtain bi-modal distributions, with the first mode corresponding to lowly expressed genes. I remove these by cutting just before the second mode.
+
+```{r, warning=FALSE}
+alternew.ALSWC_ND <- log10(rowSums(read.counts[,c(1,11)]))
+alternew.ALSWC_ND <- as.data.frame(alternew.ALSWC_ND)
+
+alternew.ALSSG_ND <- log10(rowSums(read.counts[,c(2,9)]))
+alternew.ALSSG_ND <- as.data.frame(alternew.ALSSG_ND)
+
+alternew.WTWC_ND <- log10(rowSums(read.counts[,c(3,10)]))
+alternew.WTWC_ND <- as.data.frame(alternew.WTWC_ND)
+
+alternew.WTSG_ND <- log10(rowSums(read.counts[,c(4,12)]))
+alternew.WTSG_ND <- as.data.frame(alternew.WTSG_ND)
+
+alternew.ALSWC_D <- log10(rowSums(read.counts[,c(5,13)]))
+alternew.ALSWC_D <- as.data.frame(alternew.ALSWC_D)
+
+alternew.ALSSG_D <- log10(rowSums(read.counts[,c(6,14)]))
+alternew.ALSSG_D <- as.data.frame(alternew.ALSSG_D)
+
+alternew.WTWC_D <- log10(rowSums(read.counts[,c(7,15)]))
+alternew.WTWC_D <- as.data.frame(alternew.WTWC_D)
+
+alternew.WTSG_D <- log10(rowSums(read.counts[,c(8,16)]))
+alternew.WTSG_D <- as.data.frame(alternew.WTSG_D)
+
+alternew <- log10(rowSums(read.counts))
+alternew <- as.data.frame(alternew)
+
+ggplot(alternew, aes(x=alternew)) + geom_density() + theme_bw() + geom_vline(xintercept = 3.5, linetype = "dashed") + ylab("Events") + xlab("Number of Reads (log10)") +
+  theme(axis.line = element_line(colour = "black"),
+        panel.grid.minor = element_blank(),
+        panel.border = element_blank(),
+        panel.background = element_blank()) + ggtitle("Density of Reads - All Samples")
+
+ggplot(alternew.ALSWC_ND, aes(x=alternew.ALSWC_ND)) + geom_density(fill="#FFB6C1", alpha=0.5) + theme_bw() + geom_vline(xintercept = 2.5, linetype = "dashed") + ylab("Events") + xlab("Number of Reads (log10)") +
+  theme(axis.line = element_line(colour = "black"),
+        panel.grid.minor = element_blank(),
+        panel.border = element_blank(),
+        panel.background = element_blank()) + ggtitle("Density of Reads - ALS WC No Doxo")
+
+ggplot(alternew.ALSSG_ND, aes(x=alternew.ALSSG_ND)) + geom_density(fill="#FFDAB9", alpha=0.5) + theme_bw() + geom_vline(xintercept = 2.5, linetype = "dashed") + ylab("Events") + xlab("Number of Reads (log10)") +
+  theme(axis.line = element_line(colour = "black"),
+        panel.grid.minor = element_blank(),
+        panel.border = element_blank(),
+        panel.background = element_blank()) + ggtitle("Density of Reads - ALS SG No Doxo")
+
+
+ggplot(alternew.WTWC_ND, aes(x=alternew.WTWC_ND)) + geom_density(fill="#E6E6FA", alpha=0.5) + theme_bw() + geom_vline(xintercept = 2.5, linetype = "dashed") + ylab("Events") + xlab("Number of Reads (log10)") +
+  theme(axis.line = element_line(colour = "black"),
+        panel.grid.minor = element_blank(),
+        panel.border = element_blank(),
+        panel.background = element_blank()) + ggtitle("Density of Reads - WT WC No Doxo")
+
+ggplot(alternew.WTSG_ND, aes(x=alternew.WTSG_ND)) + geom_density(fill="#98FB98", alpha=0.5) + theme_bw() + geom_vline(xintercept = 2.5, linetype = "dashed") + ylab("Events") + xlab("Number of Reads (log10)") +
+  theme(axis.line = element_line(colour = "black"),
+        panel.grid.minor = element_blank(),
+        panel.border = element_blank(),
+        panel.background = element_blank()) + ggtitle("Density of Reads - WT SG No Doxo")
+
+ggplot(alternew.ALSWC_D, aes(x=alternew.ALSWC_D)) + geom_density(fill="#87CEFA", alpha=0.5) + theme_bw() + geom_vline(xintercept = 2.5, linetype = "dashed") + ylab("Events") + xlab("Number of Reads (log10)") +
+  theme(axis.line = element_line(colour = "black"),
+        panel.grid.minor = element_blank(),
+        panel.border = element_blank(),
+        panel.background = element_blank()) + ggtitle("Density of Reads - ALS WC Doxo")
+
+ggplot(alternew.ALSSG_D, aes(x=alternew.ALSSG_D)) + geom_density(fill="#EEE8AA", alpha=0.5) + theme_bw() + geom_vline(xintercept = 2.5, linetype = "dashed") + ylab("Events") + xlab("Number of Reads (log10)") +
+  theme(axis.line = element_line(colour = "black"),
+        panel.grid.minor = element_blank(),
+        panel.border = element_blank(),
+        panel.background = element_blank()) + ggtitle("Density of Reads - ALS SG Doxo")
+
+ggplot(alternew.WTWC_D, aes(x=alternew.WTWC_D)) + geom_density(fill="#F08080", alpha=0.5) + theme_bw() + geom_vline(xintercept = 2.25, linetype = "dashed") + ylab("Events") + xlab("Number of Reads (log10)") +
+  theme(axis.line = element_line(colour = "black"),
+        panel.grid.minor = element_blank(),
+        panel.border = element_blank(),
+        panel.background = element_blank()) + ggtitle("Density of Reads - WT WC Doxo")
+
+ggplot(alternew.WTSG_D, aes(x=alternew.WTSG_D)) + geom_density(fill="#B0E0E6", alpha=0.5) + theme_bw() + geom_vline(xintercept = 2.5, linetype = "dashed") + ylab("Events") + xlab("Number of Reads (log10)") +
+  theme(axis.line = element_line(colour = "black"),
+        panel.grid.minor = element_blank(),
+        panel.border = element_blank(),
+        panel.background = element_blank()) + ggtitle("Density of Reads - WT SG Doxo")
+
+```
+
+
+
+By seeing the shape of the graph, we can see where we should cut. We have a **binomial distribution** (low reads and noise vs actual biological meaningful reads). The ideal place to cut them is right before the wedge.
+
+### ***After Filtration***
+
+I didn't do it this time, but I've maintained the code to filter by sample type. This time, I considered that it was more correct to filter all samples together.
+
+```{r}
+filterednew <- subset(read.counts, alternew>3.5)
+filterednew.ALSWC_ND <- subset(read.counts, alternew.ALSWC_ND>2.5)
+filterednew.ALSSG_ND <- subset(read.counts, alternew.ALSSG_ND>2.5)
+filterednew.WTWC_ND <- subset(read.counts, alternew.WTWC_ND>2.5)
+filterednew.WTSG_ND <- subset(read.counts, alternew.WTSG_ND>2.5)
+filterednew.ALSWC_D <- subset(read.counts, alternew.ALSWC_D>2.5)
+filterednew.ALSSG_D <- subset(read.counts, alternew.ALSSG_D>2.5)
+filterednew.WTWC_D <- subset(read.counts, alternew.WTWC_D>2.5)
+filterednew.WTSG_D <- subset(read.counts, alternew.WTSG_D>2.5)
+
+#after cutting, its a good idea to visualize again
+falternew <- log10(rowSums(filterednew))
+falternew <- as.data.frame(falternew)
+ggplot(falternew, aes(x=falternew)) + geom_density() + theme_bw() + ylab("Events") + xlab("Number of Reads (log10)") +
+  theme(axis.line = element_line(colour = "black"),
+        panel.grid.minor = element_blank(),
+        panel.border = element_blank(),
+        panel.background = element_blank())
+
+#lets save the genes which we maintain
+impgenes <- c(row.names(falternew))
+impgenes.ALSWC_ND <- c(row.names(filterednew.ALSWC_ND))
+impgenes.ALSSG_ND <- c(row.names(filterednew.ALSSG_ND))
+impgenes.WTWC_ND <- c(row.names(filterednew.WTWC_ND))
+impgenes.WTSG_ND <- c(row.names(filterednew.WTSG_ND))
+impgenes.ALSWC_D <- c(row.names(filterednew.ALSWC_D))
+impgenes.ALSSG_D <- c(row.names(filterednew.ALSSG_D))
+impgenes.WTWC_D <- c(row.names(filterednew.WTWC_D))
+impgenes.WTSG_D <- c(row.names(filterednew.WTSG_D))
+
+#Now we need to select only the rows which have those genes.
+finaltable <- read.counts[row.names(read.counts)%in%impgenes,]
+# finaltable <- finaltable[row.names(finaltable)%in%impgenes.ALSWC_ND,]
+# finaltable <- finaltable[row.names(finaltable)%in%impgenes.ALSSG_ND,]
+# finaltable <- finaltable[row.names(finaltable)%in%impgenes.WTWC_ND,]
+# finaltable <- finaltable[row.names(finaltable)%in%impgenes.WTSG_ND,]
+# finaltable <- finaltable[row.names(finaltable)%in%impgenes.ALSWC_D,]
+# finaltable <- finaltable[row.names(finaltable)%in%impgenes.ALSSG_D,]
+# finaltable <- finaltable[row.names(finaltable)%in%impgenes.WTWC_D,]
+# finaltable <- finaltable[row.names(finaltable)%in%impgenes.WTSG_D,]
+```
+
+
+## Matrices
+
+Good! Now we can proceed by designing our matrices. 
+
+```{r}
+#Let us prepare metadata to add to our samples
+#I start by normalizing them all together
+#This one has all samples
+D0 <- DGEList(finaltable)
+
+
+#Then we calculate the normalization factors for these new generated data frames
+#Bear in mind this step calculates the normalization factors, but does not normalize itself.
+D0 <- calcNormFactors(D0)
+
+
+#Lets create a dataframe with this information
+#For potential Batch Effects
+CellType <- c("ALS","WT","ALS","WT","WT","ALS","ALS","WT","WT","ALS","ALS","WT","WT","ALS","ALS","WT")
+MethilType <- c("CT","CT","KO","KO","CT","KO","CT","KO","CT","KO","CT","KO","CT","KO","CT","KO")
+SampleType <- c(rep("WC",3),rep("SG",4),rep("WC",4),rep("SG",4),"WC")
+
+
+
+metadata <- data.frame(Cell=CellType, M6A=MethilType, Sample=SampleType)
+
+
+#Now we do the matrixes
+#the one with everything
+mm <- model.matrix(~0+SampleColouring)
+#the one without pbs
+
+
+#and now we normalize. This step also turns our counts into log2-counts per million.
+#The object with all simple
+y <- voom(D0, mm, plot = T)
+```
+
+
+## Normalisation
+
+For normalisation I convert the read counts into log2CPMs. Its a good way to visualise how the reads are. 
+
+```{r}
+dfforboxy <- finaltable
+orderforplots <- SampleColouring
+colouring <- data.frame(Sample=colnames(dfforboxy), Types=orderforplots)
+dfforboxy <- reshape2::melt(dfforboxy)
+colnames(dfforboxy) <- c("Sample", "Expression")
+dfforboxy <- merge(dfforboxy, colouring, by="Sample")
+# Convert 'Types' to factor with custom order
+dfforboxy$Types <- factor(dfforboxy$Types, levels = unique(SampleColouring))
+
+prenorm <- ggplot(dfforboxy, aes(x=Sample, y=(log2(Expression+1)), fill=Types)) + geom_boxplot(alpha=0.6) + theme_bw() + ylab("Read Counts (Log2)") + xlab("Samples") + scale_fill_manual(name = "Sample Type", values = c(custom_palette), labels=c(unique(orderforplots))) +
+  theme(axis.line = element_line(colour = "black"),
+        panel.grid.minor = element_blank(),
+        panel.border = element_blank(),
+        panel.background = element_blank(),
+        axis.text.x=element_blank(),
+        axis.ticks.x=element_blank(),
+        legend.position = "None") + ggtitle("Prior to Normalisation")
+
+#Using the Standard Matrix
+
+dfforboxy <- y$E
+dfforboxy <- reshape2::melt(dfforboxy)
+dfforboxy <- dfforboxy[,-1]
+colnames(dfforboxy) <- c("Sample", "Expression")
+dfforboxy <- merge(dfforboxy, colouring, by="Sample")
+# Convert 'Types' to factor with custom order
+dfforboxy$Types <- factor(dfforboxy$Types, levels = unique(SampleColouring))
+postnorm <- ggplot(dfforboxy, aes(x=Sample, y=Expression, fill=Types)) + geom_boxplot(alpha=0.6) + theme_bw() + ylab("Read Counts (Log2CPM)") + xlab("Samples") + scale_fill_manual(name = "Sample Type", values = c(custom_palette), labels=c(unique(orderforplots))) +
+  theme(axis.line = element_line(colour = "black"),
+        panel.grid.minor = element_blank(),
+        panel.border = element_blank(),
+        panel.background = element_blank(),
+        axis.text.x=element_blank(),
+        axis.ticks.x=element_blank(),
+        legend.position = "None") + ggtitle("After Normalisation")
+
+ggarrange(prenorm, postnorm, nrow=1)
+
+```
+
+## PCA
+
+Before we move on, lets do a **Principal Component analysis**. It is a good exploratory tool to find out how our samples relate to each other and if there are any obvious outliers. We would expect our replicates to be nearer to one another than to other samples, and more different samples should be further away. 
+
+```{r, fig.height=7, fig.width=9}
+# Define color palette
+custom_palette <- qualitative_hcl(4, palette = "Pastel")
+custom_palette <- sample(custom_palette, 4)
+
+#This prepares my data for the PCA
+dfforpca <- y$E
+dfforpca <- t(dfforpca)
+dfforpca <- as.data.frame(dfforpca) # needs to be a data.frame
+dfforpca <- apply(dfforpca, 2, as.numeric) # Ensure numeric
+dfforpca <- as.data.frame(dfforpca) # still needs to be a data.frame
+
+# Add metadata, which we will then use to plot
+dfforpca$Sample <- SampleType
+dfforpca$M6A <- MethilType
+dfforpca$Cell <- CellType
+
+# PCA computation itself. I do one PCA for each variable I want to see.
+pca_res <- prcomp(dfforpca[, 1:(ncol(dfforpca)-3)], scale = FALSE)
+
+p_Sample <- autoplot(pca_res, data = dfforpca, x = 1, y = 2, colour = "Sample", size = 8) +
+  theme_bw() +
+  scale_colour_manual(name = "Sample", values = custom_palette) +
+  ggtitle("PCA - Coloured by Sample") +
+  theme(plot.title = element_text(hjust = 0.5),
+        axis.line = element_line(colour = "black"),
+        panel.grid.minor = element_blank(),
+        panel.border = element_blank(),
+        panel.background = element_blank())
+
+p_M6A <- autoplot(pca_res, data = dfforpca, x = 1, y = 2, colour = "M6A", size = 8) +
+  theme_bw() +
+  scale_colour_manual(name = "M6A", values = custom_palette) +
+  ggtitle("PCA - Coloured by M6A") +
+  theme(plot.title = element_text(hjust = 0.5),
+        axis.line = element_line(colour = "black"),
+        panel.grid.minor = element_blank(),
+        panel.border = element_blank(),
+        panel.background = element_blank())
+
+p_Cell <- autoplot(pca_res, data = dfforpca, x = 1, y = 2, colour = "Cell", size = 8) +
+  theme_bw() +
+  scale_colour_manual(name = "Cell", values = custom_palette) +
+  ggtitle("PCA - Coloured by Cell") +
+  theme(plot.title = element_text(hjust = 0.5),
+        axis.line = element_line(colour = "black"),
+        panel.grid.minor = element_blank(),
+        panel.border = element_blank(),
+        panel.background = element_blank())
+
+p_Sample
+p_M6A
+p_Cell
+
+#in case you want to see most important genes for PCA yourself
+contribs1 <- pca_res$rotation[,1]
+contribs2 <- pca_res$rotation[,2]
+
+#These are the biggest contributors to the PCA1 (right side)
+(pos1genes <- sort(contribs1, decreasing=T)[1:10])
+#These are the biggest contributors to the PCA1 (left side)
+(neg1genes <- sort(contribs1, decreasing=F)[1:10])
+
+#These are the biggest contributors to the PCA2 (up side)
+(pos2genes <- sort(contribs2, decreasing=T)[1:10])
+#These are the biggest contributors to the PCA2 (down side)
+(neg2genes <- sort(contribs2, decreasing=F)[1:10])
+
+
+```
+
+As we can observe on the plot, PC1 is driven by sample type, and PC2 is driven by m6A status.
+
+## Linear Models
+
+```{r}
+
+SampleType <- factor(SampleType)
+SampleType <- relevel(SampleType,"WC")
+
+CellType <- factor(CellType)
+CellType <- relevel(CellType,"WT")
+
+MethilType <- factor(MethilType)
+MethilType <- relevel(MethilType,"KO")
+
+
+mm <- model.matrix(~0+Sample+Cell+M6A, metadata)
+fitted <- lmFit(y, mm)
+head(coef(fitted))
+
+
+
+contrastas <- makeContrasts(SampleSG   - SampleWC    , levels = coef(fitted))
+# 
+tmp <- contrasts.fit(fitted, contrastas)
+# 
+# #Correction for multiple testing
+tmp <- eBayes(tmp)
+# 
+top.table <- topTable(tmp, sort.by = "logFC", n=Inf)
+
+DEGenes <- top.table
+
+
+
+ndegs=20
+```
+
+# SG vs Non-SG
+
+## Volcano Plot
+
+```{r, results='hide', warning=FALSE, message=FALSE}
+
+write.table(x = DEGenes,
+            file = "~/Projects/StressGranules/SGPAPER/SGvsWC/SGm6A.txt", sep="\t", col.names = TRUE, row.names = TRUE, quote=FALSE)
+
+upmarkers <- as.data.frame(DEGenes[DEGenes$logFC>2.5 & DEGenes$B>10,] )
+downmarkers <- as.data.frame(DEGenes[DEGenes$logFC< -4 & DEGenes$B>10,] )
+
+ggplot(data=DEGenes,
+                 aes(x=logFC,
+                     y=  B)) +
+  geom_point(color="#CCCCCC")+
+  theme_bw() + ylab("B-Statistic")+xlab("Log Fold-Change")+
+  theme(axis.line = element_line(colour = "black"),
+        panel.grid.minor = element_blank(),
+        panel.border = element_blank(),
+        panel.background = element_blank()) +
+  ggtitle("SG vs WC")+
+  theme(plot.title = element_text(hjust = 0.5), plot.subtitle = element_text(hjust = 0.5)) + 
+  geom_point(data=upmarkers, aes(x=logFC, y=  B), color="#A10702",size=4)+
+  geom_point(data=downmarkers, aes(x=logFC, y=  B), color="#03256C",size=4)+
+  geom_label_repel(upmarkers[1:ndegs,] , mapping=aes(label=row.names(upmarkers)[1:ndegs]),size=4,point.padding=-0.5, color="#A10702",max.overlaps = 20, fontface="italic")+
+  geom_label_repel(downmarkers[1:ndegs,] , mapping=aes(label=row.names(downmarkers)[1:ndegs]),size=4,point.padding=-0.5, color="#03256C",max.overlaps = 20, fontface="italic")+
+  theme(text=element_text(size=15,  family="Arial MS"))
+
+```
+
+## Volcano Plot with Transcript Length
+
+```{r, message=FALSE, warning=FALSE, results='hide'}
+
+DEGenes$Gene <- row.names(DEGenes)
+colnames(genelength) <- c("Length","Gene")
+DEGenes <- merge(DEGenes, genelength, by="Gene")
+
+ggplot(data=DEGenes,
+                 aes(x=logFC,
+                     y=  B)) +
+  geom_point(aes(color=log10(Length)))+
+  theme_bw() +
+  theme(axis.line = element_line(colour = "black"),
+        panel.grid.minor = element_blank(),
+        panel.border = element_blank(),
+        panel.background = element_blank()) +
+  ggtitle("SG")+ xlab(expression(Log[2] ~ Fold ~ Change)) + ylab("B-Statistic") +
+  theme(plot.title = element_text(hjust = 0.5))  +
+  scale_colour_gradient(low = "black", high = "red")+ theme(text=element_text(family = "Quicksand"))
+
+
+smooth.SG <- lm(t~log10(Length), DEGenes)
+liner.SG <- rstandard(smooth.SG)
+DEGenes <-cbind(DEGenes, liner.SG)
+colnames(DEGenes)[9] <- "Residuals"
+row.names(DEGenes) <- DEGenes$Gene
+linemarkers <- as.data.frame(DEGenes[abs(DEGenes$Residuals)>4,])
+
+# Calculate the Spearman correlation coefficient
+spearman_corr <- cor(DEGenes$t, log10(DEGenes$Length), method = "pearson")
+
+
+
+ggplot(DEGenes, aes(y=t, x=log10(Length))) + geom_point(color="#CCCCCC", alpha=1) +   theme_bw()+ geom_density_2d()+
+ ylab("SG Enrichment (t-stat)") + xlab(expression(RNA ~ Length ~ Log[10] ~ Base ~ Pairs)) +
+  theme(axis.line = element_line(colour = "black"),
+        panel.grid.minor = element_blank(),
+        panel.border = element_blank(),
+        panel.background = element_blank()) + 
+  theme(plot.title = element_text(hjust = 0.5))  +
+  geom_abline(slope=smooth.SG$coefficients[2], intercept = smooth.SG$coefficients[1], linetype = "dashed")+ stat_cor(method = "spearman", cor.coef.name = "rho",size=7)
+
+```
+
+
+# With m6A SG vs WC
+
+Now, I compare samples separately. First I will compare samples with m6A. Since the authors link m6A to SG enrichment and ALS, I focused on the ALS samples. 
+
+(Additionally, it appears the effect of m6A is very very light, but it appears to be slightly less so on ALS samples)
+
+```{r}
+
+mm <- model.matrix(~0+SampleColouring)
+fitted <- lmFit(y, mm)
+head(coef(fitted))
+
+contrastas <- makeContrasts( ((SampleColouringALSGCT))    - ((SampleColouringALWCCT))     , levels = coef(fitted))
+# 
+tmp <- contrasts.fit(fitted, contrastas)
+# 
+# #Correction for multiple testing
+tmp <- eBayes(tmp)
+# 
+top.table <- topTable(tmp, sort.by = "logFC", n=Inf)
+
+DEGenes <- top.table
+
+
+
+ndegs=20
+```
+
+
+## Volcano Plot
+
+```{r, results='hide', warning=FALSE, message=FALSE}
+
+upmarkers <- as.data.frame(DEGenes[DEGenes$logFC>2 & DEGenes$B>5,] )
+downmarkers <- as.data.frame(DEGenes[DEGenes$logFC< -3.5 & DEGenes$B>5,] )
+
+ggplot(data=DEGenes,
+                 aes(x=logFC,
+                     y=  B)) +
+  geom_point(color="#CCCCCC")+
+  theme_bw() +
+  theme(axis.line = element_line(colour = "black"),
+        panel.grid.minor = element_blank(),
+        panel.border = element_blank(),
+        panel.background = element_blank()) +
+  ggtitle("SG vs WC (WT)")+
+  theme(plot.title = element_text(hjust = 0.5)) +
+  geom_label_repel(upmarkers[1:ndegs,] , mapping=aes(label=row.names(upmarkers)[1:ndegs]),size=3,point.padding=-0.5, color="#A10702",max.overlaps = 20)+
+  geom_label_repel(downmarkers[1:ndegs,] , mapping=aes(label=row.names(downmarkers)[1:ndegs]),size=3,point.padding=-0.5, color="#03256C",max.overlaps = 20)+
+  geom_point(data=upmarkers, aes(x=logFC, y=  B), color="#A10702")+
+  geom_point(data=downmarkers, aes(x=logFC, y=  B), color="#03256C")
+
+wt_t <- data.frame(Gene=row.names(DEGenes), wt_t=DEGenes$t, wt_logFC=DEGenes$logFC)
+```
+
+## Volcano Plot with Transcript Length
+
+```{r, message=FALSE, warning=FALSE, results='hide'}
+
+DEGenes$Gene <- row.names(DEGenes)
+colnames(genelength) <- c("Length","Gene")
+DEGenes <- merge(DEGenes, genelength, by="Gene")
+
+ggplot(data=DEGenes,
+                 aes(x=logFC,
+                     y=  B)) +
+  geom_point(aes(color=log10(Length)))+
+  theme_bw() +
+  theme(axis.line = element_line(colour = "black"),
+        panel.grid.minor = element_blank(),
+        panel.border = element_blank(),
+        panel.background = element_blank()) +
+  ggtitle("SG vs No-SG")+ xlab(expression(Log[2] ~ Fold ~ Change)) + ylab("B-Statistic") +
+  theme(plot.title = element_text(hjust = 0.5))  +
+  scale_colour_gradient(low = "black", high = "red")+ theme(text=element_text(family = "Quicksand"))
+
+
+smooth.SG <- lm(t~log10(Length), DEGenes)
+liner.SG <- rstandard(smooth.SG)
+DEGenes <-cbind(DEGenes, liner.SG)
+colnames(DEGenes)[9] <- "Residuals"
+row.names(DEGenes) <- DEGenes$Gene
+linemarkers <- as.data.frame(DEGenes[abs(DEGenes$Residuals)>4,])
+
+# Calculate the Spearman correlation coefficient
+spearman_corr <- cor(DEGenes$t, log10(DEGenes$Length), method = "spearman")
+
+
+
+ggplot(DEGenes, aes(y=t, x=log10(Length))) + geom_point(color="#CCCCCC", alpha=1) +   theme_bw()+ geom_density_2d()+
+ ylab("SG-Enrichment (t-stat)") + xlab(expression(RNA ~ Length ~ Log[10] ~ Base ~ Pairs)) + ggtitle("With m6A")+
+  theme(axis.line = element_line(colour = "black"),
+        panel.grid.minor = element_blank(),
+        panel.border = element_blank(),
+        panel.background = element_blank()) + 
+  theme(plot.title = element_text(hjust = 0.5))  +
+  geom_abline(slope=smooth.SG$coefficients[2], intercept = smooth.SG$coefficients[1], linetype = "dashed")+ stat_cor(method = "spearman", cor.coef.name = "rho", size=5)
+
+
+
+```
+
+There is a very strong lenght bias. m6A WT Stress granules are enriched in longer rnas.
+
+# Without m6A SG vs WC
+
+
+Now I will compare samples without m6A. Since the authors link m6A to SG enrichment and ALS, I focused on the ALS samples. 
+
+(Additionally, it appears the effect of m6A is very very light, but it appears to be slightly less so on ALS samples)
+
+```{r}
+
+mm <- model.matrix(~0+SampleColouring)
+fitted <- lmFit(y, mm)
+head(coef(fitted))
+
+contrastas <- makeContrasts( ((SampleColouringALSGEX))    - ((SampleColouringALWCEX))     , levels = coef(fitted))
+# 
+tmp <- contrasts.fit(fitted, contrastas)
+# 
+# #Correction for multiple testing
+tmp <- eBayes(tmp)
+# 
+top.table <- topTable(tmp, sort.by = "logFC", n=Inf)
+
+DEGenes <- top.table
+
+
+
+ndegs=20
+```
+
+
+## Volcano Plot
+
+```{r, results='hide', warning=FALSE, message=FALSE}
+
+upmarkers <- as.data.frame(DEGenes[DEGenes$logFC>2 & DEGenes$B>5,] )
+downmarkers <- as.data.frame(DEGenes[DEGenes$logFC< -3.5 & DEGenes$B>5,] )
+
+ggplot(data=DEGenes,
+                 aes(x=logFC,
+                     y=  B)) +
+  geom_point(color="#CCCCCC")+
+  theme_bw() +
+  theme(axis.line = element_line(colour = "black"),
+        panel.grid.minor = element_blank(),
+        panel.border = element_blank(),
+        panel.background = element_blank()) +
+  ggtitle("SG vs WC (ko)")+
+  theme(plot.title = element_text(hjust = 0.5)) +
+  geom_label_repel(upmarkers[1:ndegs,] , mapping=aes(label=row.names(upmarkers)[1:ndegs]),size=3,point.padding=-0.5, color="#A10702",max.overlaps = 20)+
+  geom_label_repel(downmarkers[1:ndegs,] , mapping=aes(label=row.names(downmarkers)[1:ndegs]),size=3,point.padding=-0.5, color="#03256C",max.overlaps = 20)+
+  geom_point(data=upmarkers, aes(x=logFC, y=  B), color="#A10702")+
+  geom_point(data=downmarkers, aes(x=logFC, y=  B), color="#03256C")
+
+nt_t <- data.frame(Gene=row.names(DEGenes), nt_t=DEGenes$t, nt_logFC=DEGenes$logFC)
+```
+
+## Volcano Plot with Transcript Length
+
+```{r, message=FALSE, warning=FALSE, results='hide'}
+
+DEGenes$Gene <- row.names(DEGenes)
+colnames(genelength) <- c("Length","Gene")
+DEGenes <- merge(DEGenes, genelength, by="Gene")
+
+ggplot(data=DEGenes,
+                 aes(x=logFC,
+                     y=  B)) +
+  geom_point(aes(color=log10(Length)))+
+  theme_bw() +
+  theme(axis.line = element_line(colour = "black"),
+        panel.grid.minor = element_blank(),
+        panel.border = element_blank(),
+        panel.background = element_blank()) +
+  ggtitle("SG vs No-SG")+ xlab(expression(Log[2] ~ Fold ~ Change)) + ylab("B-Statistic") +
+  theme(plot.title = element_text(hjust = 0.5))  +
+  scale_colour_gradient(low = "black", high = "red")+ theme(text=element_text(family = "Quicksand"))
+
+
+smooth.SG <- lm(t~log10(Length), DEGenes)
+liner.SG <- rstandard(smooth.SG)
+DEGenes <-cbind(DEGenes, liner.SG)
+colnames(DEGenes)[9] <- "Residuals"
+row.names(DEGenes) <- DEGenes$Gene
+linemarkers <- as.data.frame(DEGenes[abs(DEGenes$Residuals)>4,])
+
+# Calculate the Spearman correlation coefficient
+spearman_corr <- cor(DEGenes$t, log10(DEGenes$Length), method = "spearman")
+
+
+
+ggplot(DEGenes, aes(y=t, x=log10(Length))) + geom_point(color="#CCCCCC", alpha=1) +   theme_bw()+ geom_density_2d()+
+ ylab("SG-Enrichment (t-stat)") + xlab(expression(RNA ~ Length ~ Log[10] ~ Base ~ Pairs)) + ggtitle("Without m6A")+
+  theme(axis.line = element_line(colour = "black"),
+        panel.grid.minor = element_blank(),
+        panel.border = element_blank(),
+        panel.background = element_blank()) + 
+  theme(plot.title = element_text(hjust = 0.5))  +
+  geom_abline(slope=smooth.SG$coefficients[2], intercept = smooth.SG$coefficients[1], linetype = "dashed")+ stat_cor(method = "spearman", cor.coef.name = "rho", size=5)
+
+
+
+
+```
+
+There is a very strong lenght bias. m6A KO Stress granules are enriched in longer rnas.
+
+# Comparisons
+
+```{r}
+m6A <- fread("~/Projects/StressGranules/Simulator/MolecularWeights_m6A.csv")[,c(1,3,4)]
+
+
+wtvsnt <- merge(wt_t, nt_t, by="Gene")
+colnames(m6A) <- c("Gene", "NM6A", "Ratio")
+wtvsnt <- merge(wtvsnt, m6A, all.y=F, all.x=T)
+wtvsnt[is.na(wtvsnt)] <- 0
+
+smooth.SG <- lm(wt_t~(nt_t), wtvsnt)
+liner.SG <- rstandard(smooth.SG)
+wtvsnt <-cbind(wtvsnt, liner.SG)
+colnames(wtvsnt)[8] <- "Residuals"
+ogres <- wtvsnt[,c(1,8)]
+#row.names(wtvsnt) <- wtvsnt$Gene
+linemarkers <- as.data.frame(wtvsnt[abs(wtvsnt$Residuals)>4,])
+
+# Calculate the Spearman correlation coefficient
+spearman_corr <- cor(wtvsnt$wt_t, (wtvsnt$nt_t), method = "spearman")
+
+
+
+ggplot(wtvsnt, aes(y=wt_t, x=(nt_t))) + 
+  geom_point(fill = "#DDDDDD", alpha = 0.3, size=5, shape=21, colour='black') +   
+  geom_density2d(color="#800020", size=1.2)  +   theme_bw()+xlab("M6AKO SG Enrichment")+
+  ylab("WT SG Enrichment")+
+  theme(axis.line = element_line(colour = "black"),
+        panel.grid.minor = element_blank(),
+        panel.border = element_blank(),
+        panel.background = element_blank()) + 
+  theme(plot.title = element_text(hjust = 0.5)) + 
+  theme(text=element_text(size=15,  family="Arial MS")) + stat_cor(method = "spearman", cor.coef.name = "rho", size=5)+ theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank()) +
+  geom_abline(slope=smooth.SG$coefficients[2], intercept = smooth.SG$coefficients[1], linetype = "dashed")
+
+
+ggplot(wtvsnt, aes(y=NM6A, x=(liner.SG))) + geom_point(color="#CCCCCC", alpha=1) +   theme_bw()+ 
+ ylab("Number of m6A") + xlab("Residuals") +
+  theme(axis.line = element_line(colour = "black"),
+        panel.grid.minor = element_blank(),
+        panel.border = element_blank(),
+        panel.background = element_blank()) + 
+  theme(plot.title = element_text(hjust = 0.5))  + stat_cor(method = "spearman", cor.coef.name = "rho", size=5)
+
+wtvsnt$bins <- ifelse(wtvsnt$NM6A <= 4, wtvsnt$NM6A,
+                      ifelse(wtvsnt$NM6A>=5 & wtvsnt$NM6A<=9, "[5,9]","[10,["))
+
+
+wtvsnt$bins <- factor(wtvsnt$bins, levels=c(0:5, "[5,9]","[10,[" ))
+ggplot(wtvsnt, aes(x=bins, y=(Residuals)))  + geom_jitter(alpha=0.2) + geom_boxplot(fill="#43F3D5", alpha=0.4) +theme_bw()+ 
+ xlab("Number of m6A") + ylab("Residuals") +
+  theme(axis.line = element_line(colour = "black"),
+        panel.grid.minor = element_blank(),
+        panel.border = element_blank(),
+        panel.background = element_blank()) + 
+  theme(plot.title = element_text(hjust = 0.5)) 
+
+```
+Enrichment is very similar between WT and m6A KO stress granules. There does seem to be a very slight enrichment for transcripts with many m6A modifications.
+
+# Spin-Sim
+
+```{r}
+
+
+goalsum_WT1 <- sum(read.counts[,7])
+goalsum_KO1 <- sum(read.counts[,6])
+goalsum_WT2 <- sum(read.counts[,15])
+goalsum_KO2 <- sum(read.counts[,14])
+
+colnames(genelength) <- c("Length", "Gene")
+
+
+#For the new samples. Comp samples are "complex" and weight was calculate using the ratio of m6A. Simp samples simply assume that all transcripts of the same type have the same number of m6A modifications
+simwt1s <- read.table("~/Projects/StressGranules/Simulator/OriginalSamples/m6A/ALSWTSG1_Simp.txt", sep = ",")[,c(1,3)]
+colnames(simwt1s) <- c("Gene", "SGWT1S")
+simwt2s <- read.table("~/Projects/StressGranules/Simulator/OriginalSamples/m6A/ALSWTSG2_Simp.txt", sep = ",")[,c(1,3)]
+colnames(simwt2s) <- c("Gene", "SGWT2S")
+simwt1c <- read.table("~/Projects/StressGranules/Simulator/OriginalSamples/m6A/ALSWTSG1_Comp.txt", sep = ",")[,c(1,3)]
+colnames(simwt1c) <- c("Gene", "SGWT1C")
+simwt2c <- read.table("~/Projects/StressGranules/Simulator/OriginalSamples/m6A/ALSWTSG2_Comp.txt", sep = ",")[,c(1,3)]
+colnames(simwt2c) <- c("Gene", "SGWT2C")
+
+simko1 <- read.table("~/Projects/StressGranules/Simulator/OriginalSamples/m6A/ALSKOSG1_Simp.txt", sep = ",")[,c(1,3)]
+colnames(simko1) <- c("Gene", "SGKO1")
+simko2 <- read.table("~/Projects/StressGranules/Simulator/OriginalSamples/m6A/ALSKOSG2_Simp.txt", sep = ",")[,c(1,3)]
+colnames(simko2) <- c("Gene", "SGKO2")
+
+simsamples <- merge(simwt1s, simwt2s, by="Gene")
+#simsamples <- merge(simwt2, simwt3, by="Gene")
+simsamples <- merge(simsamples, simwt1c, by="Gene")
+simsamples <- merge(simsamples, simwt2c, by="Gene")
+simsamples <- merge(simsamples, simko1, by="Gene")
+simsamples <- merge(simsamples, simko2, by="Gene")
+simsamples <- merge(simsamples, genelength, by="Gene")
+
+simsamples <- simsamples %>%
+  group_by(Gene) %>%
+  slice(which.max(Length)) %>%
+  ungroup()
+
+simsamples <- as.data.frame(simsamples)
+
+colnames(simsamples)[8] <- "Length"
+
+simsamples$WTCounts_1 <- simsamples$SGWT1S*simsamples$Length
+simsamples$WTCounts_1 <- simsamples$WTCounts_1/sum(simsamples$WTCounts_1)*goalsum_WT1
+simsamples$WTCounts_2 <- simsamples$SGWT2S*simsamples$Length
+simsamples$WTCounts_2 <- simsamples$WTCounts_2/sum(simsamples$WTCounts_2)*goalsum_WT2
+simsamples$WTCounts_3 <- simsamples$SGWT1C*simsamples$Length
+simsamples$WTCounts_3 <- simsamples$WTCounts_3/sum(simsamples$WTCounts_3)*goalsum_WT1
+simsamples$WTCounts_4 <- simsamples$SGWT2C*simsamples$Length
+simsamples$WTCounts_4 <- simsamples$WTCounts_4/sum(simsamples$WTCounts_4)*goalsum_WT2
+
+simsamples$NTCounts_1 <- simsamples$SGKO1*simsamples$Length
+simsamples$NTCounts_1 <- simsamples$NTCounts_1/sum(simsamples$NTCounts_1)*goalsum_KO1
+simsamples$NTCounts_2 <- simsamples$SGKO2*simsamples$Length
+simsamples$NTCounts_2 <- simsamples$NTCounts_2/sum(simsamples$NTCounts_2)*goalsum_KO2
+
+
+simsamples <- simsamples[,c(1,9:14)] 
+
+OGsamples <- read.counts[,c(1,11,3,10)]
+OGsamples$Gene <- row.names(OGsamples)
+
+simandog <- merge(simsamples, OGsamples, by="Gene")
+row.names(simandog) <- simandog$Gene
+simandog$Gene <- NULL
+```
+
+# Filtration
+
+```{r}
+alternew <- log10(rowSums(simandog))
+alternew <- as.data.frame(alternew)
+filterednew <- subset(simandog, alternew>3.5)
+impgenes <- c(row.names(falternew))
+finaltable <- simandog[row.names(simandog)%in%impgenes,]
+falternew <- log10(rowSums(filterednew))
+falternew <- as.data.frame(falternew)
+ggplot(falternew, aes(x=falternew)) + geom_density() + theme_bw() + ylab("Events") + xlab("Number of Reads (log10)") +
+  theme(axis.line = element_line(colour = "black"),
+        panel.grid.minor = element_blank(),
+        panel.border = element_blank(),
+        panel.background = element_blank())
+
+```
+
+# Matrices
+
+```{r}
+sampy <- c(rep("SGWTS",2), rep("SGWTC",2), rep("KOSG",2), rep("WTWC",2),rep("KOWC",2))
+
+#To be able to use Voom, we must first convert our read count table into a special DGE object.
+D0 <- DGEList(finaltable)
+
+#Then we calculate the normalization factors.
+#Bear in mind this step calculates the normalization factors, but does not normalize itself.
+D0 <- calcNormFactors(D0)
+
+
+sampy <- sampy
+
+#Now we do our matrix itself
+mm <- model.matrix(~0+sampy)
+
+#and now we normalize. This step also turns our counts into log2-counts per million.
+y <- voom(D0, mm, plot = T)
+```
+
+
+
+## PCA
+
+```{r}
+#this is done to be able to do traditional PCA
+
+sampy <- sampy
+dfforpca <- y$E
+dfforpca <- rbind(dfforpca, sampy)
+dfforpca <- t(dfforpca)
+numcol <- c(1:(ncol(dfforpca)-1))
+dfforpca <- as.data.frame(dfforpca) #for some reason I can only change colum type if its a dataframe
+
+dfforpca[ ,numcol] <- apply(dfforpca[ , numcol], 2,            # to turn our columns into numeric
+                            function(x) as.numeric(as.character(x)))
+
+#sapply(dfforpca, class) #to check class
+
+# Or specify the factor levels in the order you want
+dfforpca$sampy <- factor(dfforpca$sampy, levels = c("SGWTS", "SGWTC", "KOSG", "WTWC", "KOWC"))
+
+pca_res <- prcomp(dfforpca[,numcol], scale=FALSE) #prepare the pca
+
+#to make everything pretty
+p <- autoplot(pca_res, data = dfforpca, x=1, y=2, colour = "sampy", size=8, alpha=0.7)
+p <- p + theme_bw() + scale_colour_manual((name = "Samples"), values = c("black", "#769fca", "green", "purple", "orange"), labels=c("SGWTS", "KOSG", "WTWC", "KOWC", "SGWTC"))
+p <- p + ggtitle("PCA Plot") + theme(plot.title = element_text(hjust = 0.5)) +
+  theme(axis.line = element_line(colour = "black"),
+        panel.grid.minor = element_blank(),
+        panel.border = element_blank(),
+        panel.background = element_blank())
+p
+
+
+#in case you want to see them yourself
+contribs1 <- pca_res$rotation[,1]
+contribs2 <- pca_res$rotation[,2]
+
+#These are the biggest contributors to the PCA1 (right side)
+(pos1genes <- sort(contribs1, decreasing=T)[1:10])
+#These are the biggest contributors to the PCA1 (left side)
+(neg1genes <- sort(contribs1, decreasing=F)[1:10])
+
+#These are the biggest contributors to the PCA2 (up side)
+(pos2genes <- sort(contribs2, decreasing=T)[1:10])
+#These are the biggest contributors to the PCA2 (down side)
+(neg2genes <- sort(contribs2, decreasing=F)[1:10])
+```
+
+
+## Linear Models
+
+Now we must perform linear model fitting. 
+
+```{r Linear Models}
+fitted <- lmFit(y, mm)
+
+head(coef(fitted))
+
+#next we measure contrasts between groups (log-fold change is obtained from these fitted linear models)
+contr <- makeContrasts(sampySGWTS      - sampyWTWC     , levels = colnames(coef(fitted)))
+
+#next we estimate the contrast for each gene
+tmp <- contrasts.fit(fitted, contr)
+
+
+#use empirical bayes smoothing of standard erros (shrinks extreme standard erros)
+tmp <- eBayes(tmp)
+
+top.table <- topTable(tmp, sort.by = "logFC", n = Inf)
+
+DEGenes <- top.table
+
+ndegs <- 20
+```
+
+# WT Samples
+
+## Volcano Plots
+
+```{r , results='hide', warning=FALSE, message=FALSE}
+
+upmarkers <- as.data.frame(DEGenes[DEGenes$logFC>3 & DEGenes$B>0,] )
+downmarkers <- as.data.frame(DEGenes[DEGenes$logFC< -3 & DEGenes$B>5,] )
+
+ggplot(data=DEGenes,
+                 aes(x=logFC,
+                     y=  B)) +
+  geom_point(color="#CCCCCC")+
+  theme_bw() +
+  theme(axis.line = element_line(colour = "black"),
+        panel.grid.minor = element_blank(),
+        panel.border = element_blank(),
+        panel.background = element_blank()) +
+  ggtitle("Sim SG vs WC (m6A WT)")+
+  theme(plot.title = element_text(hjust = 0.5)) +
+  geom_label_repel(upmarkers[1:ndegs,] , mapping=aes(label=row.names(upmarkers)[1:ndegs]),size=3,point.padding=-0.5, color="#769fca",max.overlaps = 20)+
+  geom_label_repel(downmarkers[1:ndegs,] , mapping=aes(label=row.names(downmarkers)[1:ndegs]),size=3,point.padding=-0.5, color="#a2d1e6",max.overlaps = 20)+
+  geom_point(data=upmarkers, aes(x=logFC, y=  B), color="#769fca")+
+  geom_point(data=downmarkers, aes(x=logFC, y=  B), color="#a2d1e6")
+
+simwt <- data.frame(Gene=row.names(DEGenes), simwt_t=DEGenes$t, simwt_logFC=DEGenes$logFC)
+#simnt <- data.frame(Gene=row.names(DEGenes), simnt_t=DEGenes$t, simnt_logFC=DEGenes$logFC)
+```
+
+# KO Samples
+
+```{r}
+fitted <- lmFit(y, mm)
+
+head(coef(fitted))
+
+#next we measure contrasts between groups (log-fold change is obtained from these fitted linear models)
+contr <- makeContrasts(sampyKOSG       - sampyKOWC      , levels = colnames(coef(fitted)))
+
+#next we estimate the contrast for each gene
+tmp <- contrasts.fit(fitted, contr)
+
+
+#use empirical bayes smoothing of standard erros (shrinks extreme standard erros)
+tmp <- eBayes(tmp)
+
+top.table <- topTable(tmp, sort.by = "logFC", n = Inf)
+
+DEGenes <- top.table
+
+ndegs <- 20
+```
+
+
+## Volcano Plots
+
+```{r , results='hide', warning=FALSE, message=FALSE}
+
+upmarkers <- as.data.frame(DEGenes[DEGenes$logFC>3 & DEGenes$B>0,] )
+downmarkers <- as.data.frame(DEGenes[DEGenes$logFC< -3 & DEGenes$B>5,] )
+
+ggplot(data=DEGenes,
+                 aes(x=logFC,
+                     y=  B)) +
+  geom_point(color="#CCCCCC")+
+  theme_bw() +
+  theme(axis.line = element_line(colour = "black"),
+        panel.grid.minor = element_blank(),
+        panel.border = element_blank(),
+        panel.background = element_blank()) +
+  ggtitle("Sim SG vs WC (m6A KO)")+
+  theme(plot.title = element_text(hjust = 0.5)) +
+  geom_label_repel(upmarkers[1:ndegs,] , mapping=aes(label=row.names(upmarkers)[1:ndegs]),size=3,point.padding=-0.5, color="#769fca",max.overlaps = 20)+
+  geom_label_repel(downmarkers[1:ndegs,] , mapping=aes(label=row.names(downmarkers)[1:ndegs]),size=3,point.padding=-0.5, color="#a2d1e6",max.overlaps = 20)+
+  geom_point(data=upmarkers, aes(x=logFC, y=  B), color="#769fca")+
+  geom_point(data=downmarkers, aes(x=logFC, y=  B), color="#a2d1e6")
+
+simnt <- data.frame(Gene=row.names(DEGenes), simnt_t=DEGenes$t, simnt_logFC=DEGenes$logFC)
+```
+
+# Comparisons
+
+```{r}
+wtvsnt <- merge(simwt, simnt, by="Gene")
+
+
+smooth.SG <- lm(simwt_t~(simnt_t), wtvsnt)
+liner.SG <- rstandard(smooth.SG)
+wtvsnt <-cbind(wtvsnt, liner.SG)
+colnames(wtvsnt)[6] <- "Residuals"
+row.names(wtvsnt) <- wtvsnt$Gene
+linemarkers <- as.data.frame(wtvsnt[abs(wtvsnt$Residuals)>4,])
+
+# Calculate the Spearman correlation coefficient
+spearman_corr <- cor(wtvsnt$simwt_t, (wtvsnt$simnt_t), method = "spearman")
+
+
+
+ggplot(wtvsnt, aes(y=simwt_t, x=(simnt_t))) + geom_point(color="#CCCCCC", alpha=1) +   theme_bw()+ geom_density_2d()+
+ ylab("WT Enrichment") + xlab("KO Enrichemnt") +
+  theme(axis.line = element_line(colour = "black"),
+        panel.grid.minor = element_blank(),
+        panel.border = element_blank(),
+        panel.background = element_blank()) + 
+  theme(plot.title = element_text(hjust = 0.5))  +
+  geom_abline(slope=smooth.SG$coefficients[2], intercept = smooth.SG$coefficients[1], linetype = "dashed")+ stat_cor(method = "spearman", cor.coef.name = "rho", size=5)
+
+
+colnames(m6A) <- c("Gene", "NM6A", "Ratio")
+wtvsnt <- merge(wtvsnt, m6A, all.y=F, all.x=T)
+wtvsnt[is.na(wtvsnt)] <- 0
+
+wtvsnt$bins <- ifelse(wtvsnt$NM6A <= 4, wtvsnt$NM6A,
+                      ifelse(wtvsnt$NM6A>=5 & wtvsnt$NM6A<=9, "[5,9]","[10,["))
+
+
+wtvsnt$bins <- factor(wtvsnt$bins, levels=c(0:5, "[6,8]","[9,[" ))
+ggplot(wtvsnt, aes(x=bins, y=(Residuals)))  + geom_jitter(alpha=0.2) + geom_boxplot(fill="#43F3D5", alpha=0.4) +theme_bw()+ 
+ xlab("Number of m6a") + ylab("Residuals") +
+  theme(axis.line = element_line(colour = "black"),
+        panel.grid.minor = element_blank(),
+        panel.border = element_blank(),
+        panel.background = element_blank()) + 
+  theme(plot.title = element_text(hjust = 0.5))
+
+ggplot(wtvsnt, aes(y=NM6A, x=(Residuals))) + geom_point(color="#CCCCCC", alpha=1) +   theme_bw()+ 
+ xlab("Number of m6a") + ylab("Residuals") +
+  theme(axis.line = element_line(colour = "black"),
+        panel.grid.minor = element_blank(),
+        panel.border = element_blank(),
+        panel.background = element_blank()) + 
+  theme(plot.title = element_text(hjust = 0.5))  + stat_cor(method = "spearman", cor.coef.name = "rho", size=5)
+
+simres <- wtvsnt[,c(1,6)]
+
+
+
+resvres <- merge(ogres, simres, by="Gene")
+
+
+smooth.SG <- lm(Residuals.y~(Residuals.x), resvres)
+liner.SG <- rstandard(smooth.SG)
+resvres <-cbind(resvres, liner.SG)
+colnames(resvres)[4] <- "Residuals"
+#row.names(resvres) <- resvres$Gene
+linemarkers <- as.data.frame(resvres[abs(resvres$Residuals)>4,])
+
+# Calculate the Spearman correlation coefficient
+spearman_corr <- cor(resvres$Residuals.y, (resvres$Residuals.x), method = "spearman")
+
+
+resvres <- merge(resvres, m6A, by="Gene", all.y=F, all.x=T)
+resvres[is.na(resvres)] <- 0
+
+resvres$bins <- ifelse(resvres$NM6A <= 8, resvres$NM6A,
+                      ifelse(resvres$NM6A>=9 & resvres$NM6A<=12, "[6,8]","[9,["))
+
+
+resvres$bins <- factor(resvres$bins, levels=c(0:12, "[6,8]","[9,[" ))
+
+#resvres$bins <- resvres$NM6A
+#resvres$bins <- factor(resvres$bins, levels=c(0:12))
+
+upmarkers <- as.data.frame(resvres[resvres$NM6A>=9,] )
+
+trial <- subset(resvres, NM6A>=5)
+
+resvres$proxy <- resvres$NM6A*resvres$Ratio
+
+
+ggplot(resvres, aes(x=(Residuals.x),y=Residuals.y, colour=as.factor(bins))) + 
+  geom_point(fill = "#DDDDDD", alpha = 0.3, size=5, shape=21)  +   theme_bw()+xlab("Original Residuals")+
+  ylab("Simulated Residuals")+
+  theme(axis.line = element_line(colour = "black"),
+        panel.grid.minor = element_blank(),
+        panel.border = element_blank(),
+        panel.background = element_blank()) + 
+  theme(plot.title = element_text(hjust = 0.5)) + stat_cor(method = "spearman", cor.coef.name = "rho", size=5)+
+  theme(text=element_text(size=15,  family="Arial MS")) + theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank()) +
+  geom_point(data=upmarkers, aes(x=Residuals.x, y=  Residuals.y), color="#43F3D5",fill="#43F3D5",alpha=1, size=5, shape=21) 
+
+```
+Honestly, the effect of m6A is so light, that its hard to make any observations. In my personal opinion, its because it a very light modification (in terms of weight), and so we have trouble seeing differences in DC isolated samples.
+
+# "Real" SG
+
+After the spin-sim pipeline, we can then compared the original SGs to our simulated ones, which allows us to determine genes which are more or less enriched than what was expected by centrifugation alone.
+
+
+```{r}
+read.counts$Gene <- row.names(read.counts)
+
+goalsum_WTSGEX1 <- sum(read.counts[,4])
+goalsum_WTSGEX2 <- sum(read.counts[,12])
+goalsum_WTSGCT1 <- sum(read.counts[,5])
+goalsum_WTSGCT2 <- sum(read.counts[,13])
+goalsum_ALSGEX1 <- sum(read.counts[,6])
+goalsum_ALSGEX2 <- sum(read.counts[,14])
+goalsum_ALSGCT1 <- sum(read.counts[,7])
+goalsum_ALSGCT2 <- sum(read.counts[,15])
+
+colnames(genelength) <- c("Length","Gene")
+
+#For the simulated samples
+SGALCT1 <- read.table("~/Projects/StressGranules/Simulator/SimulatedSamples/m6A/ALCT1.txt", sep = ",")
+SGALCT1 <- na.omit(SGALCT1)
+colnames(SGALCT1) <- c("Gene", "ALCT1")
+SGALCT2 <- read.table("~/Projects/StressGranules/Simulator/SimulatedSamples/m6A/ALCT2.txt", sep = ",")
+SGALCT2 <- na.omit(SGALCT2)
+colnames(SGALCT2) <- c("Gene", "ALCT2")
+SGALEX1 <- read.table("~/Projects/StressGranules/Simulator/SimulatedSamples/m6A/ALEX1.txt", sep = ",")
+SGALEX1 <- na.omit(SGALEX1)
+colnames(SGALEX1) <- c("Gene", "ALEX1")
+SGALEX2 <- read.table("~/Projects/StressGranules/Simulator/SimulatedSamples/m6A/ALEX2.txt", sep = ",")
+SGALEX2 <- na.omit(SGALEX2)
+colnames(SGALEX2) <- c("Gene", "ALEX2")
+SGWTEX1 <- read.table("~/Projects/StressGranules/Simulator/SimulatedSamples/m6A/WTEX1.txt", sep = ",")
+SGWTEX1 <- na.omit(SGWTEX1)
+colnames(SGWTEX1) <- c("Gene", "WTEX1")
+SGWTEX2 <- read.table("~/Projects/StressGranules/Simulator/SimulatedSamples/m6A/WTEX2.txt", sep = ",")
+SGWTEX2 <- na.omit(SGWTEX2)
+colnames(SGWTEX2) <- c("Gene", "WTEX2")
+
+SGWTWC1 <- read.table("~/Projects/StressGranules/Simulator/SimulatedSamples/m6A/WTWC1.txt", sep = ",")
+SGWTWC1 <- na.omit(SGWTWC1)
+colnames(SGWTWC1) <- c("Gene", "WTWC1")
+SGWTWC2 <- read.table("~/Projects/StressGranules/Simulator/SimulatedSamples/m6A/WTWC2.txt", sep = ",")
+SGWTWC2 <- na.omit(SGWTWC2)
+colnames(SGWTWC2) <- c("Gene", "WTWC2")
+
+
+#merging simulated samples up
+simsamples <- merge(SGALCT1, SGALCT2, by="Gene")
+simsamples <- merge(simsamples, SGALEX1, by="Gene")
+simsamples <- merge(simsamples, SGALEX2, by="Gene")
+simsamples <- merge(simsamples, SGWTEX1, by="Gene")
+simsamples <- merge(simsamples, SGWTEX2, by="Gene")
+simsamples <- merge(simsamples, SGWTWC1, by="Gene")
+simsamples <- merge(simsamples, SGWTWC2, by="Gene")
+simsamples <- merge(simsamples, genelength, by="Gene")
+
+#De-Tpming old samples
+simsamples$Counts_ALCT1 <- simsamples$ALCT1*simsamples$Length
+simsamples$Counts_ALCT1 <- simsamples$Counts_ALCT1/sum(simsamples$Counts_ALCT1)*goalsum_ALSGCT1
+simsamples$Counts_ALCT2 <- simsamples$ALCT2*simsamples$Length
+simsamples$Counts_ALCT2 <- simsamples$Counts_ALCT2/sum(simsamples$Counts_ALCT2)*goalsum_ALSGCT2
+simsamples$Counts_ALEX1 <- simsamples$ALEX1*simsamples$Length
+simsamples$Counts_ALEX1 <- simsamples$Counts_ALEX1/sum(simsamples$Counts_ALEX1)*goalsum_ALSGEX1
+simsamples$Counts_ALEX2 <- simsamples$ALEX2*simsamples$Length
+simsamples$Counts_ALEX2 <- simsamples$Counts_ALEX2/sum(simsamples$Counts_ALEX2)*goalsum_ALSGEX2
+simsamples$Counts_WTCT1 <- simsamples$WTWC1*simsamples$Length
+simsamples$Counts_WTCT1 <- simsamples$Counts_WTCT1/sum(simsamples$Counts_WTCT1)*goalsum_WTSGCT1
+simsamples$Counts_WTCT2 <- simsamples$WTWC2*simsamples$Length
+simsamples$Counts_WTCT2 <- simsamples$Counts_WTCT2/sum(simsamples$Counts_WTCT2)*goalsum_WTSGCT2
+simsamples$Counts_WTEX1 <- simsamples$WTEX1*simsamples$Length
+simsamples$Counts_WTEX1 <- simsamples$Counts_WTEX1/sum(simsamples$Counts_WTEX1)*goalsum_WTSGEX1
+simsamples$Counts_WTEX2 <- simsamples$WTEX2*simsamples$Length
+simsamples$Counts_WTEX2 <- simsamples$Counts_WTEX2/sum(simsamples$Counts_WTEX2)*goalsum_WTSGEX2
+
+
+simsamples <- simsamples[,c(1,11:18)] 
+
+
+OGsamples <- read.counts
+
+SG_City <- merge(OGsamples, simsamples, by="Gene")
+SG_City <- SG_City %>% distinct(Gene, .keep_all = TRUE)
+row.names(SG_City) <- SG_City$Gene
+SG_City$Gene <- NULL
+```
+
+
+## Filtration
+
+### ***Before Filtration***
+
+Let us begin with the filtration. Before moving on, it is important to note that according to the authors, these RNA granules are not pure and contain several contaminants. 
+
+```{r, warning=FALSE}
+alternew <- log10(rowSums(SG_City))
+alternew <- as.data.frame(alternew)
+
+ggplot(alternew, aes(x=alternew)) + geom_density() + theme_bw() + geom_vline(xintercept = 3.75, linetype = "dashed") + ylab("Events") + xlab("Number of Reads (log10)") +
+  theme(axis.line = element_line(colour = "black"),
+        panel.grid.minor = element_blank(),
+        panel.border = element_blank(),
+        panel.background = element_blank()) + ggtitle("Density of Reads - All Samples")
+```
+
+### ***After Filtration***
+
+```{r}
+filterednew <- subset(SG_City, alternew>3.75)
+
+#after cutting, its a good idea to visualize again
+falternew <- log10(rowSums(filterednew))
+falternew <- as.data.frame(falternew)
+ggplot(falternew, aes(x=falternew)) + geom_density() + theme_bw() + ylab("Events") + xlab("Number of Reads (log10)") +
+  theme(axis.line = element_line(colour = "black"),
+        panel.grid.minor = element_blank(),
+        panel.border = element_blank(),
+        panel.background = element_blank())
+
+#lets save the genes which we maintain
+impgenes <- c(row.names(falternew))
+
+#Now we need to select only the rows which have those genes.
+finaltable <- SG_City[row.names(SG_City)%in%impgenes,]
+```
+
+## Matrices
+
+Good! Now we can proceed by designing our matrices. 
+
+```{r}
+#To be able to use Voom, we must first convert our read count table into a special DGE object.
+D0 <- DGEList(finaltable)
+
+#Then we calculate the normalization factors.
+#Bear in mind this step calculates the normalization factors, but does not normalize itself.
+D0 <- calcNormFactors(D0)
+
+forall <- c("ALWCCT","WTWCCT","ALWCEX","WTSGEX","WTSGCT","ALSGEX","ALSGCT","WTWCEX","WTWCCT","ALWCEX","ALWCCT","WTSGEX","WTSGCT","ALSGEX","ALSGCT","WTWCEX", rep("SimALSGCT",2), rep("SimALSGEX",2), rep("SimWTSGCT",2), rep("SimWTSGEX",2))
+
+CellType <- c("ALS","WT","ALS","WT","WT","ALS","ALS","WT","WT","ALS","ALS","WT","WT","ALS","ALS","WT", rep("ALS",4), rep("WT",4))
+StressType <- c("CT","CT","KO","KO","CT","KO","CT","KO","CT","KO","CT","KO","CT","KO","CT","KO", rep("CT",2), rep("EX",2),rep("CT",2), rep("EX",2))
+SampleType <- c(rep("WC",3),rep("SG",4),rep("WC",4),rep("SG",4),"WC", rep("SimSG",8))
+
+
+
+#Now we do our matrix itself
+mm <- model.matrix(~0+SampleType+CellType+StressType)
+
+#and now we normalize. This step also turns our counts into log2-counts per million.
+y <- voom(D0, mm, plot = T)
+```
+
+
+## Normalisation
+
+For normalisation I convert the read counts into log2CPMs. Its a good way to visualise how the reads are. 
+
+```{r}
+
+dfforboxy <- finaltable
+custom_palette <- qualitative_hcl(12, palette = "Pastel")
+custom_palette <- sample(custom_palette,12)
+
+
+orderforplots <- forall
+colouring <- data.frame(Sample=colnames(dfforboxy), Types=orderforplots)
+dfforboxy <- reshape2::melt(dfforboxy)
+colnames(dfforboxy) <- c("Sample", "Expression")
+dfforboxy <- merge(dfforboxy, colouring, by="Sample")
+prenorm <- ggplot(dfforboxy, aes(x=Sample, y=(log2(Expression+1)), fill=Types)) + geom_boxplot(alpha=0.6) + theme_bw() + ylab("Read Counts (Log2)") + xlab("Samples") + scale_fill_manual(name = "Sample Type", values = (custom_palette), labels=unique(forall), breaks =unique(forall)) +
+  theme(axis.line = element_line(colour = "black"),
+        panel.grid.minor = element_blank(),
+        panel.border = element_blank(),
+        panel.background = element_blank(),
+        axis.text.x=element_blank(),
+        axis.ticks.x=element_blank(),
+        legend.position = "None") + ggtitle("Prior to Normalization")
+
+dfforboxy <- y$E
+dfforboxy <- reshape2::melt(dfforboxy)
+dfforboxy <- dfforboxy[,-1]
+colnames(dfforboxy) <- c("Sample", "Expression")
+dfforboxy <- merge(dfforboxy, colouring, by="Sample")
+postnorm <- ggplot(dfforboxy, aes(x=Sample, y=Expression, fill=Types)) + geom_boxplot(alpha=0.6) + theme_bw() + ylab("Read Counts (Log2CPM)") + xlab("Samples") + scale_fill_manual(name = "Sample Type", values = unique(custom_palette), labels=unique(forall), breaks =unique(forall)) +
+  theme(axis.line = element_line(colour = "black"),
+        panel.grid.minor = element_blank(),
+        panel.border = element_blank(),
+        panel.background = element_blank(),
+        axis.text.x=element_blank(),
+        axis.ticks.x=element_blank(),
+        legend.position = "None") + ggtitle("After Normalization")
+
+ggarrange(prenorm, postnorm, nrow=1)
+
+```
+
+
+## PCA
+
+```{r}
+#this is done to be able to do traditional PCA
+dfforpca <- y$E
+dfforpca <- rbind(dfforpca, forall)
+row.names(dfforpca)[nrow(dfforpca)] <- "forall"
+dfforpca <- t(dfforpca)
+numcol <- c(1:(ncol(dfforpca)-1))
+dfforpca <- as.data.frame(dfforpca) #for some reason I can only change colum type if its a dataframe
+
+dfforpca[ ,numcol] <- apply(dfforpca[ , numcol], 2,            # to turn our columns into numeric
+                            function(x) as.numeric(as.character(x)))
+
+#sapply(dfforpca, class) #to check class
+
+# Or specify the factor levels in the order you want
+dfforpca$forall <- factor(dfforpca$forall, levels = unique(forall))
+
+pca_res <- prcomp(dfforpca[,numcol], scale=FALSE) #prepare the pca
+
+#to make everything pretty
+p <- autoplot(pca_res, data = dfforpca, x=1, y=2, colour = "forall", size=8, alpha=0.7)
+p <- p + theme_bw() + scale_colour_manual((name = "Samples"), values = custom_palette, labels=unique(forall))
+p <- p + ggtitle("PCA Plot") + theme(plot.title = element_text(hjust = 0.5)) +
+  theme(axis.line = element_line(colour = "black"),
+        panel.grid.minor = element_blank(),
+        panel.border = element_blank(),
+        panel.background = element_blank())
+p
+
+
+#in case you want to see them yourself
+contribs1 <- pca_res$rotation[,1]
+contribs2 <- pca_res$rotation[,2]
+
+#These are the biggest contributors to the PCA1 (right side)
+(pos1genes <- sort(contribs1, decreasing=T)[1:10])
+#These are the biggest contributors to the PCA1 (left side)
+(neg1genes <- sort(contribs1, decreasing=F)[1:10])
+
+#These are the biggest contributors to the PCA2 (up side)
+(pos2genes <- sort(contribs2, decreasing=T)[1:10])
+#These are the biggest contributors to the PCA2 (down side)
+(neg2genes <- sort(contribs2, decreasing=F)[1:10])
+```
+
+```{r}
+
+fitted <- lmFit(y, mm)
+
+head(coef(fitted))
+
+#next we measure contrasts between groups (log-fold change is obtained from these fitted linear models)
+contr <- makeContrasts(SampleTypeSG - SampleTypeSimSG, levels = colnames(coef(fitted)))
+
+#next we estimate the contrast for each gene
+tmp <- contrasts.fit(fitted, contr)
+
+
+#use empirical bayes smoothing of standard erros (shrinks extreme standard erros)
+tmp <- eBayes(tmp)
+
+top.table <- topTable(tmp, sort.by = "logFC", n = Inf)
+
+DEGenes <- top.table
+
+ndegs <- 20
+```
+
+
+## Volcano Plot
+
+```{r, results='hide', warning=FALSE, message=FALSE}
+
+write.table(x = DEGenes,
+            file = "~/Projects/StressGranules/SGPAPER/RealSGs/Realm6A.txt", sep="\t", col.names = TRUE, row.names = TRUE, quote=FALSE)
+
+
+upmarkers <- as.data.frame(DEGenes[DEGenes$logFC>3 & DEGenes$adj.P.Val<0.05,] )
+downmarkers <- as.data.frame(DEGenes[DEGenes$logFC< -3 & DEGenes$adj.P.Val<0.05,] )
+
+ggplot(data=DEGenes,
+                 aes(x=logFC,
+                     y=  B)) +
+  geom_point(color="#CCCCCC")+
+  theme_bw() + ylab("B-Statistic")+xlab("Log Fold-Change")+
+  theme(axis.line = element_line(colour = "black"),
+        panel.grid.minor = element_blank(),
+        panel.border = element_blank(),
+        panel.background = element_blank()) +
+  ggtitle("SG vs Sim SG")+
+  theme(plot.title = element_text(hjust = 0.5), plot.subtitle = element_text(hjust = 0.5)) + 
+  geom_point(data=upmarkers, aes(x=logFC, y=  B), color="#A10702",size=4)+
+  geom_point(data=downmarkers, aes(x=logFC, y=  B), color="#03256C",size=4)+
+  geom_label_repel(upmarkers[1:ndegs,] , mapping=aes(label=row.names(upmarkers)[1:ndegs]),size=4,point.padding=-0.5, color="#A10702",max.overlaps = 20, fontface="italic")+
+  geom_label_repel(downmarkers[1:ndegs,] , mapping=aes(label=row.names(downmarkers)[1:ndegs]),size=4,point.padding=-0.5, color="#03256C",max.overlaps = 20, fontface="italic")+
+  theme(text=element_text(size=15,  family="Arial MS"))
+
+
+```
+
+
+## Volcano Plot with Gene Length
+
+```{r, message=FALSE, warning=FALSE, results='hide'}
+
+DEGenes$Gene <- row.names(DEGenes)
+colnames(genelength) <- c("Length","Gene")
+DEGenes <- merge(DEGenes, genelength, by="Gene")
+
+ggplot(data=DEGenes,
+                 aes(x=logFC,
+                     y=  B)) +
+  geom_point(aes(color=log10(Length)))+
+  theme_bw() +
+  theme(axis.line = element_line(colour = "black"),
+        panel.grid.minor = element_blank(),
+        panel.border = element_blank(),
+        panel.background = element_blank()) +
+  ggtitle("SG vs simSG")+ xlab(expression(Log[2] ~ Fold ~ Change)) + ylab("B-Statistic") +
+  theme(plot.title = element_text(hjust = 0.5))  +
+  scale_colour_gradient(low = "black", high = "red")+ theme(text=element_text(family = "Quicksand"))
+
+
+smooth.SG <- lm(t~log10(Length), DEGenes)
+liner.SG <- rstandard(smooth.SG)
+DEGenes <-cbind(DEGenes, liner.SG)
+colnames(DEGenes)[9] <- "Residuals"
+row.names(DEGenes) <- DEGenes$Gene
+linemarkers <- as.data.frame(DEGenes[abs(DEGenes$Residuals)>4,])
+
+# Calculate the Spearman correlation coefficient
+spearman_corr <- cor(DEGenes$t, log10(DEGenes$Length), method = "spearman")
+
+
+
+ggplot(DEGenes, aes(y=t, x=log10(Length))) + geom_point(color="#CCCCCC", alpha=1) +   theme_bw()+ geom_density_2d()+
+ ylab("SG vs simSG") + xlab(expression(RNA ~ Length ~ Log[10] ~ Base ~ Pairs)) +
+  theme(axis.line = element_line(colour = "black"),
+        panel.grid.minor = element_blank(),
+        panel.border = element_blank(),
+        panel.background = element_blank()) + 
+  theme(plot.title = element_text(hjust = 0.5))  +
+  geom_abline(slope=smooth.SG$coefficients[2], intercept = smooth.SG$coefficients[1], linetype = "dashed")+ stat_cor(method = "spearman", cor.coef.name = "rho",size=7)
+```
+
+Corrected SGs show a minor lenght bias
+
+## GSEA Enrichment
+
+Now that we have our genes of interest, it would also be interesting to see what are the **altered pathways** between enriched and depleted RNAs from the stress granules. Therefore, lets perform a *Gene Set Enrichment Analysis*
+
+```{r, fig.height=20, fig.width=30, results=FALSE}
+#for all genes
+DEGenes <- DEGenes[order(DEGenes[,4]),]
+gseatool <- DEGenes[,4]
+gseatool <- as.data.frame(gseatool)
+colnames(gseatool)[1] <- "t" 
+gseatool[,2] <- DEGenes$Gene
+colnames(gseatool)[2] <- "Symbol" 
+gseatool <- gseatool[,c(2,1)]
+
+#for only the genes without the contamination
+
+
+vectorranks <- gseatool$t
+names(vectorranks) <- gseatool$Symbol
+
+
+#to load our pathways
+hallmarks.gs <- msigdbr(species = "Homo sapiens", collection =  "H")
+
+hallmarks.gsets <- hallmarks.gs %>% split(x = .$gene_symbol, f = .$gs_name)
+
+for (set in names(hallmarks.gsets)){
+  hallmarks.gsets[[set]] <- toupper(hallmarks.gsets[[set]])
+}
+
+hallmarks.res <- fgsea(pathways = hallmarks.gsets, 
+                       stats = vectorranks)
+
+hallmarks.res.tidy <- hallmarks.res %>%
+  as_tibble() %>%
+  arrange(desc(NES))
+
+hallmarks.res.tidy %>% 
+  dplyr::select(-leadingEdge, -ES) %>% 
+  arrange(padj)
+
+hallmark.sg.t <- hallmarks.res.tidy[,c(1,3,6)]
+hallmark.sg.t <- as.data.frame(hallmark.sg.t)
+
+#this small part is generic
+thresh <- 0.05
+
+#this one is no longer generic
+data_to_plot <- hallmarks.res.tidy %>% filter(padj < thresh)
+
+statvec <- c()
+for (i in 1:nrow(data_to_plot)){
+  if (data_to_plot[i,6] > 0){
+    status <- "Upregulated"
+  }
+ else {
+   status <- "Downregulated"
+ }   
+statvec <- c(statvec, status)
+}
+
+data_to_plot$Status <- statvec
+
+##-----HALMARK-----
+ggplot(data_to_plot, aes(reorder(pathway, NES), NES)) +
+  geom_col(aes(fill= Status), alpha=0.75) + scale_fill_manual(values = c("#53A2BE","#BA3B46"), name = "Regulation Status", labels = c("Downregulated", "Upregulated"), breaks = c("Downregulated", "Upregulated")) +
+  coord_flip() +
+  labs(x="Pathway", y="Normalized Enrichment Score (NES)",
+       title= "Hallmark Pathways",
+       caption = paste0("p-value < ", thresh)) + theme(plot.title = element_text(hjust = 1)) +
+  theme_bw() + theme(text=element_text(family = "Quicksand")) + theme(legend.position = "none")
+```
+
+
+# Session Info
+
+```{r}
+sessionInfo()
+```

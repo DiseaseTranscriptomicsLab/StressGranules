@@ -124,7 +124,7 @@ custom_palette <- qualitative_hcl(4, palette = "Pastel")
 custom_palette <- sample(custom_palette, 4)
 
 # Use SampleColouring from metadata
-SampleColouring <- sampnamer <- c(rep("BUWT",4), rep("BUNT",4), rep("SGWT",4), rep("SGNT", 4))
+SampleColouring <- c(rep("BUWT",4), rep("BUNT",4), rep("SGWT",4), rep("SGNT", 4))
 
 # Build cumulative counts
 final <- sapply(1:ncol(read.counts), function(i) {
@@ -314,12 +314,12 @@ For normalisation I convert the read counts into log2CPMs. Its a good way to vis
 
 dfforboxy <- finaltable
 
-orderforplots <- sampnamer
+orderforplots <- SampleColouring
 colouring <- data.frame(Sample=colnames(dfforboxy), Types=orderforplots)
 dfforboxy <- reshape2::melt(dfforboxy)
 colnames(dfforboxy) <- c("Sample", "Expression")
 dfforboxy <- merge(dfforboxy, colouring, by="Sample")
-prenorm <- ggplot(dfforboxy, aes(x=Sample, y=(log2(Expression+1)), fill=Types)) + geom_boxplot(alpha=0.6) + theme_bw() + ylab("Read Counts (Log2)") + xlab("Samples") + scale_fill_manual(name = "Sample Type", values = c("#43F3D5", "#769fca", "#e88184", "#de425b"), labels=unique(sampnamer), breaks =unique(sampnamer)) +
+prenorm <- ggplot(dfforboxy, aes(x=Sample, y=(log2(Expression+1)), fill=Types)) + geom_boxplot(alpha=0.6) + theme_bw() + ylab("Read Counts (Log2)") + xlab("Samples") + scale_fill_manual(name = "Sample Type", values = c("#43F3D5", "#769fca", "#e88184", "#de425b"), labels=unique(SampleColouring), breaks =unique(SampleColouring)) +
   theme(axis.line = element_line(colour = "black"),
         panel.grid.minor = element_blank(),
         panel.border = element_blank(),
@@ -333,7 +333,7 @@ dfforboxy <- reshape2::melt(dfforboxy)
 dfforboxy <- dfforboxy[,-1]
 colnames(dfforboxy) <- c("Sample", "Expression")
 dfforboxy <- merge(dfforboxy, colouring, by="Sample")
-postnorm <- ggplot(dfforboxy, aes(x=Sample, y=Expression, fill=Types)) + geom_boxplot(alpha=0.6) + theme_bw() + ylab("Read Counts (Log2CPM)") + xlab("Samples") + scale_fill_manual(name = "Sample Type", values = c("#43F3D5", "#769fca", "#e88184", "#de425b"), labels=unique(sampnamer), breaks =unique(sampnamer)) +
+postnorm <- ggplot(dfforboxy, aes(x=Sample, y=Expression, fill=Types)) + geom_boxplot(alpha=0.6) + theme_bw() + ylab("Read Counts (Log2CPM)") + xlab("Samples") + scale_fill_manual(name = "Sample Type", values = c("#43F3D5", "#769fca", "#e88184", "#de425b"), labels=unique(SampleColouring), breaks =unique(SampleColouring)) +
   theme(axis.line = element_line(colour = "black"),
         panel.grid.minor = element_blank(),
         panel.border = element_blank(),
@@ -803,7 +803,7 @@ WT cells have a "shorter overall transcriptome". That is, they express more of s
 ```{r}
 
 #Now we do our matrix itself
-mm <- model.matrix(~0+sampnamer)
+mm <- model.matrix(~0+SampleColouring)
 
 #and now we normalize. This step also turns our counts into log2-counts per million.
 y <- voom(D0, mm, plot = T)
@@ -811,7 +811,7 @@ fitted <- lmFit(y, mm)
 head(coef(fitted))
 
 #next we measure contrasts between groups (log-fold change is obtained from these fitted linear models)
-contr<- makeContrasts(sampnamerSGWT  - sampnamerBUWT, levels = colnames(coef(fitted)))
+contr<- makeContrasts(SampleColouringSGWT  - SampleColouringBUWT, levels = colnames(coef(fitted)))
 
 #next we estimate the contrast for each gene
 tmp <- contrasts.fit(fitted, contr)
@@ -1089,7 +1089,7 @@ ggplot(hallmark.scatter_ak, aes(x=sg, y=size)) + geom_point(color="black", alpha
 ```{r}
 
 #Now we do our matrix itself
-mm <- model.matrix(~0+sampnamer)
+mm <- model.matrix(~0+SampleColouring)
 
 #and now we normalize. This step also turns our counts into log2-counts per million.
 y <- voom(D0, mm, plot = T)
@@ -1097,7 +1097,7 @@ fitted <- lmFit(y, mm)
 head(coef(fitted))
 
 #next we measure contrasts between groups (log-fold change is obtained from these fitted linear models)
-contr<- makeContrasts(sampnamerSGNT  - sampnamerBUNT, levels = colnames(coef(fitted)))
+contr<- makeContrasts(SampleColouringSGNT  - SampleColouringBUNT, levels = colnames(coef(fitted)))
 
 #next we estimate the contrast for each gene
 tmp <- contrasts.fit(fitted, contr)
@@ -1438,7 +1438,7 @@ Just to confirm, I will directly compare WC with WC samples and SG vs SG samples
 ```{r}
 
 #Now we do our matrix itself
-mm <- model.matrix(~0+sampnamer)
+mm <- model.matrix(~0+SampleColouring)
 
 #and now we normalize. This step also turns our counts into log2-counts per million.
 y <- voom(D0, mm, plot = T)
@@ -1446,7 +1446,7 @@ fitted <- lmFit(y, mm)
 head(coef(fitted))
 
 #next we measure contrasts between groups (log-fold change is obtained from these fitted linear models)
-contr<- makeContrasts(sampnamerBUNT  - sampnamerBUWT, levels = colnames(coef(fitted)))
+contr<- makeContrasts(SampleColouringBUNT  - SampleColouringBUWT, levels = colnames(coef(fitted)))
 
 #next we estimate the contrast for each gene
 tmp <- contrasts.fit(fitted, contr)
@@ -1535,7 +1535,7 @@ So, KO samples are "longer" than their wt counterparts.
 ```{r}
 
 #Now we do our matrix itself
-mm <- model.matrix(~0+sampnamer)
+mm <- model.matrix(~0+SampleColouring)
 
 #and now we normalize. This step also turns our counts into log2-counts per million.
 y <- voom(D0, mm, plot = T)
@@ -1543,7 +1543,7 @@ fitted <- lmFit(y, mm)
 head(coef(fitted))
 
 #next we measure contrasts between groups (log-fold change is obtained from these fitted linear models)
-contr<- makeContrasts(sampnamerSGNT  - sampnamerSGWT, levels = colnames(coef(fitted)))
+contr<- makeContrasts(SampleColouringSGNT  - SampleColouringSGWT, levels = colnames(coef(fitted)))
 
 #next we estimate the contrast for each gene
 tmp <- contrasts.fit(fitted, contr)
@@ -1941,6 +1941,7 @@ DEGenes <- top.table
 
 ndegs <- 20
 ```
+
 # WT Samples
 
 ## Volcano Plots
@@ -2195,6 +2196,7 @@ ggplot(resvres, aes(y=Residuals.y, x=(Residuals.x))) +
   theme(text=element_text(size=15,  family="Arial MS")) + theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank()) +
   geom_point(data=upmarkers, aes(x=Residuals.x, y=  Residuals.y), color="#43F3D5",fill="#43F3D5",alpha=0.3, size=5, shape=21) 
 ```
+
 It does seems plausible that the differences in enrichment can be caused not by biological properties of ac4C, but instead simply because of its added weight. In teal, we can see that RNAs with more residues do sediment more.
 
 # "Real" SG
