@@ -476,9 +476,9 @@ DEGenes_SGY.SGX <- top_SGY.SGX
 ## Volcano Plot 
 
 ```{r, results='hide', warning=FALSE, message=FALSE}
- #  write.table(x = DEGenes,
- #             file = "~/Projects/StressGranules/SGPAPER/SGvsWC/SexStudy.txt", sep="\t", col.names = TRUE, row.names = TRUE, quote=FALSE)
- # # 
+  write.table(x = DEGenes_GFP.vs.SGX,
+             file = "~/Projects/StressGranules/SGPAPER/SGvsWC/Shen_X.txt", sep="\t", col.names = TRUE, row.names = TRUE, quote=FALSE)
+ #
 
 
 ndegs <- 10
@@ -672,9 +672,9 @@ gsea_plot_hall+
 ## Volcano Plot 
 
 ```{r, results='hide', warning=FALSE, message=FALSE}
- #  write.table(x = DEGenes,
- #             file = "~/Projects/StressGranules/SGPAPER/SGvsWC/SexStudy.txt", sep="\t", col.names = TRUE, row.names = TRUE, quote=FALSE)
- # # 
+  write.table(x = DEGenes_GFP.vs.SGY,
+             file = "~/Projects/StressGranules/SGPAPER/SGvsWC/Shen_Y.txt", sep="\t", col.names = TRUE, row.names = TRUE, quote=FALSE)
+ #
 
 
 ndegs <- 10
@@ -868,8 +868,6 @@ gsea_plot_hall+
 ## Volcano Plot 
 
 ```{r, results='hide', warning=FALSE, message=FALSE}
- #  write.table(x = DEGenes,
- #             file = "~/Projects/StressGranules/SGPAPER/SGvsWC/SexStudy.txt", sep="\t", col.names = TRUE, row.names = TRUE, quote=FALSE)
 
 ndegs <- 10
 upmarkers <- as.data.frame(DEGenes_SGX.CTX[DEGenes_SGX.CTX$logFC>2 & DEGenes_SGX.CTX$adj.P.Val<0.05,] )
@@ -1064,8 +1062,7 @@ gsea_plot_hall+
 ## Volcano Plot 
 
 ```{r, results='hide', warning=FALSE, message=FALSE}
- #  write.table(x = DEGenes,
- #             file = "~/Projects/StressGranules/SGPAPER/SGvsWC/SexStudy.txt", sep="\t", col.names = TRUE, row.names = TRUE, quote=FALSE)
+
 
 ndegs <- 10
 upmarkers <- as.data.frame(DEGenes_SGY.CTY[DEGenes_SGY.CTY$logFC>2 & DEGenes_SGY.CTY$adj.P.Val<0.05,] )
@@ -1258,8 +1255,6 @@ gsea_plot_hall+
 ## Volcano Plot 
 
 ```{r, results='hide', warning=FALSE, message=FALSE}
- #  write.table(x = DEGenes,
- #             file = "~/Projects/StressGranules/SGPAPER/SGvsWC/SexStudy.txt", sep="\t", col.names = TRUE, row.names = TRUE, quote=FALSE)
 
 ndegs <- 10
 upmarkers <- as.data.frame(DEGenes_SGY.SGX[DEGenes_SGY.SGX$logFC>1 & DEGenes_SGY.SGX$adj.P.Val<0.05,] )
@@ -1379,8 +1374,7 @@ DEGenes <- top
 ## Volcano Plot 
 
 ```{r, results='hide', warning=FALSE, message=FALSE}
- #  write.table(x = DEGenes,
- #             file = "~/Projects/StressGranules/SGPAPER/SGvsWC/SexStudy.txt", sep="\t", col.names = TRUE, row.names = TRUE, quote=FALSE)
+
 
 ndegs <- 10
 upmarkers <- as.data.frame(DEGenes[DEGenes$logFC>1 & DEGenes$adj.P.Val<0.05,] )
@@ -1496,8 +1490,6 @@ DEGenes <- top
 ## Volcano Plot 
 
 ```{r, results='hide', warning=FALSE, message=FALSE}
- #  write.table(x = DEGenes,
- #             file = "~/Projects/StressGranules/SGPAPER/SGvsWC/SexStudy.txt", sep="\t", col.names = TRUE, row.names = TRUE, quote=FALSE)
 
 ndegs <- 10
 upmarkers <- as.data.frame(DEGenes[DEGenes$logFC>10 & DEGenes$adj.P.Val<0.05,] )
@@ -1730,8 +1722,7 @@ DEGenes <- top
 ## Volcano Plot 
 
 ```{r, results='hide', warning=FALSE, message=FALSE}
- #  write.table(x = DEGenes,
- #             file = "~/Projects/StressGranules/SGPAPER/SGvsWC/SexStudy.txt", sep="\t", col.names = TRUE, row.names = TRUE, quote=FALSE)
+
 
 ndegs <- 10
 upmarkers <- as.data.frame(DEGenes[DEGenes$logFC>8 & DEGenes$adj.P.Val<0.05,] )

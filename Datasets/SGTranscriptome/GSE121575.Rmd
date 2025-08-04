@@ -407,6 +407,8 @@ T20vsT20 <- makeContrasts(foralleIF4A_T20_Pulldown - foralleIF4A_T20_Input  , le
 
 HipvsNai <- makeContrasts(foralleIF4A_Hippuristanol_Pulldown - foralleIF4A_Naive_Pulldown , levels = colnames(coef(fitted)))
 
+HipvsHip <- makeContrasts(foralleIF4A_Hippuristanol_Pulldown - foralleIF4A_Hippuristanol_Input , levels = colnames(coef(fitted)))
+
 #Correction for multiple testing
 #First, lets take care of the general ones
 tmp_T20vsT0 <- contrasts.fit(fitted, T20vsT0)
@@ -414,6 +416,7 @@ tmp_T20vsGFP <- contrasts.fit(fitted, T20vsGFP)
 tmp_T20vsDMSO <- contrasts.fit(fitted, T20vsDMSO) 
 tmp_T20vsT20 <- contrasts.fit(fitted, T20vsT20) 
 tmp_HipvsNai <- contrasts.fit(fitted, HipvsNai) 
+tmp_HipvsHip <- contrasts.fit(fitted, HipvsHip) 
 
 #Lets Correct for multiple testing
 #First, lets take care of the general ones
@@ -422,6 +425,7 @@ tmp_T20vsGFP <- eBayes(tmp_T20vsGFP)
 tmp_T20vsDMSO <- eBayes(tmp_T20vsDMSO)
 tmp_T20vsT20 <- eBayes(tmp_T20vsT20)
 tmp_HipvsNai <- eBayes(tmp_HipvsNai)
+tmp_HipvsHip <- eBayes(tmp_HipvsHip)
 tmp_complex <- eBayes(fitted_complex)
 
 ```
@@ -436,6 +440,7 @@ top_T20vsGFP <- topTable(tmp_T20vsGFP, sort.by = "logFC", n=Inf)
 top_T20vsDMSO <- topTable(tmp_T20vsDMSO, sort.by = "logFC", n=Inf)
 top_T20vsT20 <- topTable(tmp_T20vsT20, sort.by = "logFC", n=Inf)
 top_HipvsNai <- topTable(tmp_HipvsNai, sort.by = "logFC", n=Inf)
+top_HipvsHip <- topTable(tmp_HipvsHip, sort.by = "logFC", n=Inf)
 top_complex <- topTable(tmp_complex,16, sort.by = "logFC", n=Inf)
 
 #DEGenes
@@ -444,6 +449,7 @@ DEGenes_T20vsGFP <- top_T20vsGFP
 DEGenes_T20vsDMSO <- top_T20vsDMSO
 DEGenes_T20vsT20 <- top_T20vsT20
 DEGenes_HipvsNai <- top_HipvsNai
+DEGenes_HipvsHip <- top_HipvsHip
 DEGenes_complex <- top_complex
 
 ndegs <- 20
@@ -651,7 +657,8 @@ gsea_plot_hall+
 ## Volcano Plot 
 
 ```{r, results='hide', warning=FALSE, message=FALSE}
-
+write.table(x = DEGenes_T20vsGFP,
+            file = "~/Projects/StressGranules/SGPAPER/SGvsWC/APadron_Heatshock.txt", sep="\t", col.names = TRUE, row.names = TRUE, quote=FALSE)
 
 upmarkers <- as.data.frame(DEGenes_T20vsGFP[DEGenes_T20vsGFP$logFC>6 & DEGenes_T20vsGFP$adj.P.Val<0.05,] )
 downmarkers <- as.data.frame(DEGenes_T20vsGFP[DEGenes_T20vsGFP$logFC< -6 & DEGenes_T20vsGFP$adj.P.Val<0.05,] )
@@ -1036,7 +1043,6 @@ gsea_plot_hall+
 ## Volcano Plot 
 
 ```{r, results='hide', warning=FALSE, message=FALSE}
-
 upmarkers <- as.data.frame(DEGenes_T20vsT20[DEGenes_T20vsT20$logFC>4 & DEGenes_T20vsT20$adj.P.Val<0.05,] )
 downmarkers <- as.data.frame(DEGenes_T20vsT20[DEGenes_T20vsT20$logFC< -6 & DEGenes_T20vsT20$adj.P.Val<0.05,] )
 
@@ -1230,6 +1236,8 @@ NO SIGNIFICANT PATHWAYS!
 ## Volcano Plot 
 
 ```{r, results='hide', warning=FALSE, message=FALSE}
+write.table(x = DEGenes_HipvsNai,
+            file = "~/Projects/StressGranules/SGPAPER/SGvsWC/APadron_Hippuristanol.txt", sep="\t", col.names = TRUE, row.names = TRUE, quote=FALSE)
 
 upmarkers <- as.data.frame(DEGenes_HipvsNai[DEGenes_HipvsNai$logFC>3 & DEGenes_HipvsNai$adj.P.Val<0.05,] )
 downmarkers <- as.data.frame(DEGenes_HipvsNai[DEGenes_HipvsNai$logFC< -5 & DEGenes_HipvsNai$adj.P.Val<0.05,] )
@@ -1418,14 +1426,209 @@ gsea_plot_hall+
   theme(text=element_text(size=25,  family="Arial MS"))
 ```
 
-# Isolated SG Signal
+# Hippuristanol vs Hippuristanol
 
 ## Volcano Plot 
 
 ```{r, results='hide', warning=FALSE, message=FALSE}
 
-upmarkers <- as.data.frame(DEGenes_complex[DEGenes_complex$logFC>5 & DEGenes_complex$adj.P.Val<0.05,] )
-downmarkers <- as.data.frame(DEGenes_complex[DEGenes_complex$logFC< -5 & DEGenes_complex$adj.P.Val<0.05,] )
+upmarkers <- as.data.frame(DEGenes_HipvsHip[DEGenes_HipvsHip$logFC>3 & DEGenes_HipvsHip$adj.P.Val<0.05,] )
+downmarkers <- as.data.frame(DEGenes_HipvsHip[DEGenes_HipvsHip$logFC< -5 & DEGenes_HipvsHip$adj.P.Val<0.05,] )
+
+ggplot(data=DEGenes_HipvsHip,
+                 aes(x=logFC,
+                     y=  B)) +
+  geom_point(color="#CCCCCC")+
+  theme_bw() + ylab("B-Statistic")+xlab("Log Fold-Change")+
+  theme(axis.line = element_line(colour = "black"),
+        panel.grid.minor = element_blank(),
+        panel.border = element_blank(),
+        panel.background = element_blank()) +
+  ggtitle("Hippuristanol vs Hippuristanol")+
+  theme(plot.title = element_text(hjust = 0.5), plot.subtitle = element_text(hjust = 0.5)) + 
+  geom_point(data=upmarkers, aes(x=logFC, y=  B), color="#A10702",size=4)+
+  geom_point(data=downmarkers, aes(x=logFC, y=  B), color="#03256C",size=4)+
+  geom_label_repel(upmarkers[1:ndegs,] , mapping=aes(label=row.names(upmarkers)[1:ndegs]),size=4,point.padding=-0.5, color="#A10702",max.overlaps = 20, fontface="italic")+
+  geom_label_repel(downmarkers[1:ndegs,] , mapping=aes(label=row.names(downmarkers)[1:ndegs]),size=4,point.padding=-0.5, color="#03256C",max.overlaps = 20, fontface="italic")+
+  theme(text=element_text(size=15,  family="Arial MS"))
+```
+
+
+## Volcano Plot with Gene Length
+
+```{r, message=FALSE, warning=FALSE, results='hide'}
+
+DEGenes_HipvsHip$Gene <- row.names(DEGenes_HipvsHip)
+colnames(genelength) <- c("Length","Gene")
+DEGenes_HipvsHip <- merge(DEGenes_HipvsHip, genelength, by="Gene")
+
+ggplot(data=DEGenes_HipvsHip,
+                 aes(x=logFC,
+                     y=  B)) +
+  geom_point(aes(color=log10(Length)))+
+  theme_bw() +
+  theme(axis.line = element_line(colour = "black"),
+        panel.grid.minor = element_blank(),
+        panel.border = element_blank(),
+        panel.background = element_blank()) +
+  ggtitle("Hippuristanol vs Naive (Pulldown)")+ xlab(expression(Log[2] ~ Fold ~ Change)) + ylab("B-Statistic") +
+  theme(plot.title = element_text(hjust = 0.5))  +
+  scale_colour_gradient(low = "black", high = "red")+ theme(text=element_text(family = "Quicksand"))
+
+
+smooth.SG <- lm(t~log10(Length), DEGenes_HipvsHip)
+liner.SG <- rstandard(smooth.SG)
+DEGenes_HipvsHip <-cbind(DEGenes_HipvsHip, liner.SG)
+colnames(DEGenes_HipvsHip)[9] <- "Residuals"
+row.names(DEGenes_HipvsHip) <- DEGenes_HipvsHip$Gene
+linemarkers <- as.data.frame(DEGenes_HipvsHip[abs(DEGenes_HipvsHip$Residuals)>4,])
+
+# Calculate the Spearman correlation coefficient
+spearman_corr <- cor(DEGenes_HipvsHip$t, log10(DEGenes_HipvsHip$Length), method = "spearman")
+
+
+
+ggplot(DEGenes_HipvsHip, aes(y=t, x=log10(Length))) + geom_point(color="#CCCCCC", alpha=1) +   theme_bw()+ geom_density_2d()+
+ ylab("Hippuristanol vs Naive (Pulldown)") + xlab(expression(RNA ~ Length ~ Log[10] ~ Base ~ Pairs)) +
+  theme(axis.line = element_line(colour = "black"),
+        panel.grid.minor = element_blank(),
+        panel.border = element_blank(),
+        panel.background = element_blank()) + 
+  theme(plot.title = element_text(hjust = 0.5))  +
+  geom_abline(slope=smooth.SG$coefficients[2], intercept = smooth.SG$coefficients[1], linetype = "dashed")+ stat_cor(method = "spearman", cor.coef.name = "rho",size=7)
+```
+
+Mirroring the other stress, I dont see a lenght bias.
+
+## Expression Graphs (Extra QC)
+
+As an added control, lets plot these genes in regard to their expression, and contamination.
+
+```{r, fig.height=12, fig.width=12}
+# Define color palette
+custom_palette <- qualitative_hcl(20, palette = "Pastel")
+custom_palette <- sample(custom_palette, 20)
+
+
+upmarkers <- as.data.frame(DEGenes_HipvsHip[DEGenes_HipvsHip$logFC>3 & DEGenes_HipvsHip$adj.P.Val<0.05,] )
+downmarkers <- as.data.frame(DEGenes_HipvsHip[DEGenes_HipvsHip$logFC< -5 & DEGenes_HipvsHip$adj.P.Val<0.05,] )
+
+finagenes <- rbind(upmarkers, downmarkers)
+
+dfforexpression <- dfforpca
+samplecodes <- data.frame(samples=row.names(dfforexpression), purity=c(1:nrow(dfforexpression)))
+sampletype <- data.frame(samples=row.names(dfforexpression), sampletype=forall)
+dfforexpression <- t(dfforexpression)
+genesforexp <- dfforexpression[row.names(dfforexpression)%in%row.names(finagenes),]
+genesforexp <- reshape2::melt(genesforexp)
+colnames(genesforexp) <- c("Gene", "samples", "expression")
+genesforexp <- merge(genesforexp, samplecodes, by="samples")
+genesforexp <- merge(genesforexp, sampletype, by="samples")
+genesforexp <- genesforexp[,-1]
+genesforexp[,2] <- as.numeric(genesforexp[,2])
+genesforexp[,1] <- as.character(genesforexp[,1])
+genesforexp <- genesforexp[order(genesforexp$Gene),]
+
+
+winnyplot <- ggplot(genesforexp, aes(x=purity, y=expression, fill=sampletype, colour=sampletype)) + geom_bar(position="dodge", stat="identity", alpha=0.5) + facet_wrap(.~ Gene, ncol=5)
+winnyplot <- winnyplot + scale_fill_manual(name = "Sample Type", values = custom_palette) + scale_colour_manual(name = "Sample Type", values = custom_palette) 
+winnyplot <- winnyplot + theme_bw() + xlab("Samples") + ylab("Gene Expression (Log2 CPM)") + theme(
+      strip.text.x = element_text(
+        size = 12, face="italic"
+        )) +
+ theme(
+   strip.background = element_rect(
+     color="black", fill="#FFFFFF", size=1, linetype="solid"
+     )
+   ) + theme(
+    #legend.position = c(.95, .40),
+    legend.justification = c("right", "top"),
+    legend.box.just = "right",
+    ) + theme(legend.title = element_text(size = 12)) + ggtitle("Expression of DEA genes") + theme(plot.title = element_text(hjust = 0.5, size=14, face="bold"))
+winnyplot
+```
+
+## GSEA
+
+```{r, fig.height=20, fig.width=30, results=FALSE}
+#for all genes
+DEGenes_HipvsHip <- DEGenes_HipvsHip[order(DEGenes_HipvsHip[,4]),]
+gseatool <- DEGenes_HipvsHip[,4]
+gseatool <- as.data.frame(gseatool)
+colnames(gseatool)[1] <- "t" 
+gseatool[,2] <- DEGenes_HipvsHip$Gene
+colnames(gseatool)[2] <- "Symbol" 
+gseatool <- gseatool[,c(2,1)]
+
+vectorranks <- gseatool$t
+names(vectorranks) <- gseatool$Symbol
+
+
+#to load our pathways
+hallmarks.gs <- msigdbr(species = "Homo sapiens", collection =  "H")
+
+hallmarks.gsets <- hallmarks.gs %>% split(x = .$gene_symbol, f = .$gs_name)
+
+for (set in names(hallmarks.gsets)){
+  hallmarks.gsets[[set]] <- toupper(hallmarks.gsets[[set]])
+}
+
+hallmarks.res <- fgsea(pathways = hallmarks.gsets, 
+                       stats = vectorranks)
+
+hallmarks.res.tidy <- hallmarks.res %>%
+  as_tibble() %>%
+  arrange(desc(NES))
+
+hallmarks.res.tidy %>% 
+  dplyr::select(-leadingEdge, -ES) %>% 
+  arrange(padj)
+
+hallmark.sg.t <- hallmarks.res.tidy[,c(1,6)]
+hallmark.sg.t <- as.data.frame(hallmark.sg.t)
+
+#this small part is generic
+thresh <- 0.01
+
+#this one is no longer generic
+data_to_plot <- hallmarks.res.tidy %>% filter(padj < thresh)
+
+statvec <- c()
+for (i in 1:nrow(data_to_plot)){
+  if (data_to_plot[i,6] > 0){
+    status <- "Upregulated"
+  }
+ else {
+   status <- "Downregulated"
+ }   
+statvec <- c(statvec, status)
+}
+
+data_to_plot$Status <- statvec
+
+##-----HALMARK-----
+gsea_plot_hall <- ggplot(data_to_plot, aes(reorder(pathway, NES), NES)) +
+  geom_col(aes(fill= Status), alpha=0.75) + scale_fill_manual(values = c("#53A2BE","#BA3B46"), name = "Regulation Status", labels = c("Downregulated", "Upregulated"), breaks = c("Downregulated", "Upregulated")) +
+  coord_flip() +
+  labs(x="Pathway", y="Normalised Enrichment Score (NES)",
+       title= "Hallmark Gene Sets",
+       caption = paste0("p-value < ", thresh)) + theme(plot.title = element_text(hjust = 1)) +
+  theme_bw() + theme(text=element_text(family = "Quicksand")) + theme(legend.position = "none")
+
+gsea_plot_hall+
+  theme(text=element_text(size=25,  family="Arial MS"))
+```
+
+# Isolated SG Signal
+
+## Volcano Plot 
+
+```{r, results='hide', warning=FALSE, message=FALSE}
+write.table(x = DEGenes_complex,
+            file = "~/Projects/StressGranules/SGPAPER/RealSGs/APadron.txt", sep="\t", col.names = TRUE, row.names = TRUE, quote=FALSE)
+
+upmarkers <- as.data.frame(DEGenes_complex[DEGenes_complex$logFC>1 & DEGenes_complex$adj.P.Val<0.05,] )
+downmarkers <- as.data.frame(DEGenes_complex[DEGenes_complex$logFC< -1 & DEGenes_complex$adj.P.Val<0.05,] )
 
 ggplot(data=DEGenes_complex,
                  aes(x=logFC,

@@ -827,6 +827,8 @@ ndegs=20
 ## Volcano Plot
 
 ```{r, results='hide', warning=FALSE, message=FALSE}
+write.table(x = DEGenes,
+            file = "~/Projects/StressGranules/SGPAPER/SGvsWC/Kudrin_WT.txt", sep="\t", col.names = TRUE, row.names = TRUE, quote=FALSE)
 
 upmarkers <- as.data.frame(DEGenes[DEGenes$logFC>2.5 & DEGenes$B>10,] )
 downmarkers <- as.data.frame(DEGenes[DEGenes$logFC< -2.5 & DEGenes$B>10,] )
@@ -1113,6 +1115,8 @@ ndegs=20
 ## Volcano Plot
 
 ```{r, results='hide', warning=FALSE, message=FALSE}
+write.table(x = DEGenes,
+            file = "~/Projects/StressGranules/SGPAPER/SGvsWC/Kudrin_KO.txt", sep="\t", col.names = TRUE, row.names = TRUE, quote=FALSE)
 
 upmarkers <- as.data.frame(DEGenes[DEGenes$logFC>2.5 & DEGenes$B>10,] )
 downmarkers <- as.data.frame(DEGenes[DEGenes$logFC< -2.5 & DEGenes$B>10,] )

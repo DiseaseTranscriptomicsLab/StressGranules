@@ -499,6 +499,8 @@ ndegs=20
 ### Volcano Plot
 
 ```{r}
+write.table(x = DEGenes.UV.SGvsWC,
+            file = "~/Projects/StressGranules/SGPAPER/SGvsWC/FANCI_UV.txt", sep="\t", col.names = TRUE, row.names = TRUE, quote=FALSE)
 
 upmarkers <- as.data.frame(DEGenes.UV.SGvsWC[DEGenes.UV.SGvsWC$logFC>3.5 & DEGenes.UV.SGvsWC$B>50,] )
 downmarkers <- as.data.frame(DEGenes.UV.SGvsWC[DEGenes.UV.SGvsWC$logFC< -4 & DEGenes.UV.SGvsWC$B>50,] )
@@ -764,6 +766,8 @@ There is some "contamination" by transcript lenght in the gene set enrichment.
 ### Volcano Plot
 
 ```{r}
+write.table(x = DEGenes.OS.SGvsWC,
+            file = "~/Projects/StressGranules/SGPAPER/SGvsWC/FANCI_OS.txt", sep="\t", col.names = TRUE, row.names = TRUE, quote=FALSE)
 
 upmarkers <- as.data.frame(DEGenes.OS.SGvsWC[DEGenes.OS.SGvsWC$logFC>3.5 & DEGenes.OS.SGvsWC$B>50,] )
 downmarkers <- as.data.frame(DEGenes.OS.SGvsWC[DEGenes.OS.SGvsWC$logFC< -4 & DEGenes.OS.SGvsWC$B>50,] )
@@ -1026,6 +1030,8 @@ We still see some "contamination" of transcript size in gene set enrichment.
 ### Volcano Plot
 
 ```{r}
+write.table(x = DEGenes.HS.SGvsWC,
+            file = "~/Projects/StressGranules/SGPAPER/SGvsWC/FANCI_HS.txt", sep="\t", col.names = TRUE, row.names = TRUE, quote=FALSE)
 
 upmarkers <- as.data.frame(DEGenes.HS.SGvsWC[DEGenes.HS.SGvsWC$logFC>3.5 & DEGenes.HS.SGvsWC$B>50,] )
 downmarkers <- as.data.frame(DEGenes.HS.SGvsWC[DEGenes.HS.SGvsWC$logFC< -4 & DEGenes.HS.SGvsWC$B>50,] )
@@ -1288,6 +1294,8 @@ We see a considerable "contamination" of transcript lenght in gene set enrichmen
 ### Volcano Plot
 
 ```{r}
+write.table(x = DEGenes.AS.SGvsWC,
+            file = "~/Projects/StressGranules/SGPAPER/SGvsWC/FANCI_AS.txt", sep="\t", col.names = TRUE, row.names = TRUE, quote=FALSE)
 
 upmarkers <- as.data.frame(DEGenes.AS.SGvsWC[DEGenes.AS.SGvsWC$logFC>3.5 & DEGenes.AS.SGvsWC$B>50,] )
 downmarkers <- as.data.frame(DEGenes.AS.SGvsWC[DEGenes.AS.SGvsWC$logFC< -4 & DEGenes.AS.SGvsWC$B>50,] )

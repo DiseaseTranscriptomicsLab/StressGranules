@@ -6,7 +6,7 @@
     <meta name="generator" content="pandoc" />
 
     
-        <meta name="date" content="2025-07-22" />
+        <meta name="date" content="2025-08-04" />
     
     <title>Analyses of GSE171792</title>
 
@@ -197,7 +197,7 @@
                 - <a href="mailto:alexandreafonso@gimm.pt" class="email">alexandreafonso@gimm.pt</a>&lt;
           <br>
       </p>
-         <p class="date"><span class="glyphicon glyphicon-calendar"></span> 22 July 2025</p>
+         <p class="date"><span class="glyphicon glyphicon-calendar"></span> 04 August 2025</p>
            
 
    
@@ -671,9 +671,9 @@ DEGenes_SGY.SGX &lt;- top_SGY.SGX</code></pre>
 <h1>DDX3X vs GFP</h1>
 <div id="volcano-plot" class="section level2">
 <h2>Volcano Plot</h2>
-<pre class="r"><code> #  write.table(x = DEGenes,
- #             file = &quot;~/Projects/StressGranules/SGPAPER/SGvsWC/SexStudy.txt&quot;, sep=&quot;\t&quot;, col.names = TRUE, row.names = TRUE, quote=FALSE)
- # # 
+<pre class="r"><code>  write.table(x = DEGenes_GFP.vs.SGX,
+             file = &quot;~/Projects/StressGranules/SGPAPER/SGvsWC/Shen_X.txt&quot;, sep=&quot;\t&quot;, col.names = TRUE, row.names = TRUE, quote=FALSE)
+ #
 
 
 ndegs &lt;- 10
@@ -875,9 +875,9 @@ gsea_plot_hall+
 <h1>DDX3Y vs GFP</h1>
 <div id="volcano-plot-1" class="section level2">
 <h2>Volcano Plot</h2>
-<pre class="r"><code> #  write.table(x = DEGenes,
- #             file = &quot;~/Projects/StressGranules/SGPAPER/SGvsWC/SexStudy.txt&quot;, sep=&quot;\t&quot;, col.names = TRUE, row.names = TRUE, quote=FALSE)
- # # 
+<pre class="r"><code>  write.table(x = DEGenes_GFP.vs.SGY,
+             file = &quot;~/Projects/StressGranules/SGPAPER/SGvsWC/Shen_Y.txt&quot;, sep=&quot;\t&quot;, col.names = TRUE, row.names = TRUE, quote=FALSE)
+ #
 
 
 ndegs &lt;- 10
@@ -1074,10 +1074,7 @@ gsea_plot_hall+
 <h1>DDX3X vs Ct Unstressed</h1>
 <div id="volcano-plot-2" class="section level2">
 <h2>Volcano Plot</h2>
-<pre class="r"><code> #  write.table(x = DEGenes,
- #             file = &quot;~/Projects/StressGranules/SGPAPER/SGvsWC/SexStudy.txt&quot;, sep=&quot;\t&quot;, col.names = TRUE, row.names = TRUE, quote=FALSE)
-
-ndegs &lt;- 10
+<pre class="r"><code>ndegs &lt;- 10
 upmarkers &lt;- as.data.frame(DEGenes_SGX.CTX[DEGenes_SGX.CTX$logFC&gt;2 &amp; DEGenes_SGX.CTX$adj.P.Val&lt;0.05,] )
 downmarkers &lt;- as.data.frame(DEGenes_SGX.CTX[DEGenes_SGX.CTX$logFC&lt; -2 &amp; DEGenes_SGX.CTX$adj.P.Val&lt;0.05,] )
 
@@ -1271,10 +1268,7 @@ gsea_plot_hall+
 <h1>DDX3Y vs Ct Unstressed</h1>
 <div id="volcano-plot-3" class="section level2">
 <h2>Volcano Plot</h2>
-<pre class="r"><code> #  write.table(x = DEGenes,
- #             file = &quot;~/Projects/StressGranules/SGPAPER/SGvsWC/SexStudy.txt&quot;, sep=&quot;\t&quot;, col.names = TRUE, row.names = TRUE, quote=FALSE)
-
-ndegs &lt;- 10
+<pre class="r"><code>ndegs &lt;- 10
 upmarkers &lt;- as.data.frame(DEGenes_SGY.CTY[DEGenes_SGY.CTY$logFC&gt;2 &amp; DEGenes_SGY.CTY$adj.P.Val&lt;0.05,] )
 downmarkers &lt;- as.data.frame(DEGenes_SGY.CTY[DEGenes_SGY.CTY$logFC&lt; -2 &amp; DEGenes_SGY.CTY$adj.P.Val&lt;0.05,] )
 
@@ -1468,10 +1462,7 @@ gsea_plot_hall+
 <h1>DDX3Y vs DDX3X</h1>
 <div id="volcano-plot-4" class="section level2">
 <h2>Volcano Plot</h2>
-<pre class="r"><code> #  write.table(x = DEGenes,
- #             file = &quot;~/Projects/StressGranules/SGPAPER/SGvsWC/SexStudy.txt&quot;, sep=&quot;\t&quot;, col.names = TRUE, row.names = TRUE, quote=FALSE)
-
-ndegs &lt;- 10
+<pre class="r"><code>ndegs &lt;- 10
 upmarkers &lt;- as.data.frame(DEGenes_SGY.SGX[DEGenes_SGY.SGX$logFC&gt;1 &amp; DEGenes_SGY.SGX$adj.P.Val&lt;0.05,] )
 downmarkers &lt;- as.data.frame(DEGenes_SGY.SGX[DEGenes_SGY.SGX$logFC&lt; -1 &amp; DEGenes_SGY.SGX$adj.P.Val&lt;0.05,] )
 
@@ -1578,10 +1569,7 @@ top &lt;- topTable(tmp,5,sort.by = &quot;logFC&quot;, n=Inf)
 DEGenes &lt;- top</code></pre>
 <div id="volcano-plot-5" class="section level2">
 <h2>Volcano Plot</h2>
-<pre class="r"><code> #  write.table(x = DEGenes,
- #             file = &quot;~/Projects/StressGranules/SGPAPER/SGvsWC/SexStudy.txt&quot;, sep=&quot;\t&quot;, col.names = TRUE, row.names = TRUE, quote=FALSE)
-
-ndegs &lt;- 10
+<pre class="r"><code>ndegs &lt;- 10
 upmarkers &lt;- as.data.frame(DEGenes[DEGenes$logFC&gt;1 &amp; DEGenes$adj.P.Val&lt;0.05,] )
 downmarkers &lt;- as.data.frame(DEGenes[DEGenes$logFC&lt; -1 &amp; DEGenes$adj.P.Val&lt;0.05,] )
 
@@ -1684,10 +1672,7 @@ top &lt;- topTable(tmp,5,sort.by = &quot;logFC&quot;, n=Inf)
 DEGenes &lt;- top</code></pre>
 <div id="volcano-plot-6" class="section level2">
 <h2>Volcano Plot</h2>
-<pre class="r"><code> #  write.table(x = DEGenes,
- #             file = &quot;~/Projects/StressGranules/SGPAPER/SGvsWC/SexStudy.txt&quot;, sep=&quot;\t&quot;, col.names = TRUE, row.names = TRUE, quote=FALSE)
-
-ndegs &lt;- 10
+<pre class="r"><code>ndegs &lt;- 10
 upmarkers &lt;- as.data.frame(DEGenes[DEGenes$logFC&gt;10 &amp; DEGenes$adj.P.Val&lt;0.05,] )
 downmarkers &lt;- as.data.frame(DEGenes[DEGenes$logFC&lt; -2 &amp; DEGenes$adj.P.Val&lt;0.05,] )
 
@@ -1915,10 +1900,7 @@ top &lt;- topTable(tmp,5,sort.by = &quot;logFC&quot;, n=Inf)
 DEGenes &lt;- top</code></pre>
 <div id="volcano-plot-7" class="section level2">
 <h2>Volcano Plot</h2>
-<pre class="r"><code> #  write.table(x = DEGenes,
- #             file = &quot;~/Projects/StressGranules/SGPAPER/SGvsWC/SexStudy.txt&quot;, sep=&quot;\t&quot;, col.names = TRUE, row.names = TRUE, quote=FALSE)
-
-ndegs &lt;- 10
+<pre class="r"><code>ndegs &lt;- 10
 upmarkers &lt;- as.data.frame(DEGenes[DEGenes$logFC&gt;8 &amp; DEGenes$adj.P.Val&lt;0.05,] )
 downmarkers &lt;- as.data.frame(DEGenes[DEGenes$logFC&lt; -2 &amp; DEGenes$adj.P.Val&lt;0.05,] )
 
@@ -2176,7 +2158,7 @@ gsea_plot_hall+
 ##  [58] utf8_1.2.6             locfit_1.5-9.12        httr2_1.1.2           
 ##  [61] labeling_0.4.3         tidyselect_1.2.1       rlang_1.1.6           
 ##  [64] AnnotationDbi_1.56.2   tools_4.1.2            cachem_1.1.0          
-##  [67] cli_3.6.5              generics_0.1.4         RSQLite_2.3.9         
+##  [67] cli_3.6.5              generics_0.1.4         RSQLite_2.4.2         
 ##  [70] broom_1.0.8            evaluate_1.0.4         fastmap_1.2.0         
 ##  [73] yaml_2.3.10            babelgene_22.9         knitr_1.50            
 ##  [76] bit64_4.6.0-1          KEGGREST_1.34.0        xml2_1.3.8            

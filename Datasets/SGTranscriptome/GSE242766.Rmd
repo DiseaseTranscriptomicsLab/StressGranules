@@ -485,7 +485,354 @@ contribs2 <- pca_res$rotation[,2]
 
 As we can observe on the plot, PC1 is driven by sample type, and PC2 is driven by m6A status.
 
-## Linear Models
+# Simple Linear Models
+
+```{r}
+
+mm <- model.matrix(~0+SampleColouring)
+fitted <- lmFit(y, mm)
+head(coef(fitted))
+
+
+
+WT.CT <- makeContrasts(SampleColouringWTSGCT   - SampleColouringWTWCCT     , levels = coef(fitted))
+WT.EX <- makeContrasts(SampleColouringWTSGEX    - SampleColouringWTWCEX    , levels = coef(fitted))
+ALS.CT <- makeContrasts(SampleColouringALSGCT    - SampleColouringALWCCT     , levels = coef(fitted))
+ALS.EX <- makeContrasts(SampleColouringALSGEX    - SampleColouringALWCEX     , levels = coef(fitted))
+
+# 
+tmp.WT.CT <- contrasts.fit(fitted, WT.CT)
+tmp.WT.EX <- contrasts.fit(fitted, WT.EX)
+tmp.ALS.CT <- contrasts.fit(fitted, ALS.CT)
+tmp.ALS.EX <- contrasts.fit(fitted, ALS.EX)
+# 
+# #Correction for multiple testing
+tmp.WT.CT <- eBayes(tmp.WT.CT)
+tmp.WT.EX <- eBayes(tmp.WT.EX)
+tmp.ALS.CT <- eBayes(tmp.ALS.CT)
+tmp.ALS.EX <- eBayes(tmp.ALS.EX)
+# 
+top.table.WT.CT <- topTable(tmp.WT.CT, sort.by = "logFC", n=Inf)
+top.table.WT.EX <- topTable(tmp.WT.EX, sort.by = "logFC", n=Inf)
+top.table.ALS.CT <- topTable(tmp.ALS.CT, sort.by = "logFC", n=Inf)
+top.table.ALS.EX <- topTable(tmp.ALS.EX, sort.by = "logFC", n=Inf)
+
+DEGenes.WT.CT <- top.table.WT.CT
+DEGenes.WT.EX <- top.table.WT.EX
+DEGenes.ALS.CT <- top.table.ALS.CT
+DEGenes.ALS.EX <- top.table.ALS.EX
+
+
+
+ndegs=20
+```
+
+# FUS WT SG vs WC
+
+## Volcano Plot
+
+```{r, message=FALSE, warning=FALSE, results='hide'}
+
+write.table(x = DEGenes.WT.CT,
+            file = "~/Projects/StressGranules/SGPAPER/SGvsWC/Timo_WTCT.txt", sep="\t", col.names = TRUE, row.names = TRUE, quote=FALSE)
+
+upmarkers <- as.data.frame(DEGenes.WT.CT[DEGenes.WT.CT$logFC>2.5 & DEGenes.WT.CT$B>10,] )
+downmarkers <- as.data.frame(DEGenes.WT.CT[DEGenes.WT.CT$logFC< -4 & DEGenes.WT.CT$B>10,] )
+
+ggplot(data=DEGenes.WT.CT,
+                 aes(x=logFC,
+                     y=  B)) +
+  geom_point(color="#CCCCCC")+
+  theme_bw() + ylab("B-Statistic")+xlab("Log Fold-Change")+
+  theme(axis.line = element_line(colour = "black"),
+        panel.grid.minor = element_blank(),
+        panel.border = element_blank(),
+        panel.background = element_blank()) +
+  ggtitle("SG vs WC")+
+  theme(plot.title = element_text(hjust = 0.5), plot.subtitle = element_text(hjust = 0.5)) + 
+  geom_point(data=upmarkers, aes(x=logFC, y=  B), color="#A10702",size=4)+
+  geom_point(data=downmarkers, aes(x=logFC, y=  B), color="#03256C",size=4)+
+  geom_label_repel(upmarkers[1:ndegs,] , mapping=aes(label=row.names(upmarkers)[1:ndegs]),size=4,point.padding=-0.5, color="#A10702",max.overlaps = 20, fontface="italic")+
+  geom_label_repel(downmarkers[1:ndegs,] , mapping=aes(label=row.names(downmarkers)[1:ndegs]),size=4,point.padding=-0.5, color="#03256C",max.overlaps = 20, fontface="italic")+
+  theme(text=element_text(size=15,  family="Arial MS"))
+
+```
+
+## Volcano Plot with Transcript Length
+
+```{r, message=FALSE, warning=FALSE, results='hide'}
+
+DEGenes.WT.CT$Gene <- row.names(DEGenes.WT.CT)
+colnames(genelength) <- c("Length","Gene")
+DEGenes.WT.CT <- merge(DEGenes.WT.CT, genelength, by="Gene")
+
+ggplot(data=DEGenes.WT.CT,
+                 aes(x=logFC,
+                     y=  B)) +
+  geom_point(aes(color=log10(Length)))+
+  theme_bw() +
+  theme(axis.line = element_line(colour = "black"),
+        panel.grid.minor = element_blank(),
+        panel.border = element_blank(),
+        panel.background = element_blank()) +
+  ggtitle("SG")+ xlab(expression(Log[2] ~ Fold ~ Change)) + ylab("B-Statistic") +
+  theme(plot.title = element_text(hjust = 0.5))  +
+  scale_colour_gradient(low = "black", high = "red")+ theme(text=element_text(family = "Quicksand"))
+
+
+smooth.SG <- lm(t~log10(Length), DEGenes.WT.CT)
+liner.SG <- rstandard(smooth.SG)
+DEGenes.WT.CT <-cbind(DEGenes.WT.CT, liner.SG)
+colnames(DEGenes.WT.CT)[9] <- "Residuals"
+row.names(DEGenes.WT.CT) <- DEGenes.WT.CT$Gene
+linemarkers <- as.data.frame(DEGenes.WT.CT[abs(DEGenes.WT.CT$Residuals)>4,])
+
+# Calculate the Spearman correlation coefficient
+spearman_corr <- cor(DEGenes.WT.CT$t, log10(DEGenes.WT.CT$Length), method = "pearson")
+
+
+
+ggplot(DEGenes.WT.CT, aes(y=t, x=log10(Length))) + geom_point(color="#CCCCCC", alpha=1) +   theme_bw()+ geom_density_2d()+
+ ylab("SG Enrichment (t-stat)") + xlab(expression(RNA ~ Length ~ Log[10] ~ Base ~ Pairs)) +
+  theme(axis.line = element_line(colour = "black"),
+        panel.grid.minor = element_blank(),
+        panel.border = element_blank(),
+        panel.background = element_blank()) + 
+  theme(plot.title = element_text(hjust = 0.5))  +
+  geom_abline(slope=smooth.SG$coefficients[2], intercept = smooth.SG$coefficients[1], linetype = "dashed")+ stat_cor(method = "spearman", cor.coef.name = "rho",size=7)
+
+```
+
+# FUS WT m6A KD SG vs WC
+
+## Volcano Plot
+
+```{r, message=FALSE, warning=FALSE, results='hide'}
+
+write.table(x = DEGenes.WT.EX,
+            file = "~/Projects/StressGranules/SGPAPER/SGvsWC/Timo_WTEX.txt", sep="\t", col.names = TRUE, row.names = TRUE, quote=FALSE)
+
+upmarkers <- as.data.frame(DEGenes.WT.EX[DEGenes.WT.EX$logFC>2.5 & DEGenes.WT.EX$B>10,] )
+downmarkers <- as.data.frame(DEGenes.WT.EX[DEGenes.WT.EX$logFC< -4 & DEGenes.WT.EX$B>10,] )
+
+ggplot(data=DEGenes.WT.EX,
+                 aes(x=logFC,
+                     y=  B)) +
+  geom_point(color="#CCCCCC")+
+  theme_bw() + ylab("B-Statistic")+xlab("Log Fold-Change")+
+  theme(axis.line = element_line(colour = "black"),
+        panel.grid.minor = element_blank(),
+        panel.border = element_blank(),
+        panel.background = element_blank()) +
+  ggtitle("SG vs WC")+
+  theme(plot.title = element_text(hjust = 0.5), plot.subtitle = element_text(hjust = 0.5)) + 
+  geom_point(data=upmarkers, aes(x=logFC, y=  B), color="#A10702",size=4)+
+  geom_point(data=downmarkers, aes(x=logFC, y=  B), color="#03256C",size=4)+
+  geom_label_repel(upmarkers[1:ndegs,] , mapping=aes(label=row.names(upmarkers)[1:ndegs]),size=4,point.padding=-0.5, color="#A10702",max.overlaps = 20, fontface="italic")+
+  geom_label_repel(downmarkers[1:ndegs,] , mapping=aes(label=row.names(downmarkers)[1:ndegs]),size=4,point.padding=-0.5, color="#03256C",max.overlaps = 20, fontface="italic")+
+  theme(text=element_text(size=15,  family="Arial MS"))
+
+```
+
+## Volcano Plot with Transcript Length
+
+```{r, message=FALSE, warning=FALSE, results='hide'}
+
+DEGenes.WT.EX$Gene <- row.names(DEGenes.WT.EX)
+colnames(genelength) <- c("Length","Gene")
+DEGenes.WT.EX <- merge(DEGenes.WT.EX, genelength, by="Gene")
+
+ggplot(data=DEGenes.WT.EX,
+                 aes(x=logFC,
+                     y=  B)) +
+  geom_point(aes(color=log10(Length)))+
+  theme_bw() +
+  theme(axis.line = element_line(colour = "black"),
+        panel.grid.minor = element_blank(),
+        panel.border = element_blank(),
+        panel.background = element_blank()) +
+  ggtitle("SG")+ xlab(expression(Log[2] ~ Fold ~ Change)) + ylab("B-Statistic") +
+  theme(plot.title = element_text(hjust = 0.5))  +
+  scale_colour_gradient(low = "black", high = "red")+ theme(text=element_text(family = "Quicksand"))
+
+
+smooth.SG <- lm(t~log10(Length), DEGenes.WT.EX)
+liner.SG <- rstandard(smooth.SG)
+DEGenes.WT.EX <-cbind(DEGenes.WT.EX, liner.SG)
+colnames(DEGenes.WT.EX)[9] <- "Residuals"
+row.names(DEGenes.WT.EX) <- DEGenes.WT.EX$Gene
+linemarkers <- as.data.frame(DEGenes.WT.EX[abs(DEGenes.WT.EX$Residuals)>4,])
+
+# Calculate the Spearman correlation coefficient
+spearman_corr <- cor(DEGenes.WT.EX$t, log10(DEGenes.WT.EX$Length), method = "pearson")
+
+
+
+ggplot(DEGenes.WT.EX, aes(y=t, x=log10(Length))) + geom_point(color="#CCCCCC", alpha=1) +   theme_bw()+ geom_density_2d()+
+ ylab("SG Enrichment (t-stat)") + xlab(expression(RNA ~ Length ~ Log[10] ~ Base ~ Pairs)) +
+  theme(axis.line = element_line(colour = "black"),
+        panel.grid.minor = element_blank(),
+        panel.border = element_blank(),
+        panel.background = element_blank()) + 
+  theme(plot.title = element_text(hjust = 0.5))  +
+  geom_abline(slope=smooth.SG$coefficients[2], intercept = smooth.SG$coefficients[1], linetype = "dashed")+ stat_cor(method = "spearman", cor.coef.name = "rho",size=7)
+
+```
+
+# FUS mut SG vs WC
+
+## Volcano Plot
+
+```{r, message=FALSE, warning=FALSE, results='hide'}
+
+write.table(x = DEGenes.ALS.CT,
+            file = "~/Projects/StressGranules/SGPAPER/SGvsWC/Timo_ALSCT.txt", sep="\t", col.names = TRUE, row.names = TRUE, quote=FALSE)
+
+upmarkers <- as.data.frame(DEGenes.ALS.CT[DEGenes.ALS.CT$logFC>2.5 & DEGenes.ALS.CT$B>10,] )
+downmarkers <- as.data.frame(DEGenes.ALS.CT[DEGenes.ALS.CT$logFC< -4 & DEGenes.ALS.CT$B>10,] )
+
+ggplot(data=DEGenes.ALS.CT,
+                 aes(x=logFC,
+                     y=  B)) +
+  geom_point(color="#CCCCCC")+
+  theme_bw() + ylab("B-Statistic")+xlab("Log Fold-Change")+
+  theme(axis.line = element_line(colour = "black"),
+        panel.grid.minor = element_blank(),
+        panel.border = element_blank(),
+        panel.background = element_blank()) +
+  ggtitle("SG vs WC")+
+  theme(plot.title = element_text(hjust = 0.5), plot.subtitle = element_text(hjust = 0.5)) + 
+  geom_point(data=upmarkers, aes(x=logFC, y=  B), color="#A10702",size=4)+
+  geom_point(data=downmarkers, aes(x=logFC, y=  B), color="#03256C",size=4)+
+  geom_label_repel(upmarkers[1:ndegs,] , mapping=aes(label=row.names(upmarkers)[1:ndegs]),size=4,point.padding=-0.5, color="#A10702",max.overlaps = 20, fontface="italic")+
+  geom_label_repel(downmarkers[1:ndegs,] , mapping=aes(label=row.names(downmarkers)[1:ndegs]),size=4,point.padding=-0.5, color="#03256C",max.overlaps = 20, fontface="italic")+
+  theme(text=element_text(size=15,  family="Arial MS"))
+
+```
+
+## Volcano Plot with Transcript Length
+
+```{r, message=FALSE, warning=FALSE, results='hide'}
+
+DEGenes.ALS.CT$Gene <- row.names(DEGenes.ALS.CT)
+colnames(genelength) <- c("Length","Gene")
+DEGenes.ALS.CT <- merge(DEGenes.ALS.CT, genelength, by="Gene")
+
+ggplot(data=DEGenes.ALS.CT,
+                 aes(x=logFC,
+                     y=  B)) +
+  geom_point(aes(color=log10(Length)))+
+  theme_bw() +
+  theme(axis.line = element_line(colour = "black"),
+        panel.grid.minor = element_blank(),
+        panel.border = element_blank(),
+        panel.background = element_blank()) +
+  ggtitle("SG")+ xlab(expression(Log[2] ~ Fold ~ Change)) + ylab("B-Statistic") +
+  theme(plot.title = element_text(hjust = 0.5))  +
+  scale_colour_gradient(low = "black", high = "red")+ theme(text=element_text(family = "Quicksand"))
+
+
+smooth.SG <- lm(t~log10(Length), DEGenes.ALS.CT)
+liner.SG <- rstandard(smooth.SG)
+DEGenes.ALS.CT <-cbind(DEGenes.ALS.CT, liner.SG)
+colnames(DEGenes.ALS.CT)[9] <- "Residuals"
+row.names(DEGenes.ALS.CT) <- DEGenes.ALS.CT$Gene
+linemarkers <- as.data.frame(DEGenes.ALS.CT[abs(DEGenes.ALS.CT$Residuals)>4,])
+
+# Calculate the Spearman correlation coefficient
+spearman_corr <- cor(DEGenes.ALS.CT$t, log10(DEGenes.ALS.CT$Length), method = "pearson")
+
+
+
+ggplot(DEGenes.ALS.CT, aes(y=t, x=log10(Length))) + geom_point(color="#CCCCCC", alpha=1) +   theme_bw()+ geom_density_2d()+
+ ylab("SG Enrichment (t-stat)") + xlab(expression(RNA ~ Length ~ Log[10] ~ Base ~ Pairs)) +
+  theme(axis.line = element_line(colour = "black"),
+        panel.grid.minor = element_blank(),
+        panel.border = element_blank(),
+        panel.background = element_blank()) + 
+  theme(plot.title = element_text(hjust = 0.5))  +
+  geom_abline(slope=smooth.SG$coefficients[2], intercept = smooth.SG$coefficients[1], linetype = "dashed")+ stat_cor(method = "spearman", cor.coef.name = "rho",size=7)
+
+```
+
+
+# FUS mut m6A KD SG vs WC
+
+## Volcano Plot
+
+```{r, message=FALSE, warning=FALSE, results='hide'}
+
+write.table(x = DEGenes.ALS.EX,
+            file = "~/Projects/StressGranules/SGPAPER/SGvsWC/Timo_ALSEX.txt", sep="\t", col.names = TRUE, row.names = TRUE, quote=FALSE)
+
+upmarkers <- as.data.frame(DEGenes.ALS.EX[DEGenes.ALS.EX$logFC>2.5 & DEGenes.ALS.EX$B>10,] )
+downmarkers <- as.data.frame(DEGenes.ALS.EX[DEGenes.ALS.EX$logFC< -4 & DEGenes.ALS.EX$B>10,] )
+
+ggplot(data=DEGenes.ALS.EX,
+                 aes(x=logFC,
+                     y=  B)) +
+  geom_point(color="#CCCCCC")+
+  theme_bw() + ylab("B-Statistic")+xlab("Log Fold-Change")+
+  theme(axis.line = element_line(colour = "black"),
+        panel.grid.minor = element_blank(),
+        panel.border = element_blank(),
+        panel.background = element_blank()) +
+  ggtitle("SG vs WC")+
+  theme(plot.title = element_text(hjust = 0.5), plot.subtitle = element_text(hjust = 0.5)) + 
+  geom_point(data=upmarkers, aes(x=logFC, y=  B), color="#A10702",size=4)+
+  geom_point(data=downmarkers, aes(x=logFC, y=  B), color="#03256C",size=4)+
+  geom_label_repel(upmarkers[1:ndegs,] , mapping=aes(label=row.names(upmarkers)[1:ndegs]),size=4,point.padding=-0.5, color="#A10702",max.overlaps = 20, fontface="italic")+
+  geom_label_repel(downmarkers[1:ndegs,] , mapping=aes(label=row.names(downmarkers)[1:ndegs]),size=4,point.padding=-0.5, color="#03256C",max.overlaps = 20, fontface="italic")+
+  theme(text=element_text(size=15,  family="Arial MS"))
+
+```
+
+## Volcano Plot with Transcript Length
+
+```{r, message=FALSE, warning=FALSE, results='hide'}
+
+DEGenes.ALS.EX$Gene <- row.names(DEGenes.ALS.EX)
+colnames(genelength) <- c("Length","Gene")
+DEGenes.ALS.EX <- merge(DEGenes.ALS.EX, genelength, by="Gene")
+
+ggplot(data=DEGenes.ALS.EX,
+                 aes(x=logFC,
+                     y=  B)) +
+  geom_point(aes(color=log10(Length)))+
+  theme_bw() +
+  theme(axis.line = element_line(colour = "black"),
+        panel.grid.minor = element_blank(),
+        panel.border = element_blank(),
+        panel.background = element_blank()) +
+  ggtitle("SG")+ xlab(expression(Log[2] ~ Fold ~ Change)) + ylab("B-Statistic") +
+  theme(plot.title = element_text(hjust = 0.5))  +
+  scale_colour_gradient(low = "black", high = "red")+ theme(text=element_text(family = "Quicksand"))
+
+
+smooth.SG <- lm(t~log10(Length), DEGenes.ALS.EX)
+liner.SG <- rstandard(smooth.SG)
+DEGenes.ALS.EX <-cbind(DEGenes.ALS.EX, liner.SG)
+colnames(DEGenes.ALS.EX)[9] <- "Residuals"
+row.names(DEGenes.ALS.EX) <- DEGenes.ALS.EX$Gene
+linemarkers <- as.data.frame(DEGenes.ALS.EX[abs(DEGenes.ALS.EX$Residuals)>4,])
+
+# Calculate the Spearman correlation coefficient
+spearman_corr <- cor(DEGenes.ALS.EX$t, log10(DEGenes.ALS.EX$Length), method = "pearson")
+
+
+
+ggplot(DEGenes.ALS.EX, aes(y=t, x=log10(Length))) + geom_point(color="#CCCCCC", alpha=1) +   theme_bw()+ geom_density_2d()+
+ ylab("SG Enrichment (t-stat)") + xlab(expression(RNA ~ Length ~ Log[10] ~ Base ~ Pairs)) +
+  theme(axis.line = element_line(colour = "black"),
+        panel.grid.minor = element_blank(),
+        panel.border = element_blank(),
+        panel.background = element_blank()) + 
+  theme(plot.title = element_text(hjust = 0.5))  +
+  geom_abline(slope=smooth.SG$coefficients[2], intercept = smooth.SG$coefficients[1], linetype = "dashed")+ stat_cor(method = "spearman", cor.coef.name = "rho",size=7)
+
+```
+
+# Complex Linear Models
 
 ```{r}
 

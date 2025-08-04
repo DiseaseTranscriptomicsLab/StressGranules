@@ -509,7 +509,660 @@ contribs2 <- pca_res$rotation[,2]
 ```
 As one can observe from the PCAs, our PC1 is mostly explained by whether a sample is SG or WC.
 
-## Linear Models
+# Simple Linear Models
+
+In these linear models, I simply compare samples directly.
+
+```{r}
+
+mm <- model.matrix(~0+SampleColouring)
+
+D0 <- DGEList(finaltable)
+
+#Then we calculate the normalization factors for these new generated data frames
+#Bear in mind this step calculates the normalization factors, but does not normalize itself.
+D0 <- calcNormFactors(D0)
+
+y <- voom(D0, mm, plot = T)
+
+fitted <- lmFit(y, mm)
+
+head(coef(fitted))
+
+WT.AR.PA <- makeContrasts(SampleColouringWT.SG.AR.PA  - SampleColouringWT.BU.AR , levels = colnames(coef(fitted)))
+WT.SO.PA <- makeContrasts(SampleColouringWT.SG.SO.PA  - SampleColouringWT.BU.SO , levels = colnames(coef(fitted)))
+KO.SO.PA <- makeContrasts(SampleColouringKO.SG.SO.PA  - SampleColouringKO.BU.SO , levels = colnames(coef(fitted)))
+GF.SO.G3 <- makeContrasts(SampleColouringGF.SG.SO.G3  - SampleColouringGF.BU.SO , levels = colnames(coef(fitted)))
+
+tmp_WT.AR.PA <- contrasts.fit(fitted, WT.AR.PA)
+tmp_WT.SO.PA <- contrasts.fit(fitted, WT.SO.PA)
+tmp_KO.SO.PA <- contrasts.fit(fitted, KO.SO.PA)
+tmp_GF.SO.G3 <- contrasts.fit(fitted, GF.SO.G3)
+
+tmp_WT.AR.PA <- eBayes(tmp_WT.AR.PA)
+tmp_WT.SO.PA <- eBayes(tmp_WT.SO.PA)
+tmp_KO.SO.PA <- eBayes(tmp_KO.SO.PA)
+tmp_GF.SO.G3 <- eBayes(tmp_GF.SO.G3)
+
+top_WT.AR.PA <- topTable(tmp_WT.AR.PA, sort.by = "logFC", n=Inf)
+top_WT.SO.PA <- topTable(tmp_WT.SO.PA, sort.by = "logFC", n=Inf)
+top_KO.SO.PA <- topTable(tmp_KO.SO.PA, sort.by = "logFC", n=Inf)
+top_GF.SO.G3 <- topTable(tmp_GF.SO.G3, sort.by = "logFC", n=Inf)
+
+DEGenes_WT.AR.PA <- top_WT.AR.PA
+DEGenes_WT.SO.PA <- top_WT.SO.PA
+DEGenes_KO.SO.PA <- top_KO.SO.PA
+DEGenes_GF.SO.G3 <- top_GF.SO.G3
+
+ndegs <- 20
+```
+
+# SG vs WC (WT Cells, Arsenite, PABPC1-IP)
+
+## Volcano Plot
+
+```{r}
+write.table(x = DEGenes_WT.AR.PA,
+            file = "~/Projects/StressGranules/SGPAPER/SGvsWC/TMatheny2021_WTARPA.txt", sep="\t", col.names = TRUE, row.names = TRUE, quote=FALSE)
+
+upmarkers <- as.data.frame(DEGenes_WT.AR.PA[DEGenes_WT.AR.PA$logFC>3 & DEGenes_WT.AR.PA$adj.P.Val<0.05,] )
+downmarkers <- as.data.frame(DEGenes_WT.AR.PA[DEGenes_WT.AR.PA$logFC< -3 & DEGenes_WT.AR.PA$adj.P.Val<0.05,] )
+
+ggplot(data=DEGenes_WT.AR.PA,
+                 aes(x=logFC,
+                     y=  B)) +
+  geom_point(color="#CCCCCC")+
+  theme_bw() + ylab("B-Statistic")+xlab("Log Fold-Change")+
+  theme(axis.line = element_line(colour = "black"),
+        panel.grid.minor = element_blank(),
+        panel.border = element_blank(),
+        panel.background = element_blank()) +
+  ggtitle("SG vs WC")+
+  theme(plot.title = element_text(hjust = 0.5), plot.subtitle = element_text(hjust = 0.5)) + 
+  geom_point(data=upmarkers, aes(x=logFC, y=  B), color="#A10702",size=4)+
+  geom_point(data=downmarkers, aes(x=logFC, y=  B), color="#03256C",size=4)+
+  geom_label_repel(upmarkers[1:ndegs,] , mapping=aes(label=row.names(upmarkers)[1:ndegs]),size=4,point.padding=-0.5, color="#A10702",max.overlaps = 20, fontface="italic")+
+  geom_label_repel(downmarkers[1:ndegs,] , mapping=aes(label=row.names(downmarkers)[1:ndegs]),size=4,point.padding=-0.5, color="#03256C",max.overlaps = 20, fontface="italic")+
+  theme(text=element_text(size=15,  family="Arial MS"))
+
+```
+
+## Volcano Plot with Gene Length
+
+```{r, message=FALSE, warning=FALSE, results='hide'}
+
+DEGenes_WT.AR.PA$Gene <- row.names(DEGenes_WT.AR.PA)
+colnames(genelength) <- c("Length","Gene")
+DEGenes_WT.AR.PA <- merge(DEGenes_WT.AR.PA, genelength, by="Gene")
+
+ggplot(data=DEGenes_WT.AR.PA,
+                 aes(x=logFC,
+                     y=  B)) +
+  geom_point(aes(color=log10(Length)))+
+  theme_bw() +
+  theme(axis.line = element_line(colour = "black"),
+        panel.grid.minor = element_blank(),
+        panel.border = element_blank(),
+        panel.background = element_blank()) +
+  ggtitle("SG vs WC")+ xlab(expression(Log[2] ~ Fold ~ Change)) + ylab("B-Statistic") +
+  theme(plot.title = element_text(hjust = 0.5))  +
+  scale_colour_gradient(low = "black", high = "red")+ theme(text=element_text(family = "Quicksand"))
+
+
+smooth.SG <- lm(t~log10(Length), DEGenes_WT.AR.PA)
+liner.SG <- rstandard(smooth.SG)
+DEGenes_WT.AR.PA <-cbind(DEGenes_WT.AR.PA, liner.SG)
+colnames(DEGenes_WT.AR.PA)[9] <- "Residuals"
+row.names(DEGenes_WT.AR.PA) <- DEGenes_WT.AR.PA$Gene
+linemarkers <- as.data.frame(DEGenes_WT.AR.PA[abs(DEGenes_WT.AR.PA$Residuals)>4,])
+
+# Calculate the Spearman correlation coefficient
+spearman_corr <- cor(DEGenes_WT.AR.PA$t, log10(DEGenes_WT.AR.PA$Length), method = "spearman")
+
+
+
+ggplot(DEGenes_WT.AR.PA, aes(y=t, x=log10(Length))) + geom_point(color="#CCCCCC", alpha=1) +   theme_bw()+ geom_density_2d()+
+ ylab("SG vs WC") + xlab(expression(RNA ~ Length ~ Log[10] ~ Base ~ Pairs)) +
+  theme(axis.line = element_line(colour = "black"),
+        panel.grid.minor = element_blank(),
+        panel.border = element_blank(),
+        panel.background = element_blank()) + 
+  theme(plot.title = element_text(hjust = 0.5))  +
+  geom_abline(slope=smooth.SG$coefficients[2], intercept = smooth.SG$coefficients[1], linetype = "dashed")+ stat_cor(method = "spearman", cor.coef.name = "rho",size=7)
+```
+
+A massive lenght bias is seen.
+
+## GSEA
+
+Now that we have our genes of interest, it would also be interesting to see what are the **altered gene sets** between upregulated and downregulated transcripts from the above comparison. Therefore, lets perform a *Gene Set Enrichment Analysis*
+
+
+```{r, fig.height=20, fig.width=30}
+#for all genes
+DEGenes_WT.AR.PA <- DEGenes_WT.AR.PA[order(DEGenes_WT.AR.PA[,4]),]
+gseatool <- DEGenes_WT.AR.PA[,4]
+gseatool <- as.data.frame(gseatool)
+colnames(gseatool)[1] <- "t" 
+gseatool[,2] <- DEGenes_WT.AR.PA$Gene
+colnames(gseatool)[2] <- "Symbol" 
+gseatool <- gseatool[,c(2,1)]
+
+vectorranks <- gseatool$t
+names(vectorranks) <- gseatool$Symbol
+
+
+#to load our pathways
+hallmarks.gs <- msigdbr(species = "Homo sapiens", collection =  "H")
+
+hallmarks.gsets <- hallmarks.gs %>% split(x = .$gene_symbol, f = .$gs_name)
+
+for (set in names(hallmarks.gsets)){
+  hallmarks.gsets[[set]] <- toupper(hallmarks.gsets[[set]])
+}
+
+hallmarks.res <- fgsea(pathways = hallmarks.gsets, 
+                       stats = vectorranks)
+
+hallmarks.res.tidy <- hallmarks.res %>%
+  as_tibble() %>%
+  arrange(desc(NES))
+
+hallmarks.res.tidy %>% 
+  dplyr::select(-leadingEdge, -ES) %>% 
+  arrange(padj)
+
+hallmark.sg.t <- hallmarks.res.tidy[,c(1,6)]
+hallmark.sg.t <- as.data.frame(hallmark.sg.t)
+
+#this small part is generic
+thresh <- 0.05
+
+#this one is no longer generic
+data_to_plot <- hallmarks.res.tidy %>% filter(padj < thresh)
+
+statvec <- c()
+for (i in 1:nrow(data_to_plot)){
+  if (data_to_plot[i,6] > 0){
+    status <- "Upregulated"
+  }
+ else {
+   status <- "Downregulated"
+ }   
+statvec <- c(statvec, status)
+}
+
+data_to_plot$Status <- statvec
+
+##-----HALMARK-----
+gsea_plot_hall <- ggplot(data_to_plot, aes(reorder(pathway, NES), NES)) +
+  geom_col(aes(fill= Status), alpha=0.75) + scale_fill_manual(values = c("#53A2BE","#BA3B46"), name = "Regulation Status", labels = c("Downregulated", "Upregulated"), breaks = c("Downregulated", "Upregulated")) +
+  coord_flip() +
+  labs(x="Pathway", y="Normalised Enrichment Score (NES)",
+       title= "Hallmark Gene Sets",
+       caption = paste0("p-value < ", thresh)) + theme(plot.title = element_text(hjust = 1)) +
+  theme_bw() + theme(text=element_text(family = "Quicksand")) + theme(legend.position = "none")
+
+gsea_plot_hall+
+  theme(text=element_text(size=25,  family="Arial MS"))
+```
+
+# SG vs WC (WT Cells, Sorbitol, PABPC1-IP)
+
+## Volcano Plot
+
+```{r}
+write.table(x = DEGenes_WT.SO.PA,
+            file = "~/Projects/StressGranules/SGPAPER/SGvsWC/TMatheny2021_WTSOPA.txt", sep="\t", col.names = TRUE, row.names = TRUE, quote=FALSE)
+
+upmarkers <- as.data.frame(DEGenes_WT.SO.PA[DEGenes_WT.SO.PA$logFC>3 & DEGenes_WT.SO.PA$adj.P.Val<0.05,] )
+downmarkers <- as.data.frame(DEGenes_WT.SO.PA[DEGenes_WT.SO.PA$logFC< -3 & DEGenes_WT.SO.PA$adj.P.Val<0.05,] )
+
+ggplot(data=DEGenes_WT.SO.PA,
+                 aes(x=logFC,
+                     y=  B)) +
+  geom_point(color="#CCCCCC")+
+  theme_bw() + ylab("B-Statistic")+xlab("Log Fold-Change")+
+  theme(axis.line = element_line(colour = "black"),
+        panel.grid.minor = element_blank(),
+        panel.border = element_blank(),
+        panel.background = element_blank()) +
+  ggtitle("SG vs WC")+
+  theme(plot.title = element_text(hjust = 0.5), plot.subtitle = element_text(hjust = 0.5)) + 
+  geom_point(data=upmarkers, aes(x=logFC, y=  B), color="#A10702",size=4)+
+  geom_point(data=downmarkers, aes(x=logFC, y=  B), color="#03256C",size=4)+
+  geom_label_repel(upmarkers[1:ndegs,] , mapping=aes(label=row.names(upmarkers)[1:ndegs]),size=4,point.padding=-0.5, color="#A10702",max.overlaps = 20, fontface="italic")+
+  geom_label_repel(downmarkers[1:ndegs,] , mapping=aes(label=row.names(downmarkers)[1:ndegs]),size=4,point.padding=-0.5, color="#03256C",max.overlaps = 20, fontface="italic")+
+  theme(text=element_text(size=15,  family="Arial MS"))
+
+```
+
+## Volcano Plot with Gene Length
+
+```{r, message=FALSE, warning=FALSE, results='hide'}
+
+DEGenes_WT.SO.PA$Gene <- row.names(DEGenes_WT.SO.PA)
+colnames(genelength) <- c("Length","Gene")
+DEGenes_WT.SO.PA <- merge(DEGenes_WT.SO.PA, genelength, by="Gene")
+
+ggplot(data=DEGenes_WT.SO.PA,
+                 aes(x=logFC,
+                     y=  B)) +
+  geom_point(aes(color=log10(Length)))+
+  theme_bw() +
+  theme(axis.line = element_line(colour = "black"),
+        panel.grid.minor = element_blank(),
+        panel.border = element_blank(),
+        panel.background = element_blank()) +
+  ggtitle("SG vs WC")+ xlab(expression(Log[2] ~ Fold ~ Change)) + ylab("B-Statistic") +
+  theme(plot.title = element_text(hjust = 0.5))  +
+  scale_colour_gradient(low = "black", high = "red")+ theme(text=element_text(family = "Quicksand"))
+
+
+smooth.SG <- lm(t~log10(Length), DEGenes_WT.SO.PA)
+liner.SG <- rstandard(smooth.SG)
+DEGenes_WT.SO.PA <-cbind(DEGenes_WT.SO.PA, liner.SG)
+colnames(DEGenes_WT.SO.PA)[9] <- "Residuals"
+row.names(DEGenes_WT.SO.PA) <- DEGenes_WT.SO.PA$Gene
+linemarkers <- as.data.frame(DEGenes_WT.SO.PA[abs(DEGenes_WT.SO.PA$Residuals)>4,])
+
+# Calculate the Spearman correlation coefficient
+spearman_corr <- cor(DEGenes_WT.SO.PA$t, log10(DEGenes_WT.SO.PA$Length), method = "spearman")
+
+
+
+ggplot(DEGenes_WT.SO.PA, aes(y=t, x=log10(Length))) + geom_point(color="#CCCCCC", alpha=1) +   theme_bw()+ geom_density_2d()+
+ ylab("SG vs WC") + xlab(expression(RNA ~ Length ~ Log[10] ~ Base ~ Pairs)) +
+  theme(axis.line = element_line(colour = "black"),
+        panel.grid.minor = element_blank(),
+        panel.border = element_blank(),
+        panel.background = element_blank()) + 
+  theme(plot.title = element_text(hjust = 0.5))  +
+  geom_abline(slope=smooth.SG$coefficients[2], intercept = smooth.SG$coefficients[1], linetype = "dashed")+ stat_cor(method = "spearman", cor.coef.name = "rho",size=7)
+```
+
+A massive lenght bias is seen.
+
+## GSEA
+
+Now that we have our genes of interest, it would also be interesting to see what are the **altered gene sets** between upregulated and downregulated transcripts from the above comparison. Therefore, lets perform a *Gene Set Enrichment Analysis*
+
+
+```{r, fig.height=20, fig.width=30}
+#for all genes
+DEGenes_WT.SO.PA <- DEGenes_WT.SO.PA[order(DEGenes_WT.SO.PA[,4]),]
+gseatool <- DEGenes_WT.SO.PA[,4]
+gseatool <- as.data.frame(gseatool)
+colnames(gseatool)[1] <- "t" 
+gseatool[,2] <- DEGenes_WT.SO.PA$Gene
+colnames(gseatool)[2] <- "Symbol" 
+gseatool <- gseatool[,c(2,1)]
+
+vectorranks <- gseatool$t
+names(vectorranks) <- gseatool$Symbol
+
+
+#to load our pathways
+hallmarks.gs <- msigdbr(species = "Homo sapiens", collection =  "H")
+
+hallmarks.gsets <- hallmarks.gs %>% split(x = .$gene_symbol, f = .$gs_name)
+
+for (set in names(hallmarks.gsets)){
+  hallmarks.gsets[[set]] <- toupper(hallmarks.gsets[[set]])
+}
+
+hallmarks.res <- fgsea(pathways = hallmarks.gsets, 
+                       stats = vectorranks)
+
+hallmarks.res.tidy <- hallmarks.res %>%
+  as_tibble() %>%
+  arrange(desc(NES))
+
+hallmarks.res.tidy %>% 
+  dplyr::select(-leadingEdge, -ES) %>% 
+  arrange(padj)
+
+hallmark.sg.t <- hallmarks.res.tidy[,c(1,6)]
+hallmark.sg.t <- as.data.frame(hallmark.sg.t)
+
+#this small part is generic
+thresh <- 0.05
+
+#this one is no longer generic
+data_to_plot <- hallmarks.res.tidy %>% filter(padj < thresh)
+
+statvec <- c()
+for (i in 1:nrow(data_to_plot)){
+  if (data_to_plot[i,6] > 0){
+    status <- "Upregulated"
+  }
+ else {
+   status <- "Downregulated"
+ }   
+statvec <- c(statvec, status)
+}
+
+data_to_plot$Status <- statvec
+
+##-----HALMARK-----
+gsea_plot_hall <- ggplot(data_to_plot, aes(reorder(pathway, NES), NES)) +
+  geom_col(aes(fill= Status), alpha=0.75) + scale_fill_manual(values = c("#53A2BE","#BA3B46"), name = "Regulation Status", labels = c("Downregulated", "Upregulated"), breaks = c("Downregulated", "Upregulated")) +
+  coord_flip() +
+  labs(x="Pathway", y="Normalised Enrichment Score (NES)",
+       title= "Hallmark Gene Sets",
+       caption = paste0("p-value < ", thresh)) + theme(plot.title = element_text(hjust = 1)) +
+  theme_bw() + theme(text=element_text(family = "Quicksand")) + theme(legend.position = "none")
+
+gsea_plot_hall+
+  theme(text=element_text(size=25,  family="Arial MS"))
+```
+
+
+# SG vs WC (G3BP KO Cells, Sorbitol, PABPC1-IP)
+
+## Volcano Plot
+
+```{r}
+write.table(x = DEGenes_KO.SO.PA,
+            file = "~/Projects/StressGranules/SGPAPER/SGvsWC/TMatheny2021_KOSOPA.txt", sep="\t", col.names = TRUE, row.names = TRUE, quote=FALSE)
+
+upmarkers <- as.data.frame(DEGenes_KO.SO.PA[DEGenes_KO.SO.PA$logFC>3 & DEGenes_KO.SO.PA$adj.P.Val<0.05,] )
+downmarkers <- as.data.frame(DEGenes_KO.SO.PA[DEGenes_KO.SO.PA$logFC< -3 & DEGenes_KO.SO.PA$adj.P.Val<0.05,] )
+
+ggplot(data=DEGenes_KO.SO.PA,
+                 aes(x=logFC,
+                     y=  B)) +
+  geom_point(color="#CCCCCC")+
+  theme_bw() + ylab("B-Statistic")+xlab("Log Fold-Change")+
+  theme(axis.line = element_line(colour = "black"),
+        panel.grid.minor = element_blank(),
+        panel.border = element_blank(),
+        panel.background = element_blank()) +
+  ggtitle("SG vs WC")+
+  theme(plot.title = element_text(hjust = 0.5), plot.subtitle = element_text(hjust = 0.5)) + 
+  geom_point(data=upmarkers, aes(x=logFC, y=  B), color="#A10702",size=4)+
+  geom_point(data=downmarkers, aes(x=logFC, y=  B), color="#03256C",size=4)+
+  geom_label_repel(upmarkers[1:ndegs,] , mapping=aes(label=row.names(upmarkers)[1:ndegs]),size=4,point.padding=-0.5, color="#A10702",max.overlaps = 20, fontface="italic")+
+  geom_label_repel(downmarkers[1:ndegs,] , mapping=aes(label=row.names(downmarkers)[1:ndegs]),size=4,point.padding=-0.5, color="#03256C",max.overlaps = 20, fontface="italic")+
+  theme(text=element_text(size=15,  family="Arial MS"))
+
+```
+
+## Volcano Plot with Gene Length
+
+```{r, message=FALSE, warning=FALSE, results='hide'}
+
+DEGenes_KO.SO.PA$Gene <- row.names(DEGenes_KO.SO.PA)
+colnames(genelength) <- c("Length","Gene")
+DEGenes_KO.SO.PA <- merge(DEGenes_KO.SO.PA, genelength, by="Gene")
+
+ggplot(data=DEGenes_KO.SO.PA,
+                 aes(x=logFC,
+                     y=  B)) +
+  geom_point(aes(color=log10(Length)))+
+  theme_bw() +
+  theme(axis.line = element_line(colour = "black"),
+        panel.grid.minor = element_blank(),
+        panel.border = element_blank(),
+        panel.background = element_blank()) +
+  ggtitle("SG vs WC")+ xlab(expression(Log[2] ~ Fold ~ Change)) + ylab("B-Statistic") +
+  theme(plot.title = element_text(hjust = 0.5))  +
+  scale_colour_gradient(low = "black", high = "red")+ theme(text=element_text(family = "Quicksand"))
+
+
+smooth.SG <- lm(t~log10(Length), DEGenes_KO.SO.PA)
+liner.SG <- rstandard(smooth.SG)
+DEGenes_KO.SO.PA <-cbind(DEGenes_KO.SO.PA, liner.SG)
+colnames(DEGenes_KO.SO.PA)[9] <- "Residuals"
+row.names(DEGenes_KO.SO.PA) <- DEGenes_KO.SO.PA$Gene
+linemarkers <- as.data.frame(DEGenes_KO.SO.PA[abs(DEGenes_KO.SO.PA$Residuals)>4,])
+
+# Calculate the Spearman correlation coefficient
+spearman_corr <- cor(DEGenes_KO.SO.PA$t, log10(DEGenes_KO.SO.PA$Length), method = "spearman")
+
+
+
+ggplot(DEGenes_KO.SO.PA, aes(y=t, x=log10(Length))) + geom_point(color="#CCCCCC", alpha=1) +   theme_bw()+ geom_density_2d()+
+ ylab("SG vs WC") + xlab(expression(RNA ~ Length ~ Log[10] ~ Base ~ Pairs)) +
+  theme(axis.line = element_line(colour = "black"),
+        panel.grid.minor = element_blank(),
+        panel.border = element_blank(),
+        panel.background = element_blank()) + 
+  theme(plot.title = element_text(hjust = 0.5))  +
+  geom_abline(slope=smooth.SG$coefficients[2], intercept = smooth.SG$coefficients[1], linetype = "dashed")+ stat_cor(method = "spearman", cor.coef.name = "rho",size=7)
+```
+
+A massive lenght bias is seen.
+
+## GSEA
+
+Now that we have our genes of interest, it would also be interesting to see what are the **altered gene sets** between upregulated and downregulated transcripts from the above comparison. Therefore, lets perform a *Gene Set Enrichment Analysis*
+
+
+```{r, fig.height=20, fig.width=30}
+#for all genes
+DEGenes_KO.SO.PA <- DEGenes_KO.SO.PA[order(DEGenes_KO.SO.PA[,4]),]
+gseatool <- DEGenes_KO.SO.PA[,4]
+gseatool <- as.data.frame(gseatool)
+colnames(gseatool)[1] <- "t" 
+gseatool[,2] <- DEGenes_KO.SO.PA$Gene
+colnames(gseatool)[2] <- "Symbol" 
+gseatool <- gseatool[,c(2,1)]
+
+vectorranks <- gseatool$t
+names(vectorranks) <- gseatool$Symbol
+
+
+#to load our pathways
+hallmarks.gs <- msigdbr(species = "Homo sapiens", collection =  "H")
+
+hallmarks.gsets <- hallmarks.gs %>% split(x = .$gene_symbol, f = .$gs_name)
+
+for (set in names(hallmarks.gsets)){
+  hallmarks.gsets[[set]] <- toupper(hallmarks.gsets[[set]])
+}
+
+hallmarks.res <- fgsea(pathways = hallmarks.gsets, 
+                       stats = vectorranks)
+
+hallmarks.res.tidy <- hallmarks.res %>%
+  as_tibble() %>%
+  arrange(desc(NES))
+
+hallmarks.res.tidy %>% 
+  dplyr::select(-leadingEdge, -ES) %>% 
+  arrange(padj)
+
+hallmark.sg.t <- hallmarks.res.tidy[,c(1,6)]
+hallmark.sg.t <- as.data.frame(hallmark.sg.t)
+
+#this small part is generic
+thresh <- 0.05
+
+#this one is no longer generic
+data_to_plot <- hallmarks.res.tidy %>% filter(padj < thresh)
+
+statvec <- c()
+for (i in 1:nrow(data_to_plot)){
+  if (data_to_plot[i,6] > 0){
+    status <- "Upregulated"
+  }
+ else {
+   status <- "Downregulated"
+ }   
+statvec <- c(statvec, status)
+}
+
+data_to_plot$Status <- statvec
+
+##-----HALMARK-----
+gsea_plot_hall <- ggplot(data_to_plot, aes(reorder(pathway, NES), NES)) +
+  geom_col(aes(fill= Status), alpha=0.75) + scale_fill_manual(values = c("#53A2BE","#BA3B46"), name = "Regulation Status", labels = c("Downregulated", "Upregulated"), breaks = c("Downregulated", "Upregulated")) +
+  coord_flip() +
+  labs(x="Pathway", y="Normalised Enrichment Score (NES)",
+       title= "Hallmark Gene Sets",
+       caption = paste0("p-value < ", thresh)) + theme(plot.title = element_text(hjust = 1)) +
+  theme_bw() + theme(text=element_text(family = "Quicksand")) + theme(legend.position = "none")
+
+gsea_plot_hall+
+  theme(text=element_text(size=25,  family="Arial MS"))
+```
+
+
+
+# SG vs WC (G3BP-GFP Cells, Sorbitol, GFP-IP)
+
+## Volcano Plot
+
+```{r}
+write.table(x = DEGenes_GF.SO.G3,
+            file = "~/Projects/StressGranules/SGPAPER/SGvsWC/TMatheny2021_GFSOG3.txt", sep="\t", col.names = TRUE, row.names = TRUE, quote=FALSE)
+
+upmarkers <- as.data.frame(DEGenes_GF.SO.G3[DEGenes_GF.SO.G3$logFC>3 & DEGenes_GF.SO.G3$adj.P.Val<0.05,] )
+downmarkers <- as.data.frame(DEGenes_GF.SO.G3[DEGenes_GF.SO.G3$logFC< -3 & DEGenes_GF.SO.G3$adj.P.Val<0.05,] )
+
+ggplot(data=DEGenes_GF.SO.G3,
+                 aes(x=logFC,
+                     y=  B)) +
+  geom_point(color="#CCCCCC")+
+  theme_bw() + ylab("B-Statistic")+xlab("Log Fold-Change")+
+  theme(axis.line = element_line(colour = "black"),
+        panel.grid.minor = element_blank(),
+        panel.border = element_blank(),
+        panel.background = element_blank()) +
+  ggtitle("SG vs WC")+
+  theme(plot.title = element_text(hjust = 0.5), plot.subtitle = element_text(hjust = 0.5)) + 
+  geom_point(data=upmarkers, aes(x=logFC, y=  B), color="#A10702",size=4)+
+  geom_point(data=downmarkers, aes(x=logFC, y=  B), color="#03256C",size=4)+
+  geom_label_repel(upmarkers[1:ndegs,] , mapping=aes(label=row.names(upmarkers)[1:ndegs]),size=4,point.padding=-0.5, color="#A10702",max.overlaps = 20, fontface="italic")+
+  geom_label_repel(downmarkers[1:ndegs,] , mapping=aes(label=row.names(downmarkers)[1:ndegs]),size=4,point.padding=-0.5, color="#03256C",max.overlaps = 20, fontface="italic")+
+  theme(text=element_text(size=15,  family="Arial MS"))
+
+```
+
+## Volcano Plot with Gene Length
+
+```{r, message=FALSE, warning=FALSE, results='hide'}
+
+DEGenes_GF.SO.G3$Gene <- row.names(DEGenes_GF.SO.G3)
+colnames(genelength) <- c("Length","Gene")
+DEGenes_GF.SO.G3 <- merge(DEGenes_GF.SO.G3, genelength, by="Gene")
+
+ggplot(data=DEGenes_GF.SO.G3,
+                 aes(x=logFC,
+                     y=  B)) +
+  geom_point(aes(color=log10(Length)))+
+  theme_bw() +
+  theme(axis.line = element_line(colour = "black"),
+        panel.grid.minor = element_blank(),
+        panel.border = element_blank(),
+        panel.background = element_blank()) +
+  ggtitle("SG vs WC")+ xlab(expression(Log[2] ~ Fold ~ Change)) + ylab("B-Statistic") +
+  theme(plot.title = element_text(hjust = 0.5))  +
+  scale_colour_gradient(low = "black", high = "red")+ theme(text=element_text(family = "Quicksand"))
+
+
+smooth.SG <- lm(t~log10(Length), DEGenes_GF.SO.G3)
+liner.SG <- rstandard(smooth.SG)
+DEGenes_GF.SO.G3 <-cbind(DEGenes_GF.SO.G3, liner.SG)
+colnames(DEGenes_GF.SO.G3)[9] <- "Residuals"
+row.names(DEGenes_GF.SO.G3) <- DEGenes_GF.SO.G3$Gene
+linemarkers <- as.data.frame(DEGenes_GF.SO.G3[abs(DEGenes_GF.SO.G3$Residuals)>4,])
+
+# Calculate the Spearman correlation coefficient
+spearman_corr <- cor(DEGenes_GF.SO.G3$t, log10(DEGenes_GF.SO.G3$Length), method = "spearman")
+
+
+
+ggplot(DEGenes_GF.SO.G3, aes(y=t, x=log10(Length))) + geom_point(color="#CCCCCC", alpha=1) +   theme_bw()+ geom_density_2d()+
+ ylab("SG vs WC") + xlab(expression(RNA ~ Length ~ Log[10] ~ Base ~ Pairs)) +
+  theme(axis.line = element_line(colour = "black"),
+        panel.grid.minor = element_blank(),
+        panel.border = element_blank(),
+        panel.background = element_blank()) + 
+  theme(plot.title = element_text(hjust = 0.5))  +
+  geom_abline(slope=smooth.SG$coefficients[2], intercept = smooth.SG$coefficients[1], linetype = "dashed")+ stat_cor(method = "spearman", cor.coef.name = "rho",size=7)
+```
+
+A massive lenght bias is seen.
+
+## GSEA
+
+Now that we have our genes of interest, it would also be interesting to see what are the **altered gene sets** between upregulated and downregulated transcripts from the above comparison. Therefore, lets perform a *Gene Set Enrichment Analysis*
+
+
+```{r, fig.height=20, fig.width=30}
+#for all genes
+DEGenes_GF.SO.G3 <- DEGenes_GF.SO.G3[order(DEGenes_GF.SO.G3[,4]),]
+gseatool <- DEGenes_GF.SO.G3[,4]
+gseatool <- as.data.frame(gseatool)
+colnames(gseatool)[1] <- "t" 
+gseatool[,2] <- DEGenes_GF.SO.G3$Gene
+colnames(gseatool)[2] <- "Symbol" 
+gseatool <- gseatool[,c(2,1)]
+
+vectorranks <- gseatool$t
+names(vectorranks) <- gseatool$Symbol
+
+
+#to load our pathways
+hallmarks.gs <- msigdbr(species = "Homo sapiens", collection =  "H")
+
+hallmarks.gsets <- hallmarks.gs %>% split(x = .$gene_symbol, f = .$gs_name)
+
+for (set in names(hallmarks.gsets)){
+  hallmarks.gsets[[set]] <- toupper(hallmarks.gsets[[set]])
+}
+
+hallmarks.res <- fgsea(pathways = hallmarks.gsets, 
+                       stats = vectorranks)
+
+hallmarks.res.tidy <- hallmarks.res %>%
+  as_tibble() %>%
+  arrange(desc(NES))
+
+hallmarks.res.tidy %>% 
+  dplyr::select(-leadingEdge, -ES) %>% 
+  arrange(padj)
+
+hallmark.sg.t <- hallmarks.res.tidy[,c(1,6)]
+hallmark.sg.t <- as.data.frame(hallmark.sg.t)
+
+#this small part is generic
+thresh <- 0.05
+
+#this one is no longer generic
+data_to_plot <- hallmarks.res.tidy %>% filter(padj < thresh)
+
+statvec <- c()
+for (i in 1:nrow(data_to_plot)){
+  if (data_to_plot[i,6] > 0){
+    status <- "Upregulated"
+  }
+ else {
+   status <- "Downregulated"
+ }   
+statvec <- c(statvec, status)
+}
+
+data_to_plot$Status <- statvec
+
+##-----HALMARK-----
+gsea_plot_hall <- ggplot(data_to_plot, aes(reorder(pathway, NES), NES)) +
+  geom_col(aes(fill= Status), alpha=0.75) + scale_fill_manual(values = c("#53A2BE","#BA3B46"), name = "Regulation Status", labels = c("Downregulated", "Upregulated"), breaks = c("Downregulated", "Upregulated")) +
+  coord_flip() +
+  labs(x="Pathway", y="Normalised Enrichment Score (NES)",
+       title= "Hallmark Gene Sets",
+       caption = paste0("p-value < ", thresh)) + theme(plot.title = element_text(hjust = 1)) +
+  theme_bw() + theme(text=element_text(family = "Quicksand")) + theme(legend.position = "none")
+
+gsea_plot_hall+
+  theme(text=element_text(size=25,  family="Arial MS"))
+```
+
+# Complex Linear Models
+
+In these type of linear models, I take into account the different variables, such as stress and genotype.
 
 ```{r}
 
@@ -579,6 +1232,7 @@ ggplot(data=DEGenes_SG.vs.WC,
   theme(text=element_text(size=15,  family="Arial MS"))
 
 ```
+
 ## Volcano Plot with Gene Length
 
 ```{r, message=FALSE, warning=FALSE, results='hide'}
@@ -596,7 +1250,7 @@ ggplot(data=DEGenes_SG.vs.WC,
         panel.grid.minor = element_blank(),
         panel.border = element_blank(),
         panel.background = element_blank()) +
-  ggtitle("SG vs SG")+ xlab(expression(Log[2] ~ Fold ~ Change)) + ylab("B-Statistic") +
+  ggtitle("SG vs WC")+ xlab(expression(Log[2] ~ Fold ~ Change)) + ylab("B-Statistic") +
   theme(plot.title = element_text(hjust = 0.5))  +
   scale_colour_gradient(low = "black", high = "red")+ theme(text=element_text(family = "Quicksand"))
 
@@ -614,7 +1268,7 @@ spearman_corr <- cor(DEGenes_SG.vs.WC$t, log10(DEGenes_SG.vs.WC$Length), method 
 
 
 ggplot(DEGenes_SG.vs.WC, aes(y=t, x=log10(Length))) + geom_point(color="#CCCCCC", alpha=1) +   theme_bw()+ geom_density_2d()+
- ylab("SG vs SG") + xlab(expression(RNA ~ Length ~ Log[10] ~ Base ~ Pairs)) +
+ ylab("SG vs WC") + xlab(expression(RNA ~ Length ~ Log[10] ~ Base ~ Pairs)) +
   theme(axis.line = element_line(colour = "black"),
         panel.grid.minor = element_blank(),
         panel.border = element_blank(),
@@ -723,6 +1377,7 @@ ggplot(data=DEGenes_Arse,
   geom_label_repel(downmarkers[1:ndegs,] , mapping=aes(label=row.names(downmarkers)[1:ndegs]),size=4,point.padding=-0.5, color="#03256C",max.overlaps = 20, fontface="italic")+
   theme(text=element_text(size=15,  family="Arial MS"))
 ```
+
 ## Volcano Plot with Gene Length
 
 ```{r, message=FALSE, warning=FALSE, results='hide'}
@@ -867,6 +1522,7 @@ ggplot(data=DEGenes_Sorb,
   geom_label_repel(downmarkers[1:ndegs,] , mapping=aes(label=row.names(downmarkers)[1:ndegs]),size=4,point.padding=-0.5, color="#03256C",max.overlaps = 20, fontface="italic")+
   theme(text=element_text(size=15,  family="Arial MS"))
 ```
+
 ## Volcano Plot with Gene Length
 
 ```{r, message=FALSE, warning=FALSE, results='hide'}
@@ -1011,6 +1667,7 @@ ggplot(data=DEGenes_KO,
   geom_label_repel(downmarkers[1:ndegs,] , mapping=aes(label=row.names(downmarkers)[1:ndegs]),size=4,point.padding=-0.5, color="#03256C",max.overlaps = 20, fontface="italic")+
   theme(text=element_text(size=15,  family="Arial MS"))
 ```
+
 ## Volcano Plot with Gene Length
 
 ```{r, message=FALSE, warning=FALSE, results='hide'}
@@ -1154,6 +1811,7 @@ ggplot(data=DEGenes_GFP,
   geom_label_repel(downmarkers[1:ndegs,] , mapping=aes(label=row.names(downmarkers)[1:ndegs]),size=4,point.padding=-0.5, color="#03256C",max.overlaps = 20, fontface="italic")+
   theme(text=element_text(size=15,  family="Arial MS"))
 ```
+
 ## Volcano Plot with Gene Length
 
 ```{r, message=FALSE, warning=FALSE, results='hide'}

@@ -722,7 +722,1094 @@ contribs2 <- pca_res$rotation[,2]
 ```
 Now PC1 is driven by sample type instead.
 
-## Linear Models
+# Simple Linear Models
+
+Now we must perform linear model fitting.
+
+```{r}
+mm <- model.matrix(~0+SampleColouring)
+y <- voom(corrcounts_v1, mm)
+fitted <- lmFit(y$E, mm)
+
+head(coef(fitted))
+
+#next we measure contrasts between groups (log-fold change is obtained from these fitted linear models)
+U2.AS <- makeContrasts(SampleColouringU2G3AsLabEn  - SampleColouringU2G3AsLabIn, levels = (colnames(coef(fitted))))
+HEK.AS<- makeContrasts(SampleColouringHekG3AsLabEn  - SampleColouringHekG3AsLabIn , levels = (colnames(coef(fitted))))
+HEK.SO<- makeContrasts(SampleColouringHekG3SoLabEn  - SampleColouringHekG3SoLabIn , levels = (colnames(coef(fitted))))
+
+
+#next we estimate the contrast for each gene
+tmp.U2.AS  <- contrasts.fit(fitted, U2.AS )
+tmp.HEK.AS <- contrasts.fit(fitted, HEK.AS)
+tmp.HEK.SO <- contrasts.fit(fitted, HEK.SO)
+
+#use empirical bayes smoothing of standard erros (shrinks extreme standard erros)
+tmp.U2.AS <- eBayes(tmp.U2.AS)
+tmp.HEK.AS <- eBayes(tmp.HEK.AS)
+tmp.HEK.SO <- eBayes(tmp.HEK.SO)
+
+top.table.U2.AS <- topTable(tmp.U2.AS, sort.by = "logFC", n=Inf)
+top.table.HEK.AS <- topTable(tmp.HEK.AS, sort.by = "logFC", n=Inf)
+top.table.HEK.SO<- topTable(tmp.HEK.SO, sort.by = "logFC", n=Inf)
+
+DEGenes.U2.AS <- top.table.U2.AS
+DEGenes.HEK.AS <- top.table.HEK.AS
+DEGenes.HEK.SO <- top.table.HEK.SO
+
+
+
+
+
+ndegs=20
+```
+
+# U2-OS Arsenite
+
+## Volcano Plot
+
+```{r, results='hide', warning=FALSE, message=FALSE}
+write.table(x = DEGenes.U2.AS,
+          file = "~/Projects/StressGranules/SGPAPER/SGvsWC/Ren_U2Ar.txt", sep="\t", col.names = TRUE, row.names = TRUE, quote=FALSE)
+
+upmarkers <- as.data.frame(DEGenes.U2.AS[DEGenes.U2.AS$logFC>2.5 & DEGenes.U2.AS$adj.P.Val<0.05,] )
+downmarkers <- as.data.frame(DEGenes.U2.AS[DEGenes.U2.AS$logFC< -2 & DEGenes.U2.AS$adj.P.Val<0.05,] )
+
+
+ggplot(data=DEGenes.U2.AS,
+                 aes(x=logFC,
+                     y=  B)) +
+  geom_point(color="#DDDDDD")+
+  theme_bw() +
+  theme(axis.line = element_line(colour = "black"),
+        panel.grid.minor = element_blank(),
+        panel.border = element_blank(),
+        panel.background = element_blank()) +
+  ggtitle("SG vs Whole-Cell")+
+  theme(plot.title = element_text(hjust = 0.5)) +
+  geom_label_repel(upmarkers[1:ndegs,] , mapping=aes(label=row.names(upmarkers)[1:ndegs]),size=4,point.padding=-0.5, color="#de425b",max.overlaps = 200, fontface="italic")+
+  geom_label_repel(downmarkers[1:ndegs,] , mapping=aes(label=row.names(downmarkers)[1:ndegs]),size=4,point.padding=-0.5, color="#769fca",max.overlaps = 200, fontface="italic")+
+  geom_point(data=upmarkers, aes(x=logFC, y=  B), color="#de425b", size=3)+
+  geom_point(data=downmarkers, aes(x=logFC, y=  B), color="#769fca", size=3) + xlab(expression(Log[2] ~ Fold ~ Change)) + ylab("B-Statistic") + theme(text=element_text(family = "Arial", size = 20))
+
+```
+
+## Volcano Plot with Gene Lenght
+
+```{r, message=FALSE, warning=FALSE, results='hide'}
+
+DEGenes.U2.AS$Gene <- row.names(DEGenes.U2.AS)
+colnames(genelength) <- c("Length","Gene")
+DEGenes.U2.AS <- merge(DEGenes.U2.AS, genelength, by="Gene")
+
+ggplot(data=DEGenes.U2.AS,
+                 aes(x=logFC,
+                     y=  B)) +
+  geom_point(aes(color=log10(Length)))+
+  theme_bw() +
+  theme(axis.line = element_line(colour = "black"),
+        panel.grid.minor = element_blank(),
+        panel.border = element_blank(),
+        panel.background = element_blank()) +
+  ggtitle("SG")+ xlab(expression(Log[2] ~ Fold ~ Change)) + ylab("B-Statistic") +
+  theme(plot.title = element_text(hjust = 0.5))  +
+  scale_colour_gradient(low = "black", high = "red")+ theme(text=element_text(family = "Quicksand"))
+
+
+smooth.SG <- lm(t~log10(Length), DEGenes.U2.AS)
+liner.SG <- rstandard(smooth.SG)
+DEGenes.U2.AS <-cbind(DEGenes.U2.AS, liner.SG)
+colnames(DEGenes.U2.AS)[9] <- "Residuals"
+row.names(DEGenes.U2.AS) <- DEGenes.U2.AS$Gene
+linemarkers <- as.data.frame(DEGenes.U2.AS[abs(DEGenes.U2.AS$Residuals)>4,])
+
+# Calculate the Spearman correlation coefficient
+spearman_corr <- cor(DEGenes.U2.AS$t, log10(DEGenes.U2.AS$Length), method = "pearson")
+
+
+
+ggplot(DEGenes.U2.AS, aes(y=t, x=log10(Length))) + geom_point(color="#CCCCCC", alpha=1) +   theme_bw()+ geom_density_2d()+
+ ylab("SG Enrichment (t-stat)") + xlab(expression(RNA ~ Length ~ Log[10] ~ Base ~ Pairs)) +
+  theme(axis.line = element_line(colour = "black"),
+        panel.grid.minor = element_blank(),
+        panel.border = element_blank(),
+        panel.background = element_blank()) + 
+  theme(plot.title = element_text(hjust = 0.5))  +
+  geom_abline(slope=smooth.SG$coefficients[2], intercept = smooth.SG$coefficients[1], linetype = "dashed")+ stat_cor(method = "spearman", cor.coef.name = "rho",size=7)
+```
+We see a positive lenght bias.
+
+## Expression Graphs (Extra QC)
+
+As an added control, lets plot these genes in regard to their expression. This helps to see if the expression differences are robust, and not just driven by one sample.
+
+```{r, fig.height=12, fig.width=12}
+# Define color palette
+custom_palette <- qualitative_hcl(24, palette = "Pastel")
+custom_palette <- sample(custom_palette, 24)
+
+finagenes <- rbind(upmarkers, downmarkers)
+
+
+dfforexpression <- dfforpca
+samplecodes <- data.frame(samples=row.names(dfforexpression), purity=c(1:61))
+sampletype <- data.frame(samples=row.names(dfforexpression), sampletype=SampleColouring)
+dfforexpression <- t(dfforexpression)
+genesforexp <- dfforexpression[row.names(dfforexpression)%in%row.names(finagenes),]
+genesforexp <- reshape2::melt(genesforexp)
+colnames(genesforexp) <- c("Gene", "samples", "expression")
+genesforexp <- merge(genesforexp, samplecodes, by="samples")
+genesforexp <- merge(genesforexp, sampletype, by="samples")
+genesforexp <- genesforexp[,-1]
+genesforexp[,2] <- as.numeric(genesforexp[,2])
+genesforexp[,1] <- as.character(genesforexp[,1])
+genesforexp <- genesforexp[order(genesforexp$Gene),]
+
+
+winnyplot <- ggplot(genesforexp, aes(x=purity, y=expression, fill=sampletype, colour=sampletype)) + geom_bar(position="dodge", stat="identity", alpha=0.5) + facet_wrap(.~ Gene, ncol=5)
+winnyplot <- winnyplot + scale_fill_manual(name = "Sample Type", values = custom_palette, breaks = unique(SampleColouring)) + scale_colour_manual(name = "Sample Type", values = custom_palette, breaks = unique(SampleColouring)) 
+winnyplot <- winnyplot + theme_bw() + xlab("Samples (SG to Bulk Rna)") + ylab("Gene Expression (Log2 CPM)") + theme(
+      strip.text.x = element_text(
+        size = 12, face="italic"
+        )) +
+ theme(
+   strip.background = element_rect(
+     color="black", fill="#FFFFFF", size=1, linetype="solid"
+     )
+   ) + theme(
+    #legend.position = c(.95, .40),
+    legend.justification = c("right", "top"),
+    legend.box.just = "right",
+    ) + theme(legend.title = element_text(size = 12)) + ggtitle("Expression of DEA genes") + theme(plot.title = element_text(hjust = 0.5, size=14, face="bold"))
+winnyplot
+```
+
+
+## GSEA Enrichment
+
+Now that we have our genes of interest, it would also be interesting to see what are the **altered gene sets** between upregulated and downregulated transcripts from the above comparison. Therefore, lets perform a *Gene Set Enrichment Analysis*
+
+```{r, fig.height=20, fig.width=30, results=FALSE}
+#for all genes
+DEGenes.U2.AS <- DEGenes.U2.AS[order(DEGenes.U2.AS[,4]),]
+gseatool <- DEGenes.U2.AS[,4]
+gseatool <- as.data.frame(gseatool)
+colnames(gseatool)[1] <- "t" 
+gseatool[,2] <- DEGenes.U2.AS$Gene
+colnames(gseatool)[2] <- "Symbol" 
+gseatool <- gseatool[,c(2,1)]
+
+vectorranks <- gseatool$t
+names(vectorranks) <- gseatool$Symbol
+
+
+#to load our pathways
+hallmarks.gs <- msigdbr(species = "Homo sapiens", collection =  "H")
+
+hallmarks.gsets <- hallmarks.gs %>% split(x = .$gene_symbol, f = .$gs_name)
+
+for (set in names(hallmarks.gsets)){
+  hallmarks.gsets[[set]] <- toupper(hallmarks.gsets[[set]])
+}
+
+hallmarks.res <- fgsea(pathways = hallmarks.gsets, 
+                       stats = vectorranks)
+
+hallmarks.res.tidy <- hallmarks.res %>%
+  as_tibble() %>%
+  arrange(desc(NES))
+
+hallmarks.res.tidy %>% 
+  dplyr::select(-leadingEdge, -ES) %>% 
+  arrange(padj)
+
+hallmark.sg.t <- hallmarks.res.tidy[,c(1,3,6)]
+hallmark.sg.t <- as.data.frame(hallmark.sg.t)
+
+#this small part is generic
+thresh <- 0.001
+
+#this one is no longer generic
+data_to_plot <- hallmarks.res.tidy %>% filter(padj < thresh)
+
+statvec <- c()
+for (i in 1:nrow(data_to_plot)){
+  if (data_to_plot[i,6] > 0){
+    status <- "Upregulated"
+  }
+ else {
+   status <- "Downregulated"
+ }   
+statvec <- c(statvec, status)
+}
+
+data_to_plot$Status <- statvec
+
+##-----HALMARK-----
+gsea_plot_hall <- ggplot(data_to_plot, aes(reorder(pathway, NES), NES)) +
+  geom_col(aes(fill= Status), alpha=0.75) + scale_fill_manual(values = c("#53A2BE","#BA3B46"), name = "Regulation Status", labels = c("Downregulated", "Upregulated"), breaks = c("Downregulated", "Upregulated")) +
+  coord_flip() +
+  labs(x="Pathway", y="Normalised Enrichment Score (NES)",
+       title= "Hallmark Gene Sets",
+       caption = paste0("p-value < ", thresh)) + theme(plot.title = element_text(hjust = 1)) +
+  theme_bw() + theme(text=element_text(family = "Quicksand")) + theme(legend.position = "none")
+
+
+gsea_plot_hall+
+  theme(text=element_text(size=25,  family="Arial MS"))
+```
+
+
+## GSEA Length
+
+Now, since SGs are enriched for longer transcripts, these pathways may simply be the ones which are tipically enriched in longer transcripts. Therefore, I will repeat the analysis, but using transcript lenght instead of t-statistic. 
+
+```{r, results=FALSE}
+#for all genes
+DEGenes.U2.AS <- DEGenes.U2.AS[order(DEGenes.U2.AS[,8]),]
+gseatool <- DEGenes.U2.AS[,8]
+gseatool <- as.data.frame(gseatool)
+colnames(gseatool)[1] <- "t" 
+gseatool[,2] <- DEGenes.U2.AS$Gene
+colnames(gseatool)[2] <- "Symbol" 
+gseatool <- gseatool[,c(2,1)]
+
+#for only the genes without the contamination
+
+
+vectorranks <- log10(gseatool$t)
+vectorranks <- scale(vectorranks)
+names(vectorranks) <- gseatool$Symbol
+
+
+#to load our pathways
+
+##-----HALLMARK-----
+hallmarks.gs <- msigdbr(species = "Homo sapiens", collection = "H")
+
+hallmarks.gsets <- hallmarks.gs %>% split(x = .$gene_symbol, f = .$gs_name)
+
+for (set in names(hallmarks.gsets)){
+  hallmarks.gsets[[set]] <- toupper(hallmarks.gsets[[set]])
+}
+
+hallmarks.res <- fgsea(pathways = hallmarks.gsets, 
+                       stats = vectorranks)
+
+hallmarks.res.tidy <- hallmarks.res %>%
+  as_tibble() %>%
+  arrange(desc(NES))
+
+hallmarks.res.tidy %>% 
+  dplyr::select(-leadingEdge, -ES) %>% 
+  arrange(padj)
+
+hallmark.size.t <- hallmarks.res.tidy[,c(1,3,6)]
+hallmark.size.t <- as.data.frame(hallmark.size.t)
+
+
+#HALLMARK
+hallmark.scatter_ak <- merge(hallmark.sg.t, hallmark.size.t, by="pathway")
+colnames(hallmark.scatter_ak) <- c("pathway", "sg_pval", "sg", "size_pval", "size")
+hallmark.scatter_ak <- na.omit(hallmark.scatter_ak)
+res_hallmark <- lm(size ~ sg, hallmark.scatter_ak)
+
+vip.pathways_ak <- as.data.frame(hallmark.scatter_ak[(hallmark.scatter_ak$sg/hallmark.scatter_ak$size)<0,] )
+
+
+
+ggplot(hallmark.scatter_ak, aes(x=sg, y=size)) + geom_point(color="black", alpha=01) +   theme_bw()+
+ xlab("NES SG") + ylab("NES Size") +
+  theme(axis.line = element_line(colour = "black"),
+        panel.grid.minor = element_blank(),
+        panel.border = element_blank(),
+        panel.background = element_blank()) + ggtitle("hallmark SG vs Size")+
+  theme(plot.title = element_text(hjust = 0.5)) +
+  geom_abline(slope=res_hallmark$coefficients[2], intercept = res_hallmark$coefficients[1], linetype = "dashed") +
+  geom_label_repel(vip.pathways_ak[1:ndegs,] , mapping=aes(label=vip.pathways_ak$pathway[1:ndegs]),size=3,point.padding=-0.5, color="#399e5a",max.overlaps = 200)+
+  geom_point(data=vip.pathways_ak, aes(x=sg, y= size), color="#399e5a") + stat_cor(method = "spearman", cor.coef.name = "rho")
+
+```
+
+Even though there is some lenght bias in terms of enrichment, it does not seem to be linked in terms of gene set enrichment.
+
+## Most altered pathways
+
+I opted to see altered pathways as a whole. That is, ignoring bidirectionally and simply looking at what pathways are more altered as a whole (i.e, more expressed genes on either side).
+
+```{r, echo=FALSE, fig.height=20, fig.width=30, message=FALSE, warning=FALSE, results='hide'}
+#for all genes
+DEGenes.U2.AS <- DEGenes.U2.AS[order(DEGenes.U2.AS[,4]),]
+gseatool <- DEGenes.U2.AS[,4]
+gseatool <- as.data.frame(gseatool)
+colnames(gseatool)[1] <- "t" 
+gseatool[,2] <- row.names(DEGenes.U2.AS)
+colnames(gseatool)[2] <- "Symbol" 
+gseatool <- gseatool[,c(2,1)]
+
+#for only the genes without the contamination
+
+
+vectorranks <- gseatool$t
+names(vectorranks) <- gseatool$Symbol
+forcorrel <- vectorranks
+vectorranks <- abs(vectorranks)
+
+
+#to load our pathways
+hallmarks.gs <- msigdbr(species = "Homo sapiens", collection = "H")
+
+hallmarks.gsets <- hallmarks.gs %>% split(x = .$gene_symbol, f = .$gs_name)
+
+for (set in names(hallmarks.gsets)){
+  hallmarks.gsets[[set]] <- toupper(hallmarks.gsets[[set]])
+}
+
+hallmarks.res <- fgsea(pathways = hallmarks.gsets, 
+                       stats = vectorranks)
+
+hallmarks.res.tidy <- hallmarks.res %>%
+  as_tibble() %>%
+  arrange(desc(NES))
+
+hallmarks.res.tidy %>% 
+  dplyr::select(-leadingEdge, -ES) %>% 
+  arrange(padj)
+
+#this small part is generic
+thresh <- 0.001
+
+#this one is no longer generic
+data_to_plot <- hallmarks.res.tidy %>% filter(padj < thresh)
+
+statvec <- c()
+for (i in 1:nrow(data_to_plot)){
+  if (data_to_plot[i,6] > 0){
+    status <- "Upregulated"
+  }
+ else {
+   status <- "Downregulated"
+ }   
+statvec <- c(statvec, status)
+}
+
+data_to_plot$Status <- statvec
+
+##-----HALMARK-----
+gsea_plot_hall <- ggplot(data_to_plot, aes(reorder(pathway, NES), NES)) +
+  geom_col(aes(fill= Status), alpha=0.75) + scale_fill_manual(values = c("#53A2BE","#BA3B46"), name = "Regulation Status", labels = c("Downregulated", "Upregulated"), breaks = c("Downregulated", "Upregulated")) +
+  coord_flip() +
+  labs(x="Pathway", y="Normalised Enrichment Score (NES)",
+       title= "Hallmark Gene Sets",
+       caption = paste0("p-value < ", thresh)) + theme(plot.title = element_text(hjust = 1)) +
+  theme_bw() + theme(text=element_text(family = "Quicksand")) + theme(legend.position = "none")
+
+
+
+gsea_plot_hall+
+  theme(text=element_text(size=25,  family="Arial MS"))
+
+```
+
+
+# HEK-293T Arsenite
+
+## Volcano Plot
+
+```{r, results='hide', warning=FALSE, message=FALSE}
+write.table(x = DEGenes.HEK.AS,
+          file = "~/Projects/StressGranules/SGPAPER/SGvsWC/Ren_HEKAr.txt", sep="\t", col.names = TRUE, row.names = TRUE, quote=FALSE)
+
+upmarkers <- as.data.frame(DEGenes.HEK.AS[DEGenes.HEK.AS$logFC>2 & DEGenes.HEK.AS$adj.P.Val<0.05,] )
+downmarkers <- as.data.frame(DEGenes.HEK.AS[DEGenes.HEK.AS$logFC< -2 & DEGenes.HEK.AS$adj.P.Val<0.05,] )
+
+
+ggplot(data=DEGenes.HEK.AS,
+                 aes(x=logFC,
+                     y=  B)) +
+  geom_point(color="#DDDDDD")+
+  theme_bw() +
+  theme(axis.line = element_line(colour = "black"),
+        panel.grid.minor = element_blank(),
+        panel.border = element_blank(),
+        panel.background = element_blank()) +
+  ggtitle("SG vs Whole-Cell")+
+  theme(plot.title = element_text(hjust = 0.5)) +
+  geom_label_repel(upmarkers[1:ndegs,] , mapping=aes(label=row.names(upmarkers)[1:ndegs]),size=4,point.padding=-0.5, color="#de425b",max.overlaps = 200, fontface="italic")+
+  geom_label_repel(downmarkers[1:ndegs,] , mapping=aes(label=row.names(downmarkers)[1:ndegs]),size=4,point.padding=-0.5, color="#769fca",max.overlaps = 200, fontface="italic")+
+  geom_point(data=upmarkers, aes(x=logFC, y=  B), color="#de425b", size=3)+
+  geom_point(data=downmarkers, aes(x=logFC, y=  B), color="#769fca", size=3) + xlab(expression(Log[2] ~ Fold ~ Change)) + ylab("B-Statistic") + theme(text=element_text(family = "Arial", size = 20))
+
+```
+
+## Volcano Plot with Gene Lenght
+
+```{r, message=FALSE, warning=FALSE, results='hide'}
+
+DEGenes.HEK.AS$Gene <- row.names(DEGenes.HEK.AS)
+colnames(genelength) <- c("Length","Gene")
+DEGenes.HEK.AS <- merge(DEGenes.HEK.AS, genelength, by="Gene")
+
+ggplot(data=DEGenes.HEK.AS,
+                 aes(x=logFC,
+                     y=  B)) +
+  geom_point(aes(color=log10(Length)))+
+  theme_bw() +
+  theme(axis.line = element_line(colour = "black"),
+        panel.grid.minor = element_blank(),
+        panel.border = element_blank(),
+        panel.background = element_blank()) +
+  ggtitle("SG")+ xlab(expression(Log[2] ~ Fold ~ Change)) + ylab("B-Statistic") +
+  theme(plot.title = element_text(hjust = 0.5))  +
+  scale_colour_gradient(low = "black", high = "red")+ theme(text=element_text(family = "Quicksand"))
+
+
+smooth.SG <- lm(t~log10(Length), DEGenes.HEK.AS)
+liner.SG <- rstandard(smooth.SG)
+DEGenes.HEK.AS <-cbind(DEGenes.HEK.AS, liner.SG)
+colnames(DEGenes.HEK.AS)[9] <- "Residuals"
+row.names(DEGenes.HEK.AS) <- DEGenes.HEK.AS$Gene
+linemarkers <- as.data.frame(DEGenes.HEK.AS[abs(DEGenes.HEK.AS$Residuals)>4,])
+
+# Calculate the Spearman correlation coefficient
+spearman_corr <- cor(DEGenes.HEK.AS$t, log10(DEGenes.HEK.AS$Length), method = "pearson")
+
+
+
+ggplot(DEGenes.HEK.AS, aes(y=t, x=log10(Length))) + geom_point(color="#CCCCCC", alpha=1) +   theme_bw()+ geom_density_2d()+
+ ylab("SG Enrichment (t-stat)") + xlab(expression(RNA ~ Length ~ Log[10] ~ Base ~ Pairs)) +
+  theme(axis.line = element_line(colour = "black"),
+        panel.grid.minor = element_blank(),
+        panel.border = element_blank(),
+        panel.background = element_blank()) + 
+  theme(plot.title = element_text(hjust = 0.5))  +
+  geom_abline(slope=smooth.SG$coefficients[2], intercept = smooth.SG$coefficients[1], linetype = "dashed")+ stat_cor(method = "spearman", cor.coef.name = "rho",size=7)
+```
+We see a positive lenght bias.
+
+## Expression Graphs (Extra QC)
+
+As an added control, lets plot these genes in regard to their expression. This helps to see if the expression differences are robust, and not just driven by one sample.
+
+```{r, fig.height=12, fig.width=12}
+# Define color palette
+custom_palette <- qualitative_hcl(24, palette = "Pastel")
+custom_palette <- sample(custom_palette, 24)
+
+finagenes <- rbind(upmarkers, downmarkers)
+
+
+dfforexpression <- dfforpca
+samplecodes <- data.frame(samples=row.names(dfforexpression), purity=c(1:61))
+sampletype <- data.frame(samples=row.names(dfforexpression), sampletype=SampleColouring)
+dfforexpression <- t(dfforexpression)
+genesforexp <- dfforexpression[row.names(dfforexpression)%in%row.names(finagenes),]
+genesforexp <- reshape2::melt(genesforexp)
+colnames(genesforexp) <- c("Gene", "samples", "expression")
+genesforexp <- merge(genesforexp, samplecodes, by="samples")
+genesforexp <- merge(genesforexp, sampletype, by="samples")
+genesforexp <- genesforexp[,-1]
+genesforexp[,2] <- as.numeric(genesforexp[,2])
+genesforexp[,1] <- as.character(genesforexp[,1])
+genesforexp <- genesforexp[order(genesforexp$Gene),]
+
+
+winnyplot <- ggplot(genesforexp, aes(x=purity, y=expression, fill=sampletype, colour=sampletype)) + geom_bar(position="dodge", stat="identity", alpha=0.5) + facet_wrap(.~ Gene, ncol=5)
+winnyplot <- winnyplot + scale_fill_manual(name = "Sample Type", values = custom_palette, breaks = unique(SampleColouring)) + scale_colour_manual(name = "Sample Type", values = custom_palette, breaks = unique(SampleColouring)) 
+winnyplot <- winnyplot + theme_bw() + xlab("Samples (SG to Bulk Rna)") + ylab("Gene Expression (Log2 CPM)") + theme(
+      strip.text.x = element_text(
+        size = 12, face="italic"
+        )) +
+ theme(
+   strip.background = element_rect(
+     color="black", fill="#FFFFFF", size=1, linetype="solid"
+     )
+   ) + theme(
+    #legend.position = c(.95, .40),
+    legend.justification = c("right", "top"),
+    legend.box.just = "right",
+    ) + theme(legend.title = element_text(size = 12)) + ggtitle("Expression of DEA genes") + theme(plot.title = element_text(hjust = 0.5, size=14, face="bold"))
+winnyplot
+```
+
+
+## GSEA Enrichment
+
+Now that we have our genes of interest, it would also be interesting to see what are the **altered gene sets** between upregulated and downregulated transcripts from the above comparison. Therefore, lets perform a *Gene Set Enrichment Analysis*
+
+```{r, fig.height=20, fig.width=30, results=FALSE}
+#for all genes
+DEGenes.HEK.AS <- DEGenes.HEK.AS[order(DEGenes.HEK.AS[,4]),]
+gseatool <- DEGenes.HEK.AS[,4]
+gseatool <- as.data.frame(gseatool)
+colnames(gseatool)[1] <- "t" 
+gseatool[,2] <- DEGenes.HEK.AS$Gene
+colnames(gseatool)[2] <- "Symbol" 
+gseatool <- gseatool[,c(2,1)]
+
+vectorranks <- gseatool$t
+names(vectorranks) <- gseatool$Symbol
+
+
+#to load our pathways
+hallmarks.gs <- msigdbr(species = "Homo sapiens", collection =  "H")
+
+hallmarks.gsets <- hallmarks.gs %>% split(x = .$gene_symbol, f = .$gs_name)
+
+for (set in names(hallmarks.gsets)){
+  hallmarks.gsets[[set]] <- toupper(hallmarks.gsets[[set]])
+}
+
+hallmarks.res <- fgsea(pathways = hallmarks.gsets, 
+                       stats = vectorranks)
+
+hallmarks.res.tidy <- hallmarks.res %>%
+  as_tibble() %>%
+  arrange(desc(NES))
+
+hallmarks.res.tidy %>% 
+  dplyr::select(-leadingEdge, -ES) %>% 
+  arrange(padj)
+
+hallmark.sg.t <- hallmarks.res.tidy[,c(1,3,6)]
+hallmark.sg.t <- as.data.frame(hallmark.sg.t)
+
+#this small part is generic
+thresh <- 0.001
+
+#this one is no longer generic
+data_to_plot <- hallmarks.res.tidy %>% filter(padj < thresh)
+
+statvec <- c()
+for (i in 1:nrow(data_to_plot)){
+  if (data_to_plot[i,6] > 0){
+    status <- "Upregulated"
+  }
+ else {
+   status <- "Downregulated"
+ }   
+statvec <- c(statvec, status)
+}
+
+data_to_plot$Status <- statvec
+
+##-----HALMARK-----
+gsea_plot_hall <- ggplot(data_to_plot, aes(reorder(pathway, NES), NES)) +
+  geom_col(aes(fill= Status), alpha=0.75) + scale_fill_manual(values = c("#53A2BE","#BA3B46"), name = "Regulation Status", labels = c("Downregulated", "Upregulated"), breaks = c("Downregulated", "Upregulated")) +
+  coord_flip() +
+  labs(x="Pathway", y="Normalised Enrichment Score (NES)",
+       title= "Hallmark Gene Sets",
+       caption = paste0("p-value < ", thresh)) + theme(plot.title = element_text(hjust = 1)) +
+  theme_bw() + theme(text=element_text(family = "Quicksand")) + theme(legend.position = "none")
+
+
+gsea_plot_hall+
+  theme(text=element_text(size=25,  family="Arial MS"))
+```
+
+
+## GSEA Length
+
+Now, since SGs are enriched for longer transcripts, these pathways may simply be the ones which are tipically enriched in longer transcripts. Therefore, I will repeat the analysis, but using transcript lenght instead of t-statistic. 
+
+```{r, results=FALSE}
+#for all genes
+DEGenes.HEK.AS <- DEGenes.HEK.AS[order(DEGenes.HEK.AS[,8]),]
+gseatool <- DEGenes.HEK.AS[,8]
+gseatool <- as.data.frame(gseatool)
+colnames(gseatool)[1] <- "t" 
+gseatool[,2] <- DEGenes.HEK.AS$Gene
+colnames(gseatool)[2] <- "Symbol" 
+gseatool <- gseatool[,c(2,1)]
+
+#for only the genes without the contamination
+
+
+vectorranks <- log10(gseatool$t)
+vectorranks <- scale(vectorranks)
+names(vectorranks) <- gseatool$Symbol
+
+
+#to load our pathways
+
+##-----HALLMARK-----
+hallmarks.gs <- msigdbr(species = "Homo sapiens", collection = "H")
+
+hallmarks.gsets <- hallmarks.gs %>% split(x = .$gene_symbol, f = .$gs_name)
+
+for (set in names(hallmarks.gsets)){
+  hallmarks.gsets[[set]] <- toupper(hallmarks.gsets[[set]])
+}
+
+hallmarks.res <- fgsea(pathways = hallmarks.gsets, 
+                       stats = vectorranks)
+
+hallmarks.res.tidy <- hallmarks.res %>%
+  as_tibble() %>%
+  arrange(desc(NES))
+
+hallmarks.res.tidy %>% 
+  dplyr::select(-leadingEdge, -ES) %>% 
+  arrange(padj)
+
+hallmark.size.t <- hallmarks.res.tidy[,c(1,3,6)]
+hallmark.size.t <- as.data.frame(hallmark.size.t)
+
+
+#HALLMARK
+hallmark.scatter_ak <- merge(hallmark.sg.t, hallmark.size.t, by="pathway")
+colnames(hallmark.scatter_ak) <- c("pathway", "sg_pval", "sg", "size_pval", "size")
+hallmark.scatter_ak <- na.omit(hallmark.scatter_ak)
+res_hallmark <- lm(size ~ sg, hallmark.scatter_ak)
+
+vip.pathways_ak <- as.data.frame(hallmark.scatter_ak[(hallmark.scatter_ak$sg/hallmark.scatter_ak$size)<0,] )
+
+
+
+ggplot(hallmark.scatter_ak, aes(x=sg, y=size)) + geom_point(color="black", alpha=01) +   theme_bw()+
+ xlab("NES SG") + ylab("NES Size") +
+  theme(axis.line = element_line(colour = "black"),
+        panel.grid.minor = element_blank(),
+        panel.border = element_blank(),
+        panel.background = element_blank()) + ggtitle("hallmark SG vs Size")+
+  theme(plot.title = element_text(hjust = 0.5)) +
+  geom_abline(slope=res_hallmark$coefficients[2], intercept = res_hallmark$coefficients[1], linetype = "dashed") +
+  geom_label_repel(vip.pathways_ak[1:ndegs,] , mapping=aes(label=vip.pathways_ak$pathway[1:ndegs]),size=3,point.padding=-0.5, color="#399e5a",max.overlaps = 200)+
+  geom_point(data=vip.pathways_ak, aes(x=sg, y= size), color="#399e5a") + stat_cor(method = "spearman", cor.coef.name = "rho")
+
+```
+
+Even though there is some lenght bias in terms of enrichment, it does not seem to be linked in terms of gene set enrichment.
+
+## Most altered pathways
+
+I opted to see altered pathways as a whole. That is, ignoring bidirectionally and simply looking at what pathways are more altered as a whole (i.e, more expressed genes on either side).
+
+```{r, echo=FALSE, fig.height=20, fig.width=30, message=FALSE, warning=FALSE, results='hide'}
+#for all genes
+DEGenes.HEK.AS <- DEGenes.HEK.AS[order(DEGenes.HEK.AS[,4]),]
+gseatool <- DEGenes.HEK.AS[,4]
+gseatool <- as.data.frame(gseatool)
+colnames(gseatool)[1] <- "t" 
+gseatool[,2] <- row.names(DEGenes.HEK.AS)
+colnames(gseatool)[2] <- "Symbol" 
+gseatool <- gseatool[,c(2,1)]
+
+#for only the genes without the contamination
+
+
+vectorranks <- gseatool$t
+names(vectorranks) <- gseatool$Symbol
+forcorrel <- vectorranks
+vectorranks <- abs(vectorranks)
+
+
+#to load our pathways
+hallmarks.gs <- msigdbr(species = "Homo sapiens", collection = "H")
+
+hallmarks.gsets <- hallmarks.gs %>% split(x = .$gene_symbol, f = .$gs_name)
+
+for (set in names(hallmarks.gsets)){
+  hallmarks.gsets[[set]] <- toupper(hallmarks.gsets[[set]])
+}
+
+hallmarks.res <- fgsea(pathways = hallmarks.gsets, 
+                       stats = vectorranks)
+
+hallmarks.res.tidy <- hallmarks.res %>%
+  as_tibble() %>%
+  arrange(desc(NES))
+
+hallmarks.res.tidy %>% 
+  dplyr::select(-leadingEdge, -ES) %>% 
+  arrange(padj)
+
+#this small part is generic
+thresh <- 0.001
+
+#this one is no longer generic
+data_to_plot <- hallmarks.res.tidy %>% filter(padj < thresh)
+
+statvec <- c()
+for (i in 1:nrow(data_to_plot)){
+  if (data_to_plot[i,6] > 0){
+    status <- "Upregulated"
+  }
+ else {
+   status <- "Downregulated"
+ }   
+statvec <- c(statvec, status)
+}
+
+data_to_plot$Status <- statvec
+
+##-----HALMARK-----
+gsea_plot_hall <- ggplot(data_to_plot, aes(reorder(pathway, NES), NES)) +
+  geom_col(aes(fill= Status), alpha=0.75) + scale_fill_manual(values = c("#53A2BE","#BA3B46"), name = "Regulation Status", labels = c("Downregulated", "Upregulated"), breaks = c("Downregulated", "Upregulated")) +
+  coord_flip() +
+  labs(x="Pathway", y="Normalised Enrichment Score (NES)",
+       title= "Hallmark Gene Sets",
+       caption = paste0("p-value < ", thresh)) + theme(plot.title = element_text(hjust = 1)) +
+  theme_bw() + theme(text=element_text(family = "Quicksand")) + theme(legend.position = "none")
+
+
+
+gsea_plot_hall+
+  theme(text=element_text(size=25,  family="Arial MS"))
+
+```
+
+
+# HEK293T Sorbitol
+
+## Volcano Plot
+
+```{r, results='hide', warning=FALSE, message=FALSE}
+write.table(x = DEGenes.HEK.SO,
+          file = "~/Projects/StressGranules/SGPAPER/SGvsWC/Ren_HEKSo.txt", sep="\t", col.names = TRUE, row.names = TRUE, quote=FALSE)
+
+upmarkers <- as.data.frame(DEGenes.HEK.SO[DEGenes.HEK.SO$logFC>2 & DEGenes.HEK.SO$adj.P.Val<0.05,] )
+downmarkers <- as.data.frame(DEGenes.HEK.SO[DEGenes.HEK.SO$logFC< -2 & DEGenes.HEK.SO$adj.P.Val<0.05,] )
+
+
+ggplot(data=DEGenes.HEK.SO,
+                 aes(x=logFC,
+                     y=  B)) +
+  geom_point(color="#DDDDDD")+
+  theme_bw() +
+  theme(axis.line = element_line(colour = "black"),
+        panel.grid.minor = element_blank(),
+        panel.border = element_blank(),
+        panel.background = element_blank()) +
+  ggtitle("SG vs Whole-Cell")+
+  theme(plot.title = element_text(hjust = 0.5)) +
+  geom_label_repel(upmarkers[1:ndegs,] , mapping=aes(label=row.names(upmarkers)[1:ndegs]),size=4,point.padding=-0.5, color="#de425b",max.overlaps = 200, fontface="italic")+
+  geom_label_repel(downmarkers[1:ndegs,] , mapping=aes(label=row.names(downmarkers)[1:ndegs]),size=4,point.padding=-0.5, color="#769fca",max.overlaps = 200, fontface="italic")+
+  geom_point(data=upmarkers, aes(x=logFC, y=  B), color="#de425b", size=3)+
+  geom_point(data=downmarkers, aes(x=logFC, y=  B), color="#769fca", size=3) + xlab(expression(Log[2] ~ Fold ~ Change)) + ylab("B-Statistic") + theme(text=element_text(family = "Arial", size = 20))
+
+```
+
+
+## Volcano Plot with Gene Lenght
+
+```{r, message=FALSE, warning=FALSE, results='hide'}
+
+DEGenes.HEK.SO$Gene <- row.names(DEGenes.HEK.SO)
+colnames(genelength) <- c("Length","Gene")
+DEGenes.HEK.SO <- merge(DEGenes.HEK.SO, genelength, by="Gene")
+
+ggplot(data=DEGenes.HEK.SO,
+                 aes(x=logFC,
+                     y=  B)) +
+  geom_point(aes(color=log10(Length)))+
+  theme_bw() +
+  theme(axis.line = element_line(colour = "black"),
+        panel.grid.minor = element_blank(),
+        panel.border = element_blank(),
+        panel.background = element_blank()) +
+  ggtitle("SG")+ xlab(expression(Log[2] ~ Fold ~ Change)) + ylab("B-Statistic") +
+  theme(plot.title = element_text(hjust = 0.5))  +
+  scale_colour_gradient(low = "black", high = "red")+ theme(text=element_text(family = "Quicksand"))
+
+
+smooth.SG <- lm(t~log10(Length), DEGenes.HEK.SO)
+liner.SG <- rstandard(smooth.SG)
+DEGenes.HEK.SO <-cbind(DEGenes.HEK.SO, liner.SG)
+colnames(DEGenes.HEK.SO)[9] <- "Residuals"
+row.names(DEGenes.HEK.SO) <- DEGenes.HEK.SO$Gene
+linemarkers <- as.data.frame(DEGenes.HEK.SO[abs(DEGenes.HEK.SO$Residuals)>4,])
+
+# Calculate the Spearman correlation coefficient
+spearman_corr <- cor(DEGenes.HEK.SO$t, log10(DEGenes.HEK.SO$Length), method = "pearson")
+
+
+
+ggplot(DEGenes.HEK.SO, aes(y=t, x=log10(Length))) + geom_point(color="#CCCCCC", alpha=1) +   theme_bw()+ geom_density_2d()+
+ ylab("SG Enrichment (t-stat)") + xlab(expression(RNA ~ Length ~ Log[10] ~ Base ~ Pairs)) +
+  theme(axis.line = element_line(colour = "black"),
+        panel.grid.minor = element_blank(),
+        panel.border = element_blank(),
+        panel.background = element_blank()) + 
+  theme(plot.title = element_text(hjust = 0.5))  +
+  geom_abline(slope=smooth.SG$coefficients[2], intercept = smooth.SG$coefficients[1], linetype = "dashed")+ stat_cor(method = "spearman", cor.coef.name = "rho",size=7)
+```
+We see a positive lenght bias.
+
+## Expression Graphs (Extra QC)
+
+As an added control, lets plot these genes in regard to their expression. This helps to see if the expression differences are robust, and not just driven by one sample.
+
+```{r, fig.height=12, fig.width=12}
+# Define color palette
+custom_palette <- qualitative_hcl(24, palette = "Pastel")
+custom_palette <- sample(custom_palette, 24)
+
+finagenes <- rbind(upmarkers, downmarkers)
+
+
+dfforexpression <- dfforpca
+samplecodes <- data.frame(samples=row.names(dfforexpression), purity=c(1:61))
+sampletype <- data.frame(samples=row.names(dfforexpression), sampletype=SampleColouring)
+dfforexpression <- t(dfforexpression)
+genesforexp <- dfforexpression[row.names(dfforexpression)%in%row.names(finagenes),]
+genesforexp <- reshape2::melt(genesforexp)
+colnames(genesforexp) <- c("Gene", "samples", "expression")
+genesforexp <- merge(genesforexp, samplecodes, by="samples")
+genesforexp <- merge(genesforexp, sampletype, by="samples")
+genesforexp <- genesforexp[,-1]
+genesforexp[,2] <- as.numeric(genesforexp[,2])
+genesforexp[,1] <- as.character(genesforexp[,1])
+genesforexp <- genesforexp[order(genesforexp$Gene),]
+
+
+winnyplot <- ggplot(genesforexp, aes(x=purity, y=expression, fill=sampletype, colour=sampletype)) + geom_bar(position="dodge", stat="identity", alpha=0.5) + facet_wrap(.~ Gene, ncol=5)
+winnyplot <- winnyplot + scale_fill_manual(name = "Sample Type", values = custom_palette, breaks = unique(SampleColouring)) + scale_colour_manual(name = "Sample Type", values = custom_palette, breaks = unique(SampleColouring)) 
+winnyplot <- winnyplot + theme_bw() + xlab("Samples (SG to Bulk Rna)") + ylab("Gene Expression (Log2 CPM)") + theme(
+      strip.text.x = element_text(
+        size = 12, face="italic"
+        )) +
+ theme(
+   strip.background = element_rect(
+     color="black", fill="#FFFFFF", size=1, linetype="solid"
+     )
+   ) + theme(
+    #legend.position = c(.95, .40),
+    legend.justification = c("right", "top"),
+    legend.box.just = "right",
+    ) + theme(legend.title = element_text(size = 12)) + ggtitle("Expression of DEA genes") + theme(plot.title = element_text(hjust = 0.5, size=14, face="bold"))
+winnyplot
+```
+
+
+## GSEA Enrichment
+
+Now that we have our genes of interest, it would also be interesting to see what are the **altered gene sets** between upregulated and downregulated transcripts from the above comparison. Therefore, lets perform a *Gene Set Enrichment Analysis*
+
+```{r, fig.height=20, fig.width=30, results=FALSE}
+#for all genes
+DEGenes.HEK.SO <- DEGenes.HEK.SO[order(DEGenes.HEK.SO[,4]),]
+gseatool <- DEGenes.HEK.SO[,4]
+gseatool <- as.data.frame(gseatool)
+colnames(gseatool)[1] <- "t" 
+gseatool[,2] <- DEGenes.HEK.SO$Gene
+colnames(gseatool)[2] <- "Symbol" 
+gseatool <- gseatool[,c(2,1)]
+
+vectorranks <- gseatool$t
+names(vectorranks) <- gseatool$Symbol
+
+
+#to load our pathways
+hallmarks.gs <- msigdbr(species = "Homo sapiens", collection =  "H")
+
+hallmarks.gsets <- hallmarks.gs %>% split(x = .$gene_symbol, f = .$gs_name)
+
+for (set in names(hallmarks.gsets)){
+  hallmarks.gsets[[set]] <- toupper(hallmarks.gsets[[set]])
+}
+
+hallmarks.res <- fgsea(pathways = hallmarks.gsets, 
+                       stats = vectorranks)
+
+hallmarks.res.tidy <- hallmarks.res %>%
+  as_tibble() %>%
+  arrange(desc(NES))
+
+hallmarks.res.tidy %>% 
+  dplyr::select(-leadingEdge, -ES) %>% 
+  arrange(padj)
+
+hallmark.sg.t <- hallmarks.res.tidy[,c(1,3,6)]
+hallmark.sg.t <- as.data.frame(hallmark.sg.t)
+
+#this small part is generic
+thresh <- 0.001
+
+#this one is no longer generic
+data_to_plot <- hallmarks.res.tidy %>% filter(padj < thresh)
+
+statvec <- c()
+for (i in 1:nrow(data_to_plot)){
+  if (data_to_plot[i,6] > 0){
+    status <- "Upregulated"
+  }
+ else {
+   status <- "Downregulated"
+ }   
+statvec <- c(statvec, status)
+}
+
+data_to_plot$Status <- statvec
+
+##-----HALMARK-----
+gsea_plot_hall <- ggplot(data_to_plot, aes(reorder(pathway, NES), NES)) +
+  geom_col(aes(fill= Status), alpha=0.75) + scale_fill_manual(values = c("#53A2BE","#BA3B46"), name = "Regulation Status", labels = c("Downregulated", "Upregulated"), breaks = c("Downregulated", "Upregulated")) +
+  coord_flip() +
+  labs(x="Pathway", y="Normalised Enrichment Score (NES)",
+       title= "Hallmark Gene Sets",
+       caption = paste0("p-value < ", thresh)) + theme(plot.title = element_text(hjust = 1)) +
+  theme_bw() + theme(text=element_text(family = "Quicksand")) + theme(legend.position = "none")
+
+
+gsea_plot_hall+
+  theme(text=element_text(size=25,  family="Arial MS"))
+```
+
+
+## GSEA Length
+
+Now, since SGs are enriched for longer transcripts, these pathways may simply be the ones which are tipically enriched in longer transcripts. Therefore, I will repeat the analysis, but using transcript lenght instead of t-statistic. 
+
+```{r, results=FALSE}
+#for all genes
+DEGenes.HEK.SO <- DEGenes.HEK.SO[order(DEGenes.HEK.SO[,8]),]
+gseatool <- DEGenes.HEK.SO[,8]
+gseatool <- as.data.frame(gseatool)
+colnames(gseatool)[1] <- "t" 
+gseatool[,2] <- DEGenes.HEK.SO$Gene
+colnames(gseatool)[2] <- "Symbol" 
+gseatool <- gseatool[,c(2,1)]
+
+#for only the genes without the contamination
+
+
+vectorranks <- log10(gseatool$t)
+vectorranks <- scale(vectorranks)
+names(vectorranks) <- gseatool$Symbol
+
+
+#to load our pathways
+
+##-----HALLMARK-----
+hallmarks.gs <- msigdbr(species = "Homo sapiens", collection = "H")
+
+hallmarks.gsets <- hallmarks.gs %>% split(x = .$gene_symbol, f = .$gs_name)
+
+for (set in names(hallmarks.gsets)){
+  hallmarks.gsets[[set]] <- toupper(hallmarks.gsets[[set]])
+}
+
+hallmarks.res <- fgsea(pathways = hallmarks.gsets, 
+                       stats = vectorranks)
+
+hallmarks.res.tidy <- hallmarks.res %>%
+  as_tibble() %>%
+  arrange(desc(NES))
+
+hallmarks.res.tidy %>% 
+  dplyr::select(-leadingEdge, -ES) %>% 
+  arrange(padj)
+
+hallmark.size.t <- hallmarks.res.tidy[,c(1,3,6)]
+hallmark.size.t <- as.data.frame(hallmark.size.t)
+
+
+#HALLMARK
+hallmark.scatter_ak <- merge(hallmark.sg.t, hallmark.size.t, by="pathway")
+colnames(hallmark.scatter_ak) <- c("pathway", "sg_pval", "sg", "size_pval", "size")
+hallmark.scatter_ak <- na.omit(hallmark.scatter_ak)
+res_hallmark <- lm(size ~ sg, hallmark.scatter_ak)
+
+vip.pathways_ak <- as.data.frame(hallmark.scatter_ak[(hallmark.scatter_ak$sg/hallmark.scatter_ak$size)<0,] )
+
+
+
+ggplot(hallmark.scatter_ak, aes(x=sg, y=size)) + geom_point(color="black", alpha=01) +   theme_bw()+
+ xlab("NES SG") + ylab("NES Size") +
+  theme(axis.line = element_line(colour = "black"),
+        panel.grid.minor = element_blank(),
+        panel.border = element_blank(),
+        panel.background = element_blank()) + ggtitle("hallmark SG vs Size")+
+  theme(plot.title = element_text(hjust = 0.5)) +
+  geom_abline(slope=res_hallmark$coefficients[2], intercept = res_hallmark$coefficients[1], linetype = "dashed") +
+  geom_label_repel(vip.pathways_ak[1:ndegs,] , mapping=aes(label=vip.pathways_ak$pathway[1:ndegs]),size=3,point.padding=-0.5, color="#399e5a",max.overlaps = 200)+
+  geom_point(data=vip.pathways_ak, aes(x=sg, y= size), color="#399e5a") + stat_cor(method = "spearman", cor.coef.name = "rho")
+
+```
+
+Even though there is some lenght bias in terms of enrichment, it does not seem to be linked in terms of gene set enrichment.
+
+## Most altered pathways
+
+I opted to see altered pathways as a whole. That is, ignoring bidirectionally and simply looking at what pathways are more altered as a whole (i.e, more expressed genes on either side).
+
+```{r, echo=FALSE, fig.height=20, fig.width=30, message=FALSE, warning=FALSE, results='hide'}
+#for all genes
+DEGenes.HEK.SO <- DEGenes.HEK.SO[order(DEGenes.HEK.SO[,4]),]
+gseatool <- DEGenes.HEK.SO[,4]
+gseatool <- as.data.frame(gseatool)
+colnames(gseatool)[1] <- "t" 
+gseatool[,2] <- row.names(DEGenes.HEK.SO)
+colnames(gseatool)[2] <- "Symbol" 
+gseatool <- gseatool[,c(2,1)]
+
+#for only the genes without the contamination
+
+
+vectorranks <- gseatool$t
+names(vectorranks) <- gseatool$Symbol
+forcorrel <- vectorranks
+vectorranks <- abs(vectorranks)
+
+
+#to load our pathways
+hallmarks.gs <- msigdbr(species = "Homo sapiens", collection = "H")
+
+hallmarks.gsets <- hallmarks.gs %>% split(x = .$gene_symbol, f = .$gs_name)
+
+for (set in names(hallmarks.gsets)){
+  hallmarks.gsets[[set]] <- toupper(hallmarks.gsets[[set]])
+}
+
+hallmarks.res <- fgsea(pathways = hallmarks.gsets, 
+                       stats = vectorranks)
+
+hallmarks.res.tidy <- hallmarks.res %>%
+  as_tibble() %>%
+  arrange(desc(NES))
+
+hallmarks.res.tidy %>% 
+  dplyr::select(-leadingEdge, -ES) %>% 
+  arrange(padj)
+
+#this small part is generic
+thresh <- 0.001
+
+#this one is no longer generic
+data_to_plot <- hallmarks.res.tidy %>% filter(padj < thresh)
+
+statvec <- c()
+for (i in 1:nrow(data_to_plot)){
+  if (data_to_plot[i,6] > 0){
+    status <- "Upregulated"
+  }
+ else {
+   status <- "Downregulated"
+ }   
+statvec <- c(statvec, status)
+}
+
+data_to_plot$Status <- statvec
+
+##-----HALMARK-----
+gsea_plot_hall <- ggplot(data_to_plot, aes(reorder(pathway, NES), NES)) +
+  geom_col(aes(fill= Status), alpha=0.75) + scale_fill_manual(values = c("#53A2BE","#BA3B46"), name = "Regulation Status", labels = c("Downregulated", "Upregulated"), breaks = c("Downregulated", "Upregulated")) +
+  coord_flip() +
+  labs(x="Pathway", y="Normalised Enrichment Score (NES)",
+       title= "Hallmark Gene Sets",
+       caption = paste0("p-value < ", thresh)) + theme(plot.title = element_text(hjust = 1)) +
+  theme_bw() + theme(text=element_text(family = "Quicksand")) + theme(legend.position = "none")
+
+
+
+gsea_plot_hall+
+  theme(text=element_text(size=25,  family="Arial MS"))
+
+```
+
+
+# Complex Linear Models
 
 Now we must perform linear model fitting.
 
@@ -787,6 +1874,7 @@ ggplot(data=DEGenes.SG.vs.WC,
   geom_point(data=downmarkers, aes(x=logFC, y=  B), color="#769fca", size=3) + xlab(expression(Log[2] ~ Fold ~ Change)) + ylab("B-Statistic") + theme(text=element_text(family = "Arial", size = 20))
 
 ```
+
 ## Volcano Plot with Gene Lenght
 
 ```{r, message=FALSE, warning=FALSE, results='hide'}
@@ -1131,6 +2219,7 @@ ggplot(data=DEGenes.SG.vs.VEC,
   geom_point(data=downmarkers, aes(x=logFC, y=  B), color="#769fca", size=3) + xlab(expression(Log[2] ~ Fold ~ Change)) + ylab("B-Statistic") + theme(text=element_text(family = "Arial", size = 20))
 
 ```
+
 ## Volcano Plot with Gene Lenght
 
 ```{r, message=FALSE, warning=FALSE, results='hide'}
