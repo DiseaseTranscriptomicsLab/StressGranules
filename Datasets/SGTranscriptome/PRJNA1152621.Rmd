@@ -688,7 +688,7 @@ ggplot(data=DEGenes,
 
 
 write.table(x = DEGenes,
-           file = "~/Projects/StressGranules/SGPAPER/SGvsWC/Rajachandran.txt", sep="\t", col.names = TRUE, row.names = TRUE, quote=FALSE)
+           file = "~/Projects/StressGranules/SGPAPER/SGvsWC/Rajachandran_WT.txt", sep="\t", col.names = TRUE, row.names = TRUE, quote=FALSE)
 ```
 ## Volcano Plot with Gene Length
 
@@ -917,6 +917,8 @@ ggplot(data=DEGenes,
   geom_label_repel(downmarkers[1:ndegs,] , mapping=aes(label=row.names(downmarkers)[1:ndegs]),size=4,point.padding=-0.5, color="#03256C",max.overlaps = 20, fontface="italic")+
   theme(text=element_text(size=15,  family="Arial MS"))
 
+write.table(x = DEGenes,
+           file = "~/Projects/StressGranules/SGPAPER/SGvsWC/Rajachandran_KO.txt", sep="\t", col.names = TRUE, row.names = TRUE, quote=FALSE)
 ```
 
 ## Volcano Plot with Gene Length
