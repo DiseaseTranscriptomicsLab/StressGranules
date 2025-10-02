@@ -17,7 +17,7 @@ This repository contains all analyses and code associated with our study on stre
 - **`Files/`**  
   Includes reference and result files:
   - Ensembl gene length file
-  - Defined SG signatures: `SG1` and `SG2`
+  - Defined SG signatures: `SG1`
   - Purified whole-cell and stress granule signals
 
 - **`Simulations/`**  
