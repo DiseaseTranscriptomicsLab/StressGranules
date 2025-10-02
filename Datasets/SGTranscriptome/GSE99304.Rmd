@@ -172,7 +172,7 @@ custom_palette <- qualitative_hcl(2, palette = "Pastel")
 custom_palette <- sample(custom_palette, 2)
 
 # Use SampleColouring from metadata
-SampleColouring <- c("SG", "SG", "SG", "Bulk", "Bulk", "Bulk")
+SampleColouring <- c("SG", "SG", "SG", "WC", "WC", "WC")
 
 # Build cumulative counts
 final <- sapply(1:ncol(read.counts), function(i) {
@@ -209,20 +209,25 @@ trial <- merge(orderfinal[, c("Sample", "value")], finalmelt, by = "Sample", suf
 trial$percent <- (trial$value.current / trial$value.total) * 100
 trial$SampleColouring <- rep(SampleColouring, each = nrow(final))
 
-ggplot(data = trial, aes(x = genes, y = percent, group = Sample, color = SampleColouring)) +
+compplot <- ggplot(data = trial, aes(x = genes, y = percent, group = Sample, color = SampleColouring)) +
   geom_line() +
   geom_hline(yintercept = 50, linetype = "dashed") +
-  scale_color_manual(values = custom_palette, name = "Cell Line") +
+  scale_colour_manual(values = c("#53A2BE","#BA3B46"), name = "Sample Type", labels = c("WC", "SG"),breaks = c("WC","SG")) +
   xlab("Number of Genes Covered") +
-  ylab("Number of Reads (%)") +
-  xlim(0, 20000) +
+  ylab("Number of Reads (%)") + 
+  xlim(0, 5000) +
   theme_bw() +
   theme(
     axis.line = element_line(colour = "black"),
     panel.grid.minor = element_blank(),
     panel.border = element_blank(),
     panel.background = element_blank()
-  )
+  )+
+  theme(text=element_text(size=20,  family="Arial MS")) + theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(),legend.position = c(0.7, 0.3))
+
+png("~/Projects/StressGranules/SGPAPER/Images/PNG/Fig2A.png", width = 7, height=4, units = "in", res=300)
+compplot
+dev.off()
 ```
 
 As we can see in these plots, even though there is a sample type with lower complexity (Bulk samples), in this case there are no individual sample outliers in terms of complexity or read depth. Excellent!
@@ -979,6 +984,8 @@ colnames(dffordensy) <- c("Sample", "Gene", "Expression")
 This time, on the filtration, I filter by sample type. My SpinSim pipeline leads to a few outliers (some very low expressed genes), which would mess with the normalisation.
 
 ```{r}
+MitoGenes <- fread("~/MitoGenes.txt", header = FALSE)[[1]]
+
 filterednew <- subset(SG_City, alternew>3.5)
 filterednew.bu <- subset(SG_City, alternew.bu>2.75)
 filterednew.rsg <- subset(SG_City, alternew.rsg>2.75)
@@ -994,7 +1001,7 @@ ggplot(falternew, aes(x=falternew)) + geom_density() + theme_bw() + ylab("Events
         panel.background = element_blank())
 
 #lets save the genes which we maintain
-impgenes <- c(row.names(falternew))
+impgenes <- c(row.names(falternew), MitoGenes)
 impgenes.bu <- c(row.names(filterednew.bu))
 impgenes.rsg <- c(row.names(filterednew.rsg))
 impgenes.ssg <- c(row.names(filterednew.ssg))
@@ -1189,8 +1196,8 @@ ndegs <- 20
 
 ```{r, results='hide', warning=FALSE, message=FALSE}
 
-# write.table(x = DEGenes,
-#             file = "~/Projects/StressGranules/SGPAPER/RealSGs/RealAkhong.txt", sep="\t", col.names = TRUE, row.names = TRUE, quote=FALSE)
+write.table(x = DEGenes,
+            file = "~/Projects/StressGranules/SGPAPER/RealSGs/RealAkhong.txt", sep="\t", col.names = TRUE, row.names = TRUE, quote=FALSE)
 
 
 upmarkers <- as.data.frame(DEGenes[DEGenes$logFC>2 & DEGenes$B>10,] )

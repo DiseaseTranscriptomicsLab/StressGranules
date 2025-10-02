@@ -605,6 +605,7 @@ ggplot(alternew, aes(x=alternew)) + geom_density() + theme_bw() + geom_vline(xin
 ### ***After Filtration***
 
 ```{r}
+MitoGenes <- fread("~/MitoGenes.txt", header = FALSE)[[1]]
 filterednew <- subset(read.counts, alternew>3.75)
 
 
@@ -618,7 +619,7 @@ ggplot(falternew, aes(x=falternew)) + geom_density() + theme_bw() + ylab("Events
         panel.background = element_blank())
 
 #lets save the genes which we maintain
-impgenes <- c(row.names(falternew))
+impgenes <- c(row.names(falternew), MitoGenes)
 
 
 #Now we need to select only the rows which have those genes.
@@ -852,7 +853,7 @@ Now I will directly compare the 3 granule types to the whole cell.
 
 ## Linear Models
 
-Now we must perform linear model fitting. Once more, we will have 4, one for each matrix we previously designed.
+Now we must perform linear model fitting.
 
 ```{r}
 fitted <- lmFit(y, mm)
@@ -2305,6 +2306,975 @@ ggplot(tstable, aes(y=dc_t, x=(faps_t))) + geom_point(aes(color=log10(Length)), 
 ```
 
 As we can see, they are super different from each other, even when controlling for other variables. That said, perhaps PBs really to change a ton between stressed and unstressed states. Until we have data from stressed PBs isolated by FAPS, we will never be sure.
+
+
+# Comparing Fanci SGs with DC SGs
+
+
+# Direct Comparison with Other Samples
+
+Above, the datasets were analysed individually, and then I was "checking the signal". To control for normalisation and filtration, I decided to repeat the comparison, but first by integrating the datasets.
+
+## Introduction
+```{r}
+pbodies <- read.table("~/Projects/StressGranules/SG_Transcriptome/P_Bodies/alignment_STAR/featureCounts_results.txt", header = T)[,-c(2:6)]
+pbodies <- pbodies[,c(1:4,8:10)]
+
+#From A Khong 2017
+SG <- read.table("~/Projects/StressGranules/SG_Transcriptome/RP_Data_2017/TrimmedSamples/alignment_STAR/featureCounts_results.txt", header=TRUE)[,c(1,7:12)]
+
+ #Get the table of read counts by indicating the path to the file. This file is what we obtained from the running featureCounts.
+fanci <- read.table("~/Projects/StressGranules/SG_Transcriptome/FANCI/TrimmedSamples/alignment_STAR/featureCounts_Results.txt", header = T)[,-c(2:6)]
+
+
+
+granules <- merge(pbodies, SG, by="Geneid")
+raw.read.counts <- merge(granules, fanci, by="Geneid")
+
+
+#Loading up our biomart file, obtained from Ensembl, where we have the equivalence between Ensembl IDs and HGNC names
+biomart <- fread("~/biomart.txt")[,-1]
+
+
+colnames(raw.read.counts)[1] <- "ensembl_gene_id_version"
+colnames(biomart) <- c("ensembl_gene_id_version", "hgnc_symbol")
+eltable <- merge(raw.read.counts,biomart,by = "ensembl_gene_id_version", all= TRUE) #this creates a table with both ensemble ids and HGNC codes.
+
+eltable <- subset(eltable, hgnc_symbol!="")#this removes reads that dont have a corresponding hgnc symbol.
+eltable$ensembl_gene_id_version <- NULL
+read.counts <- eltable %>%
+  group_by(hgnc_symbol) %>%
+  summarise(across(everything(), sum, na.rm = TRUE))
+
+read.counts <- as.data.frame(read.counts)
+
+row.names(read.counts) <- read.counts$hgnc_symbol #changes rownames into hgnc symbols
+read.counts$hgnc_symbol <- NULL
+
+```
+
+
+## Filtration
+
+### ***Before Filtration***
+
+Let us begin with the filtration. Personally, I find that its easier to do visually. I am aware that my filtration is more violent than most. Usually, from RNA-Seq experiments, we commonly obtain bi-modal distributions, with the first mode corresponding to lowly expressed genes. I remove these by cutting just before the second mode. This time, I opted to also observe every sample type by itself.
+
+```{r, warning=FALSE}
+alternew <- log10(rowSums(read.counts))
+alternew <- as.data.frame(alternew)
+
+ggplot(alternew, aes(x=alternew)) + geom_density() + theme_bw() + geom_vline(xintercept = 3.75, linetype = "dashed") + ylab("Events") + xlab("Number of Reads (log10)") +
+  theme(axis.line = element_line(colour = "black"),
+        panel.grid.minor = element_blank(),
+        panel.border = element_blank(),
+        panel.background = element_blank()) + ggtitle("Density of Reads - All Samples")
+```
+
+
+### ***After Filtration***
+
+```{r}
+MitoGenes <- fread("~/MitoGenes.txt", header = FALSE)[[1]]
+filterednew <- subset(read.counts, alternew>3.75)
+
+
+#after cutting, its a good idea to visualize again
+falternew <- log10(rowSums(filterednew))
+falternew <- as.data.frame(falternew)
+ggplot(falternew, aes(x=falternew)) + geom_density() + theme_bw() + ylab("Events") + xlab("Number of Reads (log10)") +
+  theme(axis.line = element_line(colour = "black"),
+        panel.grid.minor = element_blank(),
+        panel.border = element_blank(),
+        panel.background = element_blank())
+
+#lets save the genes which we maintain
+impgenes <- c(row.names(falternew), MitoGenes)
+
+
+#Now we need to select only the rows which have those genes.
+finaltable <- read.counts[row.names(read.counts)%in%impgenes,]
+```
+
+
+## Matrices
+
+Good! Now we can proceed by designing our matrices. 
+
+```{r}
+sampletype <- c(rep("PB",3), rep("WC",3), rep("DC",3),rep("WC",3),rep("FC",12), rep("WC",15))
+g3state <- c(rep("WT",3), rep("WT",3), rep("GFP",3),rep("GFP",3), rep("mCHerry",27))
+forstress <- c(rep("AS",12),rep("UV",3), rep("OS",3),rep("HS",3), rep("AS",3),rep("UV",3), rep("OS",3),rep("HS",3), rep("AS",3), rep("UN",3))
+Celltype <- c(rep("U2-OS",12), rep("HeLa",27))
+
+metadata <- data.frame(Sample=sampletype, G3=g3state, Stress=forstress, Cell=Celltype)
+
+#To be able to use Voom, we must first convert our read count table into a special DGE object.
+D0 <- DGEList(finaltable)
+
+#for the others, we need to select only relevant columns. 
+
+#Then we calculate the normalization factors.
+#Bear in mind this step calculates the normalization factors, but does not normalize itself.
+D0 <- calcNormFactors(D0)
+
+
+#Now we do our matrix itself
+mm <- model.matrix(~0+Sample+G3+Stress+Cell, metadata)
+
+#and now we normalize. This step also turns our counts into log2-counts per million.
+y <- voom(D0, mm, plot = T)
+```
+
+
+## Normalisation
+
+For normalisation I convert the read counts into log2CPMs. Its a good way to visualize how the reads are. 
+
+```{r}
+
+dfforboxy <- finaltable
+
+orderforplots <- sampletype
+colouring <- data.frame(Sample=colnames(dfforboxy), Types=orderforplots)
+dfforboxy <- reshape2::melt(dfforboxy)
+colnames(dfforboxy) <- c("Sample", "Expression")
+dfforboxy <- merge(dfforboxy, colouring, by="Sample")
+prenorm <- ggplot(dfforboxy, aes(x=Sample, y=(log2(Expression+1)), fill=Types)) + geom_boxplot(alpha=0.6) + theme_bw() + ylab("Read Counts (Log2)") + xlab("Samples") + scale_fill_manual(name = "Sample Type", values = c("#43F3D5", "#769fca", "#e88184", "#de425b"), labels=unique(sampletype), breaks =unique(sampletype)) +
+  theme(axis.line = element_line(colour = "black"),
+        panel.grid.minor = element_blank(),
+        panel.border = element_blank(),
+        panel.background = element_blank(),
+        axis.text.x=element_blank(),
+        axis.ticks.x=element_blank(),
+        legend.position = "None") + ggtitle("Prior to Normalisation")
+
+dfforboxy <- y$E
+dfforboxy <- reshape2::melt(dfforboxy)
+dfforboxy <- dfforboxy[,-1]
+colnames(dfforboxy) <- c("Sample", "Expression")
+dfforboxy <- merge(dfforboxy, colouring, by="Sample")
+postnorm <- ggplot(dfforboxy, aes(x=Sample, y=Expression, fill=Types)) + geom_boxplot(alpha=0.6) + theme_bw() + ylab("Read Counts (Log2CPM)") + xlab("Samples") + scale_fill_manual(name = "Sample Type", values = c("#43F3D5", "#769fca", "#e88184", "#de425b"), labels=unique(sampletype), breaks =unique(sampletype)) +
+  theme(axis.line = element_line(colour = "black"),
+        panel.grid.minor = element_blank(),
+        panel.border = element_blank(),
+        panel.background = element_blank(),
+        axis.text.x=element_blank(),
+        axis.ticks.x=element_blank(),
+        legend.position = "None") + ggtitle("After Normalisation")
+
+ggarrange(prenorm, postnorm, nrow=1)
+
+```
+
+
+## PCA
+
+```{r}
+
+# Define color palette
+custom_palette <- qualitative_hcl(5, palette = "Pastel")
+custom_palette <- sample(custom_palette, 5)
+
+#This prepares my data for the PCA
+dfforpca <- y$E
+dfforpca <- t(dfforpca)
+dfforpca <- as.data.frame(dfforpca) # needs to be a data.frame
+dfforpca <- apply(dfforpca, 2, as.numeric) # Ensure numeric
+dfforpca <- as.data.frame(dfforpca) # still needs to be a data.frame
+
+dfforpca$Sample <- sampletype
+dfforpca$G3 <- g3state
+dfforpca$Stress <- forstress
+dfforpca$Cell <- Celltype
+
+# PCA computation itself. I do one PCA for each variable I want to see.
+pca_res <- prcomp(dfforpca[, 1:(ncol(dfforpca)-4)], scale = FALSE)
+
+p_Sample <- autoplot(pca_res, data = dfforpca, x = 1, y = 2, colour = "Sample", size = 8) +
+  theme_bw() +
+  scale_colour_manual(name = "Sample", values = custom_palette) +
+  ggtitle("PCA - Coloured by Sample") +
+  theme(plot.title = element_text(hjust = 0.5),
+        axis.line = element_line(colour = "black"),
+        panel.grid.minor = element_blank(),
+        panel.border = element_blank(),
+        panel.background = element_blank())
+
+p_g3 <- autoplot(pca_res, data = dfforpca, x = 1, y = 2, colour = "G3", size = 8) +
+  theme_bw() +
+  scale_colour_manual(name = "G3", values = custom_palette) +
+  ggtitle("PCA - Coloured by G3") +
+  theme(plot.title = element_text(hjust = 0.5),
+        axis.line = element_line(colour = "black"),
+        panel.grid.minor = element_blank(),
+        panel.border = element_blank(),
+        panel.background = element_blank())
+
+p_Stress <- autoplot(pca_res, data = dfforpca, x = 1, y = 2, colour = "Stress", size = 8) +
+  theme_bw() +
+  scale_colour_manual(name = "Stress", values = custom_palette) +
+  ggtitle("PCA - Coloured by Stress") +
+  theme(plot.title = element_text(hjust = 0.5),
+        axis.line = element_line(colour = "black"),
+        panel.grid.minor = element_blank(),
+        panel.border = element_blank(),
+        panel.background = element_blank())
+
+p_Cell <- autoplot(pca_res, data = dfforpca, x = 1, y = 2, colour = "Cell", size = 8) +
+  theme_bw() +
+  scale_colour_manual(name = "Cell", values = custom_palette) +
+  ggtitle("PCA - Coloured by Cell") +
+  theme(plot.title = element_text(hjust = 0.5),
+        axis.line = element_line(colour = "black"),
+        panel.grid.minor = element_blank(),
+        panel.border = element_blank(),
+        panel.background = element_blank())
+
+p_Sample
+p_g3
+p_Stress
+p_Cell
+
+#in case you want to see most important genes for PCA yourself
+contribs1 <- pca_res$rotation[,1]
+contribs2 <- pca_res$rotation[,2]
+
+#These are the biggest contributors to the PCA1 (right side)
+(pos1genes <- sort(contribs1, decreasing=T)[1:10])
+#These are the biggest contributors to the PCA1 (left side)
+(neg1genes <- sort(contribs1, decreasing=F)[1:10])
+
+#These are the biggest contributors to the PCA2 (up side)
+(pos2genes <- sort(contribs2, decreasing=T)[1:10])
+#These are the biggest contributors to the PCA2 (down side)
+(neg2genes <- sort(contribs2, decreasing=F)[1:10])
+
+```
+
+
+As one can observe from the PCAs, our PC1 is mostly explained by G3 status, while our PC2 is explained by sample type. For this particular experiment, in my opinion, G3 status isn't relevant, so I will batch correct for that. 
+
+
+
+## Batch Effect Correction
+
+```{r, warning=FALSE}
+metadata <- data.frame(Sample=sampletype, G3=g3state, Stress=forstress, Cell=Celltype)
+#This is the code I used to correct batch effect. It is based on the one we used in Schneider et al. (2024), aka voyAGEr.
+batch_cols <- c("G3", "Stress", "Cell") #We define which variable we want to treat as batch effects
+metadata_cols <- c("Sample") #And those we dont want to treat as such
+#This creates a new matrix with all our variables of interest
+mmbatch <- model.matrix(reformulate(paste0("~0 + ",paste0( batch_cols,collapse = " + "))), data=metadata)
+mmkeep <- model.matrix(reformulate(paste0("~0 + ",paste0( metadata_cols,collapse =  "+" ))), data=metadata)
+mm <- cbind(mmkeep,mmbatch)
+#Now, we apply the new model
+D0 <- DGEList(2^y$E) #I use the normalised counts, but these must be "unloged". Hence the 2^
+D0 <- calcNormFactors(D0) 
+y <- voom(D0, mm, plot = F)
+fit <- lmFit(y, mm)
+
+#Basicly, we determine what coefficients are originated from our batch variable, and we remove those across the data
+beta <- fit$coefficients[,-(1:ncol(mmkeep)),drop=FALSE]
+beta[is.na(beta)] <- 0 #In the case of binary variables, one of them wont have "any effect" and will thus be NA. This corrects for that step.
+corrcounts_v1 <- as.matrix(y$E) - beta %*% t(mmbatch)
+offset <- apply(corrcounts_v1,1,min) - apply(y$E,1,min) #This gives the offset itself that needs to be applied
+corrcounts_v1 <- as.data.frame(corrcounts_v1-offset)
+corrcounts_v1 <- 2^corrcounts_v1 #I prefer to unlog them, to have a dataframe of non-log CPMs, in case I need.
+```
+
+```{r}
+
+# Now we simply generate new log CPM expression values, starting from the correct expression values.
+mm <- model.matrix(~0+Sample, metadata) 
+y <- voom(corrcounts_v1, mm, plot = T)
+
+#This prepares my data for the PCA
+dfforpca <- y$E
+dfforpca <- t(dfforpca)
+dfforpca <- as.data.frame(dfforpca) # needs to be a data.frame
+dfforpca <- apply(dfforpca, 2, as.numeric) # Ensure numeric
+dfforpca <- as.data.frame(dfforpca) # still needs to be a data.frame
+
+dfforpca$Sample <- sampletype
+dfforpca$G3 <- g3state
+dfforpca$Stress <- forstress
+dfforpca$Cell <- Celltype
+
+# PCA computation itself. I do one PCA for each variable I want to see.
+pca_res <- prcomp(dfforpca[, 1:(ncol(dfforpca)-4)], scale = FALSE)
+
+p_Sample <- autoplot(pca_res, data = dfforpca, x = 1, y = 2, colour = "Sample", size = 8) +
+  theme_bw() +
+  scale_colour_manual(name = "Sample", values = custom_palette) +
+  ggtitle("PCA - Coloured by Sample") +
+  theme(plot.title = element_text(hjust = 0.5),
+        axis.line = element_line(colour = "black"),
+        panel.grid.minor = element_blank(),
+        panel.border = element_blank(),
+        panel.background = element_blank())
+
+p_g3 <- autoplot(pca_res, data = dfforpca, x = 1, y = 2, colour = "G3", size = 8) +
+  theme_bw() +
+  scale_colour_manual(name = "G3", values = custom_palette) +
+  ggtitle("PCA - Coloured by G3") +
+  theme(plot.title = element_text(hjust = 0.5),
+        axis.line = element_line(colour = "black"),
+        panel.grid.minor = element_blank(),
+        panel.border = element_blank(),
+        panel.background = element_blank())
+
+p_Stress <- autoplot(pca_res, data = dfforpca, x = 1, y = 2, colour = "Stress", size = 8) +
+  theme_bw() +
+  scale_colour_manual(name = "Stress", values = custom_palette) +
+  ggtitle("PCA - Coloured by Stress") +
+  theme(plot.title = element_text(hjust = 0.5),
+        axis.line = element_line(colour = "black"),
+        panel.grid.minor = element_blank(),
+        panel.border = element_blank(),
+        panel.background = element_blank())
+
+p_Cell <- autoplot(pca_res, data = dfforpca, x = 1, y = 2, colour = "Cell", size = 8) +
+  theme_bw() +
+  scale_colour_manual(name = "Cell", values = custom_palette) +
+  ggtitle("PCA - Coloured by Cell") +
+  theme(plot.title = element_text(hjust = 0.5),
+        axis.line = element_line(colour = "black"),
+        panel.grid.minor = element_blank(),
+        panel.border = element_blank(),
+        panel.background = element_blank())
+
+p_Sample
+p_g3
+p_Stress
+p_Cell
+
+#in case you want to see most important genes for PCA yourself
+contribs1 <- pca_res$rotation[,1]
+contribs2 <- pca_res$rotation[,2]
+
+#These are the biggest contributors to the PCA1 (right side)
+(pos1genes <- sort(contribs1, decreasing=T)[1:10])
+#These are the biggest contributors to the PCA1 (left side)
+(neg1genes <- sort(contribs1, decreasing=F)[1:10])
+
+#These are the biggest contributors to the PCA2 (up side)
+(pos2genes <- sort(contribs2, decreasing=T)[1:10])
+#These are the biggest contributors to the PCA2 (down side)
+(neg2genes <- sort(contribs2, decreasing=F)[1:10])
+
+```
+After batch correction, as one can observe from the PCAs, our PC1 is now explained by sample type.
+
+
+Now I will directly compare the 3 granule types to the whole cell.
+
+# PB vs SG DC
+
+## Linear Models
+
+Now we must perform linear model fitting.
+
+```{r}
+fitted <- lmFit(y, mm)
+head(coef(fitted))
+
+#next we measure contrasts between groups (log-fold change is obtained from these fitted linear models)
+contr<- makeContrasts(SampleDC         - SampleWC, levels = colnames(coef(fitted)))
+
+#next we estimate the contrast for each gene
+tmp <- contrasts.fit(fitted, contr)
+
+
+#use empirical bayes smoothing of standard erros (shrinks extreme standard erros)
+tmp <- eBayes(tmp)
+top.table <- topTable(tmp, sort.by = "logFC", n = Inf)
+DEGenes <- top.table
+ndegs=20
+```
+
+## Volcano
+
+```{r, results='hide', warning=FALSE, message=FALSE}
+
+upmarkers <- as.data.frame(DEGenes[DEGenes$logFC>1.5 & DEGenes$B>10,] )
+downmarkers <- as.data.frame(DEGenes[DEGenes$logFC< -1.5 & DEGenes$B>10,] )
+
+ggplot(data=DEGenes,
+                 aes(x=logFC,
+                     y=  B)) +
+  geom_point(color="#CCCCCC")+
+  theme_bw() +
+  theme(axis.line = element_line(colour = "black"),
+        panel.grid.minor = element_blank(),
+        panel.border = element_blank(),
+        panel.background = element_blank()) +
+  ggtitle("PBody vs Cytoplasm")+
+  theme(plot.title = element_text(hjust = 0.5)) +
+  geom_label_repel(upmarkers[1:ndegs,] , mapping=aes(label=row.names(upmarkers)[1:ndegs]),size=3,point.padding=-0.5, color="#769fca",max.overlaps = 20)+
+  geom_label_repel(downmarkers[1:ndegs,] , mapping=aes(label=row.names(downmarkers)[1:ndegs]),size=3,point.padding=-0.5, color="#a2d1e6",max.overlaps = 20)+
+  geom_point(data=upmarkers, aes(x=logFC, y=  B), color="#769fca")+
+  geom_point(data=downmarkers, aes(x=logFC, y=  B), color="#a2d1e6")
+
+dc_t <- data.frame(Gene=row.names(DEGenes), dc_t=DEGenes$t)
+```
+
+
+# PB vs SG Fanci
+
+## Linear Models
+
+Now we must perform linear model fitting.
+
+```{r}
+fitted <- lmFit(y, mm)
+head(coef(fitted))
+
+#next we measure contrasts between groups (log-fold change is obtained from these fitted linear models)
+contr<- makeContrasts(SampleFC         - SampleWC, levels = colnames(coef(fitted)))
+
+#next we estimate the contrast for each gene
+tmp <- contrasts.fit(fitted, contr)
+
+
+#use empirical bayes smoothing of standard erros (shrinks extreme standard erros)
+tmp <- eBayes(tmp)
+top.table <- topTable(tmp, sort.by = "logFC", n = Inf)
+DEGenes <- top.table
+ndegs=20
+```
+
+## Volcano
+
+```{r, results='hide', warning=FALSE, message=FALSE}
+
+upmarkers <- as.data.frame(DEGenes[DEGenes$logFC>1.5 & DEGenes$B>10,] )
+downmarkers <- as.data.frame(DEGenes[DEGenes$logFC< -1.5 & DEGenes$B>10,] )
+
+ggplot(data=DEGenes,
+                 aes(x=logFC,
+                     y=  B)) +
+  geom_point(color="#CCCCCC")+
+  theme_bw() +
+  theme(axis.line = element_line(colour = "black"),
+        panel.grid.minor = element_blank(),
+        panel.border = element_blank(),
+        panel.background = element_blank()) +
+  ggtitle("PBody vs Cytoplasm")+
+  theme(plot.title = element_text(hjust = 0.5)) +
+  geom_label_repel(upmarkers[1:ndegs,] , mapping=aes(label=row.names(upmarkers)[1:ndegs]),size=3,point.padding=-0.5, color="#769fca",max.overlaps = 20)+
+  geom_label_repel(downmarkers[1:ndegs,] , mapping=aes(label=row.names(downmarkers)[1:ndegs]),size=3,point.padding=-0.5, color="#a2d1e6",max.overlaps = 20)+
+  geom_point(data=upmarkers, aes(x=logFC, y=  B), color="#769fca")+
+  geom_point(data=downmarkers, aes(x=logFC, y=  B), color="#a2d1e6")
+
+fc_t <- data.frame(Gene=row.names(DEGenes), fc_t=DEGenes$t)
+```
+
+# Comparisons
+
+Comparing the methods once again.
+
+
+```{r fig.height=6, fig.width=7}
+tstable <- merge(dc_t, fc_t, by="Gene")
+tstable <- merge(tstable, genelength, by="Gene")
+smooth.SG <- lm(dc_t~(fc_t), tstable)
+
+# Calculate the Spearman correlation coefficient
+spearman_corr <- cor(tstable$dc_t, (tstable$fc_t), method = "spearman")
+
+ggplot(tstable, aes(y=dc_t, x=(fc_t))) + geom_point(aes(color=log10(Length)), alpha=0.5, size=5) +   theme_bw()+
+ ylab("DC PB Enrichment (t-stat)") + xlab("FAPS PB Enrichment (t-stat)") + scale_colour_gradient(low="black", high = "Red")+
+  theme(axis.line = element_line(colour = "black"),
+        panel.grid.minor = element_blank(),
+        panel.border = element_blank(),
+        panel.background = element_blank()) +
+  geom_abline(slope=smooth.SG$coefficients[2], intercept = smooth.SG$coefficients[1], linetype = "dashed")+
+  theme(plot.title = element_text(hjust = 0.5))  + ggtitle("PB vs PB Enrichment")+
+  scale_colour_gradient(low="#729EA1", high = "#DB5375")+
+  labs(colour = "RNA Length") + stat_cor(method = "spearman", cor.coef.name = "rho", size=5)+ theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank())+theme(text=element_text(size=15,  family="Arial MS"))
+
+write.table(tstable,"~/Projects/StressGranules/SGPAPER/FAPSvsDC.txt")
+```
+# Only Hela Cells
+
+```{r}
+ #Get the table of read counts by indicating the path to the file. This file is what we obtained from the running featureCounts.
+fanci <- read.table("~/Projects/StressGranules/SG_Transcriptome/FANCI/TrimmedSamples/alignment_STAR/featureCounts_Results.txt", header = T)[,-c(2:6)]
+
+#Loading up our biomart file, obtained from Ensembl, where we have the equivalence between Ensembl IDs and HGNC names
+biomart <- fread("~/biomart.txt")[,-1]
+
+
+colnames(fanci)[1] <- "ensembl_gene_id_version"
+colnames(biomart) <- c("ensembl_gene_id_version", "hgnc_symbol")
+eltable <- merge(fanci,biomart,by = "ensembl_gene_id_version", all= TRUE) #this creates a table with both ensemble ids and HGNC codes.
+
+eltable <- subset(eltable, hgnc_symbol!="")#this removes reads that dont have a corresponding hgnc symbol.
+eltable$ensembl_gene_id_version <- NULL
+read.counts <- eltable %>%
+  group_by(hgnc_symbol) %>%
+  summarise(across(everything(), sum, na.rm = TRUE))
+
+read.counts <- as.data.frame(read.counts)
+read.counts <- read.counts[,c(1,11:13,23:28)]
+
+
+newpbody1 <- fread("~/Projects/StressGranules/SG_Transcriptome/P_Bodies/GSE224752_HEL_Counts.txt")
+colnames(newpbody1) <- c("hgnc_symbol","HPB1", "HPB2", "HCY1", "HCY2")
+
+read.counts1 <- newpbody1 %>%
+  group_by(hgnc_symbol) %>%
+  summarise(across(everything(), sum, na.rm = TRUE))
+
+stress.read.counts <- merge(read.counts, read.counts1, by="hgnc_symbol")
+
+stress.read.counts <- as.data.frame(stress.read.counts)
+row.names(stress.read.counts) <- stress.read.counts$hgnc_symbol
+stress.read.counts$hgnc_symbol <- NULL
+```
+
+
+## Filtration
+
+### ***Before Filtration***
+
+Let us begin with the filtration. Personally, I find that its easier to do visually. I am aware that my filtration is more violent than most. Usually, from RNA-Seq experiments, we commonly obtain bi-modal distributions, with the first mode corresponding to lowly expressed genes. I remove these by cutting just before the second mode. This time, I opted to also observe every sample type by itself.
+
+```{r, warning=FALSE}
+alternew <- log10(rowSums(stress.read.counts))
+alternew <- as.data.frame(alternew)
+
+
+alternew.sg <- log10(rowSums(stress.read.counts[,1:9]))
+alternew.sg <- as.data.frame(alternew.sg)
+
+alternew.pb <- log10(rowSums(stress.read.counts[,10:13]))
+alternew.pb <- as.data.frame(alternew.pb)
+
+
+ggplot(alternew, aes(x=alternew)) + geom_density() + theme_bw() + geom_vline(xintercept = 3.75, linetype = "dashed") + ylab("Events") + xlab("Number of Reads (log10)") +
+  theme(axis.line = element_line(colour = "black"),
+        panel.grid.minor = element_blank(),
+        panel.border = element_blank(),
+        panel.background = element_blank()) + ggtitle("Density of Reads - All Samples")
+
+ggplot(alternew.pb, aes(x=alternew.pb)) + geom_density(fill="#e88184", alpha=0.5) + theme_bw() + geom_vline(xintercept = 3, linetype = "dashed") + ylab("Events") + xlab("Number of Reads (log10)") +
+  theme(axis.line = element_line(colour = "black"),
+        panel.grid.minor = element_blank(),
+        panel.border = element_blank(),
+        panel.background = element_blank()) + ggtitle("Density of Reads - PB Samples")
+
+ggplot(alternew.sg, aes(x=alternew.sg)) + geom_density(fill="#a2d1e6", alpha=0.5) + theme_bw() + geom_vline(xintercept = 3, linetype = "dashed") + ylab("Events") + xlab("Number of Reads (log10)") +
+  theme(axis.line = element_line(colour = "black"),
+        panel.grid.minor = element_blank(),
+        panel.border = element_blank(),
+        panel.background = element_blank()) + ggtitle("Density of Reads - Stress Granules Samples")
+```
+
+
+### ***After Filtration***
+
+```{r}
+filterednew <- subset(stress.read.counts, alternew>3.75)
+filterednew.sg <- subset(stress.read.counts, alternew.sg>3)
+filterednew.pb <- subset(stress.read.counts, alternew.pb>3)
+
+
+#after cutting, its a good idea to visualize again
+falternew <- log10(rowSums(filterednew))
+falternew <- as.data.frame(falternew)
+ggplot(falternew, aes(x=falternew)) + geom_density() + theme_bw() + ylab("Events") + xlab("Number of Reads (log10)") +
+  theme(axis.line = element_line(colour = "black"),
+        panel.grid.minor = element_blank(),
+        panel.border = element_blank(),
+        panel.background = element_blank())
+
+#lets save the genes which we maintain
+impgenes <- c(row.names(falternew))
+impgenes.sg <- c(row.names(filterednew.sg))
+impgenes.pb<- c(row.names(filterednew.pb))
+
+
+#Now we need to select only the rows which have those genes.
+finaltable <- stress.read.counts[row.names(stress.read.counts)%in%impgenes,]
+finaltable <- finaltable[row.names(finaltable)%in%impgenes.sg,]
+finaltable <- finaltable[row.names(finaltable)%in%impgenes.pb,]
+```
+
+
+## Matrices
+
+Good! Now we can proceed by designing our matrices. 
+
+```{r}
+sampletype <- c(rep("SG",3), rep("WC",6), rep("PB",2), rep("WC",2))
+g3state <- c(rep("mCHerry",9), rep("WT",4))
+forstress <- c(rep("AS",3),rep("AS",3), rep("UN",3), rep("UN",4))
+
+
+
+metadata <- data.frame(Sample=sampletype, G3=g3state, Stress=forstress)
+
+#To be able to use Voom, we must first convert our read count table into a special DGE object.
+D0 <- DGEList(finaltable)
+
+#for the others, we need to select only relevant columns. 
+
+#Then we calculate the normalization factors.
+#Bear in mind this step calculates the normalization factors, but does not normalize itself.
+D0 <- calcNormFactors(D0)
+
+
+#Now we do our matrix itself
+mm <- model.matrix(~0+Sample+G3+Stress, metadata)
+
+#and now we normalize. This step also turns our counts into log2-counts per million.
+y <- voom(D0, mm, plot = T)
+```
+
+## Normalisation
+
+For normalisation I convert the read counts into log2CPMs. Its a good way to visualize how the reads are. 
+
+```{r}
+
+dfforboxy <- finaltable
+
+orderforplots <- sampletype
+colouring <- data.frame(Sample=colnames(dfforboxy), Types=orderforplots)
+dfforboxy <- reshape2::melt(dfforboxy)
+colnames(dfforboxy) <- c("Sample", "Expression")
+dfforboxy <- merge(dfforboxy, colouring, by="Sample")
+prenorm <- ggplot(dfforboxy, aes(x=Sample, y=(log2(Expression+1)), fill=Types)) + geom_boxplot(alpha=0.6) + theme_bw() + ylab("Read Counts (Log2)") + xlab("Samples") + scale_fill_manual(name = "Sample Type", values = c("#43F3D5", "#769fca", "#e88184", "#de425b"), labels=unique(sampletype), breaks =unique(sampletype)) +
+  theme(axis.line = element_line(colour = "black"),
+        panel.grid.minor = element_blank(),
+        panel.border = element_blank(),
+        panel.background = element_blank(),
+        axis.text.x=element_blank(),
+        axis.ticks.x=element_blank(),
+        legend.position = "None") + ggtitle("Prior to Normalisation")
+
+dfforboxy <- y$E
+dfforboxy <- reshape2::melt(dfforboxy)
+dfforboxy <- dfforboxy[,-1]
+colnames(dfforboxy) <- c("Sample", "Expression")
+dfforboxy <- merge(dfforboxy, colouring, by="Sample")
+postnorm <- ggplot(dfforboxy, aes(x=Sample, y=Expression, fill=Types)) + geom_boxplot(alpha=0.6) + theme_bw() + ylab("Read Counts (Log2CPM)") + xlab("Samples") + scale_fill_manual(name = "Sample Type", values = c("#43F3D5", "#769fca", "#e88184", "#de425b"), labels=unique(sampletype), breaks =unique(sampletype)) +
+  theme(axis.line = element_line(colour = "black"),
+        panel.grid.minor = element_blank(),
+        panel.border = element_blank(),
+        panel.background = element_blank(),
+        axis.text.x=element_blank(),
+        axis.ticks.x=element_blank(),
+        legend.position = "None") + ggtitle("After Normalisation")
+
+ggarrange(prenorm, postnorm, nrow=1)
+
+```
+
+
+## PCA
+
+```{r}
+
+# Define color palette
+custom_palette <- qualitative_hcl(5, palette = "Pastel")
+custom_palette <- sample(custom_palette, 5)
+
+#This prepares my data for the PCA
+dfforpca <- y$E
+dfforpca <- t(dfforpca)
+dfforpca <- as.data.frame(dfforpca) # needs to be a data.frame
+dfforpca <- apply(dfforpca, 2, as.numeric) # Ensure numeric
+dfforpca <- as.data.frame(dfforpca) # still needs to be a data.frame
+
+dfforpca$Sample <- sampletype
+dfforpca$G3 <- g3state
+dfforpca$Stress <- forstress
+
+# PCA computation itself. I do one PCA for each variable I want to see.
+pca_res <- prcomp(dfforpca[, 1:(ncol(dfforpca)-3)], scale = FALSE)
+
+p_Sample <- autoplot(pca_res, data = dfforpca, x = 1, y = 2, colour = "Sample", size = 8) +
+  theme_bw() +
+  scale_colour_manual(name = "Sample", values = custom_palette) +
+  ggtitle("PCA - Coloured by Sample") +
+  theme(plot.title = element_text(hjust = 0.5),
+        axis.line = element_line(colour = "black"),
+        panel.grid.minor = element_blank(),
+        panel.border = element_blank(),
+        panel.background = element_blank())
+
+p_g3 <- autoplot(pca_res, data = dfforpca, x = 1, y = 2, colour = "G3", size = 8) +
+  theme_bw() +
+  scale_colour_manual(name = "G3", values = custom_palette) +
+  ggtitle("PCA - Coloured by G3") +
+  theme(plot.title = element_text(hjust = 0.5),
+        axis.line = element_line(colour = "black"),
+        panel.grid.minor = element_blank(),
+        panel.border = element_blank(),
+        panel.background = element_blank())
+
+p_Stress <- autoplot(pca_res, data = dfforpca, x = 1, y = 2, colour = "Stress", size = 8) +
+  theme_bw() +
+  scale_colour_manual(name = "Stress", values = custom_palette) +
+  ggtitle("PCA - Coloured by Stress") +
+  theme(plot.title = element_text(hjust = 0.5),
+        axis.line = element_line(colour = "black"),
+        panel.grid.minor = element_blank(),
+        panel.border = element_blank(),
+        panel.background = element_blank())
+
+
+p_Sample
+p_g3
+p_Stress
+
+#in case you want to see most important genes for PCA yourself
+contribs1 <- pca_res$rotation[,1]
+contribs2 <- pca_res$rotation[,2]
+
+#These are the biggest contributors to the PCA1 (right side)
+(pos1genes <- sort(contribs1, decreasing=T)[1:10])
+#These are the biggest contributors to the PCA1 (left side)
+(neg1genes <- sort(contribs1, decreasing=F)[1:10])
+
+#These are the biggest contributors to the PCA2 (up side)
+(pos2genes <- sort(contribs2, decreasing=T)[1:10])
+#These are the biggest contributors to the PCA2 (down side)
+(neg2genes <- sort(contribs2, decreasing=F)[1:10])
+
+```
+## Batch Effect Correction
+
+```{r, warning=FALSE}
+metadata <- data.frame(Sample=sampletype, G3=g3state, Stress=forstress)
+#This is the code I used to correct batch effect. It is based on the one we used in Schneider et al. (2024), aka voyAGEr.
+batch_cols <- c("G3", "Stress") #We define which variable we want to treat as batch effects
+metadata_cols <- c("Sample") #And those we dont want to treat as such
+#This creates a new matrix with all our variables of interest
+mmbatch <- model.matrix(reformulate(paste0("~0 + ",paste0( batch_cols,collapse = " + "))), data=metadata)
+mmkeep <- model.matrix(reformulate(paste0("~0 + ",paste0( metadata_cols,collapse =  "+" ))), data=metadata)
+mm <- cbind(mmkeep,mmbatch)
+#Now, we apply the new model
+D0 <- DGEList(2^y$E) #I use the normalised counts, but these must be "unloged". Hence the 2^
+D0 <- calcNormFactors(D0) 
+y <- voom(D0, mm, plot = F)
+fit <- lmFit(y, mm)
+
+#Basicly, we determine what coefficients are originated from our batch variable, and we remove those across the data
+beta <- fit$coefficients[,-(1:ncol(mmkeep)),drop=FALSE]
+beta[is.na(beta)] <- 0 #In the case of binary variables, one of them wont have "any effect" and will thus be NA. This corrects for that step.
+corrcounts_v1 <- as.matrix(y$E) - beta %*% t(mmbatch)
+offset <- apply(corrcounts_v1,1,min) - apply(y$E,1,min) #This gives the offset itself that needs to be applied
+corrcounts_v1 <- as.data.frame(corrcounts_v1-offset)
+corrcounts_v1 <- 2^corrcounts_v1 #I prefer to unlog them, to have a dataframe of non-log CPMs, in case I need.
+```
+
+```{r}
+
+# Now we simply generate new log CPM expression values, starting from the correct expression values.
+mm <- model.matrix(~0+Sample, metadata) 
+y <- voom(corrcounts_v1, mm, plot = T)
+
+#This prepares my data for the PCA
+dfforpca <- y$E
+dfforpca <- t(dfforpca)
+dfforpca <- as.data.frame(dfforpca) # needs to be a data.frame
+dfforpca <- apply(dfforpca, 2, as.numeric) # Ensure numeric
+dfforpca <- as.data.frame(dfforpca) # still needs to be a data.frame
+
+dfforpca$Sample <- sampletype
+dfforpca$G3 <- g3state
+dfforpca$Stress <- forstress
+
+# PCA computation itself. I do one PCA for each variable I want to see.
+pca_res <- prcomp(dfforpca[, 1:(ncol(dfforpca)-4)], scale = FALSE)
+
+p_Sample <- autoplot(pca_res, data = dfforpca, x = 1, y = 2, colour = "Sample", size = 8) +
+  theme_bw() +
+  scale_colour_manual(name = "Sample", values = custom_palette) +
+  ggtitle("PCA - Coloured by Sample") +
+  theme(plot.title = element_text(hjust = 0.5),
+        axis.line = element_line(colour = "black"),
+        panel.grid.minor = element_blank(),
+        panel.border = element_blank(),
+        panel.background = element_blank())
+
+p_g3 <- autoplot(pca_res, data = dfforpca, x = 1, y = 2, colour = "G3", size = 8) +
+  theme_bw() +
+  scale_colour_manual(name = "G3", values = custom_palette) +
+  ggtitle("PCA - Coloured by G3") +
+  theme(plot.title = element_text(hjust = 0.5),
+        axis.line = element_line(colour = "black"),
+        panel.grid.minor = element_blank(),
+        panel.border = element_blank(),
+        panel.background = element_blank())
+
+p_Stress <- autoplot(pca_res, data = dfforpca, x = 1, y = 2, colour = "Stress", size = 8) +
+  theme_bw() +
+  scale_colour_manual(name = "Stress", values = custom_palette) +
+  ggtitle("PCA - Coloured by Stress") +
+  theme(plot.title = element_text(hjust = 0.5),
+        axis.line = element_line(colour = "black"),
+        panel.grid.minor = element_blank(),
+        panel.border = element_blank(),
+        panel.background = element_blank())
+
+
+p_Sample
+p_g3
+p_Stress
+
+#in case you want to see most important genes for PCA yourself
+contribs1 <- pca_res$rotation[,1]
+contribs2 <- pca_res$rotation[,2]
+
+#These are the biggest contributors to the PCA1 (right side)
+(pos1genes <- sort(contribs1, decreasing=T)[1:10])
+#These are the biggest contributors to the PCA1 (left side)
+(neg1genes <- sort(contribs1, decreasing=F)[1:10])
+
+#These are the biggest contributors to the PCA2 (up side)
+(pos2genes <- sort(contribs2, decreasing=T)[1:10])
+#These are the biggest contributors to the PCA2 (down side)
+(neg2genes <- sort(contribs2, decreasing=F)[1:10])
+
+```
+
+After batch correction, as one can observe from the PCAs, our PC1 is now explained by sample type.
+
+
+Now I will directly compare the 3 granule types to the whole cell.
+
+# PB vs SG DC
+
+## Linear Models
+
+Now we must perform linear model fitting.
+
+```{r}
+fitted <- lmFit(y, mm)
+head(coef(fitted))
+
+#next we measure contrasts between groups (log-fold change is obtained from these fitted linear models)
+contr<- makeContrasts(SampleSG          - SampleWC, levels = colnames(coef(fitted)))
+
+#next we estimate the contrast for each gene
+tmp <- contrasts.fit(fitted, contr)
+
+
+#use empirical bayes smoothing of standard erros (shrinks extreme standard erros)
+tmp <- eBayes(tmp)
+top.table <- topTable(tmp, sort.by = "logFC", n = Inf)
+DEGenes <- top.table
+ndegs=20
+```
+
+## Volcano
+
+```{r, results='hide', warning=FALSE, message=FALSE}
+
+upmarkers <- as.data.frame(DEGenes[DEGenes$logFC>1.5 & DEGenes$B>10,] )
+downmarkers <- as.data.frame(DEGenes[DEGenes$logFC< -1.5 & DEGenes$B>10,] )
+
+ggplot(data=DEGenes,
+                 aes(x=logFC,
+                     y=  B)) +
+  geom_point(color="#CCCCCC")+
+  theme_bw() +
+  theme(axis.line = element_line(colour = "black"),
+        panel.grid.minor = element_blank(),
+        panel.border = element_blank(),
+        panel.background = element_blank()) +
+  ggtitle("PBody vs Cytoplasm")+
+  theme(plot.title = element_text(hjust = 0.5)) +
+  geom_label_repel(upmarkers[1:ndegs,] , mapping=aes(label=row.names(upmarkers)[1:ndegs]),size=3,point.padding=-0.5, color="#769fca",max.overlaps = 20)+
+  geom_label_repel(downmarkers[1:ndegs,] , mapping=aes(label=row.names(downmarkers)[1:ndegs]),size=3,point.padding=-0.5, color="#a2d1e6",max.overlaps = 20)+
+  geom_point(data=upmarkers, aes(x=logFC, y=  B), color="#769fca")+
+  geom_point(data=downmarkers, aes(x=logFC, y=  B), color="#a2d1e6")
+
+sg_t <- data.frame(Gene=row.names(DEGenes), sg_t=DEGenes$t)
+```
+
+
+# PB vs SG Fanci
+
+## Linear Models
+
+Now we must perform linear model fitting.
+
+```{r}
+fitted <- lmFit(y, mm)
+head(coef(fitted))
+
+#next we measure contrasts between groups (log-fold change is obtained from these fitted linear models)
+contr<- makeContrasts(SamplePB           - SampleWC, levels = colnames(coef(fitted)))
+
+#next we estimate the contrast for each gene
+tmp <- contrasts.fit(fitted, contr)
+
+
+#use empirical bayes smoothing of standard erros (shrinks extreme standard erros)
+tmp <- eBayes(tmp)
+top.table <- topTable(tmp, sort.by = "logFC", n = Inf)
+DEGenes <- top.table
+ndegs=20
+```
+
+## Volcano
+
+```{r, results='hide', warning=FALSE, message=FALSE}
+
+upmarkers <- as.data.frame(DEGenes[DEGenes$logFC>1.5 & DEGenes$B>10,] )
+downmarkers <- as.data.frame(DEGenes[DEGenes$logFC< -1.5 & DEGenes$B>10,] )
+
+ggplot(data=DEGenes,
+                 aes(x=logFC,
+                     y=  B)) +
+  geom_point(color="#CCCCCC")+
+  theme_bw() +
+  theme(axis.line = element_line(colour = "black"),
+        panel.grid.minor = element_blank(),
+        panel.border = element_blank(),
+        panel.background = element_blank()) +
+  ggtitle("PBody vs Cytoplasm")+
+  theme(plot.title = element_text(hjust = 0.5)) +
+  geom_label_repel(upmarkers[1:ndegs,] , mapping=aes(label=row.names(upmarkers)[1:ndegs]),size=3,point.padding=-0.5, color="#769fca",max.overlaps = 20)+
+  geom_label_repel(downmarkers[1:ndegs,] , mapping=aes(label=row.names(downmarkers)[1:ndegs]),size=3,point.padding=-0.5, color="#a2d1e6",max.overlaps = 20)+
+  geom_point(data=upmarkers, aes(x=logFC, y=  B), color="#769fca")+
+  geom_point(data=downmarkers, aes(x=logFC, y=  B), color="#a2d1e6")
+
+pb_t <- data.frame(Gene=row.names(DEGenes), pb_t=DEGenes$t)
+```
+# Comparisons
+
+Comparing the methods once again.
+
+
+```{r fig.height=6, fig.width=7}
+
+tstable <- merge(sg_t, pb_t, by="Gene")
+tstable <- merge(tstable, genelength, by="Gene")
+smooth.SG <- lm(sg_t~(pb_t), tstable)
+
+# Calculate the Spearman correlation coefficient
+spearman_corr <- cor(tstable$sg_t, (tstable$pb_t), method = "spearman")
+
+ggplot(tstable, aes(y=sg_t, x=(pb_t))) + geom_point(aes(color=log10(Length)), alpha=0.5, size=5) +   theme_bw()+
+ ylab("DC PB Enrichment (t-stat)") + xlab("FAPS PB Enrichment (t-stat)") + scale_colour_gradient(low="black", high = "Red")+
+  theme(axis.line = element_line(colour = "black"),
+        panel.grid.minor = element_blank(),
+        panel.border = element_blank(),
+        panel.background = element_blank()) +
+  geom_abline(slope=smooth.SG$coefficients[2], intercept = smooth.SG$coefficients[1], linetype = "dashed")+
+  theme(plot.title = element_text(hjust = 0.5))  + ggtitle("PB vs PB Enrichment")+
+  scale_colour_gradient(low="#729EA1", high = "#DB5375")+
+  labs(colour = "RNA Length") + stat_cor(method = "spearman", cor.coef.name = "rho", size=5)+ theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank())+theme(text=element_text(size=15,  family="Arial MS"))
+
+write.table(tstable,"~/Projects/StressGranules/SGPAPER/FAPSPB_batchCor.txt")
+```
 
 # Session Info
 

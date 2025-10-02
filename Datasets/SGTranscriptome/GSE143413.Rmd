@@ -846,7 +846,7 @@ linemarkers <- as.data.frame(signal_df[abs(signal_df$Residuals)>4,])
 cor.test((signal_df$t.y), (signal_df$t.x), method="spearman")
 
 ggplot(signal_df, aes(y=t.y, x=(t.x))) + geom_point(colour="#CCCCCC") +   theme_bw()+ geom_density_2d()+
- ylab("Centrifugation") + xlab("Length") + scale_color_gradient(low="black", high="red")+
+ ylab("SG Signal") + xlab("Nuclear Signal") + scale_color_gradient(low="black", high="red")+
   theme(axis.line = element_line(colour = "black"),
         panel.grid.minor = element_blank(),
         panel.border = element_blank(),

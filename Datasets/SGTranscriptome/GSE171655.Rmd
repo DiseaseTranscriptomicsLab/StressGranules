@@ -219,6 +219,9 @@ I didn't do it this time, but I've maintained the code to filter by sample type.
 
 
 ```{r}
+
+MitoGenes <- fread("~/MitoGenes.txt", header = FALSE)[[1]]
+
 filterednew <- subset(read.counts, alternew>4)
 filterednew.TC <- subset(read.counts, alternew.TC>3)
 filterednew.TS <- subset(read.counts, alternew.TS>3)
@@ -235,7 +238,7 @@ ggplot(falternew, aes(x=falternew)) + geom_density() + theme_bw() + ylab("Events
         panel.background = element_blank())
 
 #lets save the genes which we maintain
-impgenes <- c(row.names(falternew))
+impgenes <- c(row.names(falternew), MitoGenes)
 impgenes.TC <- c(row.names(filterednew.TC))
 impgenes.TS <- c(row.names(filterednew.TS))
 impgenes.SGC <- c(row.names(filterednew.SGC))
@@ -1805,7 +1808,7 @@ ggplot(hallmark.scatter_ak, aes(x=sg, y=size)) + geom_point(color="black", alpha
 
 ```{r}
 Sample <- factor(Sample, levels = c("Total", "SG"))
-mm <- model.matrix(~0+Sample*Stress)
+mm <- model.matrix(~1+Sample*Stress)
 
 D0 <- DGEList(finaltable)
 

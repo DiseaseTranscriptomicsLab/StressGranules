@@ -183,6 +183,8 @@ By seeing the shape of the graph, we can see where we should cut. We have a **bi
 ```{r filtration 2}
 #Here is my filtration. I am aware that my filtration is more violent than most. Usually, from RNA-Seq experiments, we commonly obtain bimodal distributions, with the first mode corresponding to lowly expressed or noisy genes. I remove these by cutting just before the second mode.
 filterednew <- subset(read.counts, alternew>4)
+
+MitoGenes <- fread("~/MitoGenes.txt", header = FALSE)[[1]]
 #after cutting, its a good idea to visualize again
 falternew <- log10(rowSums(filterednew))
 falternew <- as.data.frame(falternew)
@@ -190,7 +192,7 @@ ggplot(falternew, aes(x=falternew)) + geom_density() + theme_bw() + ylab("Events
   theme(axis.line = element_line(colour = "black"),
         panel.grid.minor = element_blank(),
         panel.border = element_blank(),
-        panel.background = element_blank())
+        panel.background = element_blank(), MitoGenes)
 
 #lets save the genes which we maintain
 impgenes <- c(row.names(falternew))

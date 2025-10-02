@@ -10,7 +10,7 @@ output:
     downcute_theme: "chaos"
 ---
 
-# Introduction
+'''''''''# Introduction
 
 In this document, I present all analyses pertaining to the dataset **GSE212380**  
 ([NCBI GEO Link](https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=GSE212380)),  
@@ -1432,6 +1432,9 @@ ggplot(wtvsnt, aes(x=bins, y=(liner.SG)))  + geom_jitter(alpha=0.2) + geom_boxpl
         panel.background = element_blank()) + 
   theme(plot.title = element_text(hjust = 0.5)) 
 
+write.table(x = wtvsnt,
+            file = "~/Projects/StressGranules/SGPAPER/AC4COGDATA.txt", sep="\t", col.names = TRUE, row.names = TRUE, quote=FALSE)
+
 ```
 Enrichment is very similar between WT and ACKO stress granules. Additionally, it seems most of these differences is indeed linked to number of ac4C modifications.
 
@@ -2312,6 +2315,8 @@ ggplot(alternew, aes(x=alternew)) + geom_density() + theme_bw() + geom_vline(xin
 ### ***After Filtration***
 
 ```{r}
+MitoGenes <- fread("~/MitoGenes.txt", header = FALSE)[[1]]
+
 filterednew <- subset(SG_City, alternew>3.25)
 
 #after cutting, its a good idea to visualize again
@@ -2324,7 +2329,7 @@ ggplot(falternew, aes(x=falternew)) + geom_density() + theme_bw() + ylab("Events
         panel.background = element_blank())
 
 #lets save the genes which we maintain
-impgenes <- c(row.names(falternew))
+impgenes <- c(row.names(falternew), MitoGenes)
 
 #Now we need to select only the rows which have those genes.
 finaltable <- SG_City[row.names(SG_City)%in%impgenes,]

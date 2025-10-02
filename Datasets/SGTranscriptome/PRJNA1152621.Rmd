@@ -240,6 +240,8 @@ By seeing the shape of the graph, we can see where we should cut. We have a **bi
 
 ```{r}
 #Here is my filtration. I am aware that my filtration is more violent than most. Usually, from RNA-Seq experiments, we commonly obtain bimodal distributions, with the first mode corresponding to lowly expressed or noisy genes. I remove these by cutting just before the second mode.
+
+MitoGenes <- fread("~/MitoGenes.txt", header = FALSE)[[1]]
 filterednew <- subset(read.counts, alternew>3.5)
 #after cutting, its a good idea to visualize again
 falternew <- log10(rowSums(filterednew))
@@ -251,7 +253,7 @@ ggplot(falternew, aes(x=falternew)) + geom_density() + theme_bw() + ylab("Events
         panel.background = element_blank())
 
 #lets save the genes which we maintain
-impgenes <- c(row.names(falternew))
+impgenes <- c(row.names(falternew), MitoGenes)
 
 #Now we need to select only the rows which have those genes.
 finaltable <- read.counts[row.names(read.counts)%in%impgenes,]
@@ -1840,7 +1842,29 @@ Sample <- c(rep("WC",3), rep("Nuc",2), rep("WC",2), rep("SG",3), rep("SG",3), re
 
 m6A <- c(rep("KO",3), rep("WT",2), rep("WT",2), rep("KO",3), rep("WT",3), rep("WT",3))
 
-mm <- model.matrix(~0+Stress+Sample+m6A)
+metadata <- data.frame(Stress=Stress,Sample=Sample, Metil=m6A)
+
+
+batch_cols <- c("Stress", "Metil")
+metadata_cols <- c("Sample")
+mmbatch <- model.matrix(reformulate(paste0("~0 + ",paste0( batch_cols,collapse = " + "))), data=metadata)
+mmkeep <- model.matrix(reformulate(paste0("~0 + ",paste0( metadata_cols,collapse =  "+" ))), data=metadata)
+mm <- cbind(mmkeep,mmbatch)
+D0 <- DGEList(2^y$E) #senescence_normcounts
+D0 <- calcNormFactors(D0)
+y <- voom(D0, mm, plot = F)
+fit <- lmFit(y, mm)
+beta <- fit$coefficients[,-(1:ncol(mmkeep)),drop=FALSE]
+#beta <- fit$coefficients
+beta[is.na(beta)] <- 0
+corrcounts_v1 <- as.matrix(y$E) - beta %*% t(mmbatch)
+offset <- apply(corrcounts_v1,1,min) - apply(y$E,1,min)
+corrcounts_v1 <- as.data.frame(corrcounts_v1-offset)
+corrcounts_v1 <- 2^corrcounts_v1
+y <- voom(corrcounts_v1, mm, plot = T)
+
+
+mm <- model.matrix(~0+Sample)
 
 fitted <- lmFit(y, mm)
 head(coef(fitted))
@@ -1864,6 +1888,10 @@ ndegs=20
 ## Volcano Plot
 
 ```{r, results='hide', warning=FALSE, message=FALSE}
+
+write.table(x = DEGenes,
+          file = "~/Projects/StressGranules/SGPAPER/RealSGs/Photon.txt", sep="\t", col.names = TRUE, row.names = TRUE, quote=FALSE)
+
 upmarkers <- as.data.frame(DEGenes[DEGenes$logFC>3 & DEGenes$B>10,] )
 downmarkers <- as.data.frame(DEGenes[DEGenes$logFC< -3 & DEGenes$B>10,] )
 

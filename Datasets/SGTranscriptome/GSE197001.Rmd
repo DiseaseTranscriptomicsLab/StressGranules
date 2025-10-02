@@ -376,6 +376,8 @@ I didn't do it this time, but I've maintained the code to filter by sample type.
 
 
 ```{r}
+MitoGenes <- fread("~/MitoGenes.txt", header = FALSE)[[1]]
+
 filterednew <- subset(read.counts, alternew>3.5)
 filterednew.WC <- subset(read.counts, alternew.WC>3)
 filterednew.BP <- subset(read.counts, alternew.BP>3)
@@ -391,7 +393,7 @@ ggplot(falternew, aes(x=falternew)) + geom_density() + theme_bw() + ylab("Events
         panel.background = element_blank())
 
 #lets save the genes which we maintain
-impgenes <- c(row.names(falternew))
+impgenes <- c(row.names(falternew), MitoGenes)
 impgenes.WC <- c(row.names(filterednew.WC))
 impgenes.BP <- c(row.names(filterednew.BP))
 impgenes.SG <- c(row.names(filterednew.SG))

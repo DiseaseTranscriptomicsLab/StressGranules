@@ -507,17 +507,16 @@ We get no significance. Either way, the genes with biggest logFC are stress rela
 
 ```{r}
 sampletype <- c(rep("Input",2),rep("Pull",2),rep("Input",2),rep("Pull",2),rep("Input",2),rep("Pull",2),rep("Input",2),rep("Pull",2))
-StressType <- c(rep("60",4),rep("20",4),rep("10",4),rep("0",4))
-SGPres <- c(rep("No",2), rep("Yes",2), rep("No",2),rep("Yes",2),rep("No",2),rep("No",2),rep("No",2),rep("No",2))
+StressType <- c(rep("Yes",4),rep("Yes",4),rep("No",4),rep("No",4))
 
-mm <- model.matrix(~0+sampletype+StressType+SGPres)
+mm <- model.matrix(~1+sampletype*StressType)
 fitted <- lmFit(y$E, mm)
 head(coef(fitted))
 
 tmps <- eBayes(fitted)
 
 # 
-top.table <- topTable(tmps,6,  sort.by = "logFC", n=Inf)
+top.table <- topTable(tmps,4,  sort.by = "logFC", n=Inf)
 DEGenes <- top.table
 ndegs=20
 ```
@@ -547,57 +546,6 @@ ggplot(data=DEGenes,
   theme(text=element_text(size=15,  family="Arial MS"))
 ```
 Once again, we have no significance. Once again, this is probably because of input samples.
-
-# Stress as a numerical variable
-
-In addition to coding stress as a numerical variable, I also opted to remove all Input samples from this part.
-
-```{r}
-sampletype <- c(rep("Input",2),rep("Pull",2),rep("Input",2),rep("Pull",2),rep("Input",2),rep("Pull",2),rep("Input",2),rep("Pull",2))[-c(1,2,5,6,9,10,13,14)]
-StressType <- c(rep(60,4),rep(20,4),rep(10,4),rep(0,4))[-c(1,2,5,6,9,10,13,14)]
-SGPres <- c(rep("No",2), rep("Yes",2), rep("No",2),rep("Yes",2),rep("No",2),rep("No",2),rep("No",2),rep("No",2))[-c(1,2,5,6,9,10,13,14)]
-
-mm <- model.matrix(~0+StressType+SGPres)
-fitted <- lmFit(y$E[,-c(1,2,5,6,9,10,13,14)], mm)
-head(coef(fitted))
-
-
-SG <- makeContrasts(SGPresYes - SGPresNo, levels = colnames(coef(fitted)))
-tmp_SG <- contrasts.fit(fitted, SG)
-tmp_SG <- eBayes(tmp_SG)
-
-# 
-top_SG <- topTable(tmp_SG,  sort.by = "logFC", n=Inf)
-DEGenes_SG <- top_SG
-ndegs=20
-```
-
-## Volcano Plots
-
-```{r, results='hide', warning=FALSE, message=FALSE}
-
-upmarkers <- as.data.frame(DEGenes_SG[DEGenes_SG$logFC>2 & DEGenes_SG$adj.P.Val<0.05,] )
-downmarkers <- as.data.frame(DEGenes_SG[DEGenes_SG$logFC< -2 & DEGenes_SG$adj.P.Val<0.05,] )
-
-ggplot(data=DEGenes_SG,
-                 aes(x=logFC,
-                     y=  B)) +
-  geom_point(color="#CCCCCC")+ geom_vline(xintercept = -0.5, linetype="dashed")+geom_vline(xintercept = 0.5, linetype="dashed")+
-  theme_bw() + ylab("B-Statistic")+xlab("Log Fold-Change")+
-  theme(axis.line = element_line(colour = "black"),
-        panel.grid.minor = element_blank(),
-        panel.border = element_blank(),
-        panel.background = element_blank()) +
-  ggtitle("SG vs WC")+
-  theme(plot.title = element_text(hjust = 0.5), plot.subtitle = element_text(hjust = 0.5)) + 
-  geom_point(data=upmarkers, aes(x=logFC, y=  B), color="#A10702",size=4)+
-  geom_point(data=downmarkers, aes(x=logFC, y=  B), color="#03256C",size=4)+
-  geom_label_repel(upmarkers[1:ndegs,] , mapping=aes(label=row.names(upmarkers)[1:ndegs]),size=4,point.padding=-0.5, color="#A10702",max.overlaps = 20, fontface="italic")+
-  geom_label_repel(downmarkers[1:ndegs,] , mapping=aes(label=row.names(downmarkers)[1:ndegs]),size=4,point.padding=-0.5, color="#03256C",max.overlaps = 20, fontface="italic")+
-  theme(text=element_text(size=15,  family="Arial MS"))
-```
-
-We also have no significance.
 
 # Session Info
 

@@ -1,0 +1,650 @@
+---
+title: "Analyses of GSE245209"
+subtitle: "Mapping RNA-protein interactions with subcellular resolution using colocalization CLIP."
+author: 
+  - name: "Alexandre Kaizeler^[Disease Transcriptomics Group, Gulbenkian Institute of Molecular Medicine]"
+    email: alexandreafonso@gimm.pt
+date: "`r format(Sys.time(), '%d %B %Y')`"
+output: 
+  rmdformats::downcute:
+    downcute_theme: "chaos"
+---
+
+# Introduction
+
+In this document, I present all analyses pertaining to the datasets **GSE245209**  
+([NCBI GEO Link](https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=GSE245209)),  
+originally published by **Y. Soon, 2023**.
+
+## Methodology
+
+
+```{r, message=FALSE}
+# These are all the libraries I used throughout the analysis. Not all of them will be required on this guidebook
+library(Rsubread)
+library(limma)
+library(edgeR)
+library(DESeq2)
+library(magrittr)
+library(ggrepel)
+library(tidyverse)
+library(vsn)
+library(ggplot2)
+library(NMF)
+library(biomaRt)
+library(ggpubr)
+library(factoextra)
+library(ggfortify)
+library(plotly)
+library(reshape2)
+library(fgsea)
+library(msigdbr)
+library(data.table)
+library(colorspace)
+
+set.seed(1906)
+```
+
+# CLIP-Seq Samples
+
+## First Steps
+
+```{r}
+#This section here is to load up the genelenght file I will be using throughout the analyses.
+genelength <- read.csv("~/Projects/StressGranules/SG_Transcriptome/RP_Data_2021/TrimmedSamples/alignment_STAR/TranscriptLenght.txt", header=T)
+
+genelength <- subset(genelength, Ensembl.Canonical==1)
+genelength <- subset(genelength, Gene.name!="")
+
+genelength <- genelength %>%
+  group_by(Gene.name) %>%
+  slice(which.max(Transcript.length..including.UTRs.and.CDS.)) %>%
+  ungroup()
+
+genelength <- genelength[,-c(2,3)]
+colnames(genelength) <- c("Length", "Gene")
+
+#Get the table of read counts by indicating the path to the file. This file is what we obtained from the running featureCounts.
+
+sg.read.counts.SE <- read.table("~/Projects/StressGranules/SG_Transcriptome/HuR-APEX/alignment_STAR/featureCounts_Results_SE.txt", header=TRUE)
+
+# Afterwards, I discard the columns which don't have read counts. These columns are only informations about the gene.
+sg.read.counts.SE <- sg.read.counts.SE[,-c(2:6)]
+
+sg.read.counts <- sg.read.counts.SE
+
+biomart <- fread("~/biomart.txt")[,-1]
+
+
+colnames(sg.read.counts)[1] <- "ensembl_gene_id_version"
+colnames(biomart) <- c("ensembl_gene_id_version", "hgnc_symbol")
+
+eltable <- merge(sg.read.counts,biomart,by = "ensembl_gene_id_version", all= TRUE) #this creates a table with both ensemble ids and HGNC codes.
+
+eltable <- subset(eltable, hgnc_symbol!="") #this removes reads that dont have a corresponding hgnc symbol.
+
+eltable$ensembl_gene_id_version <- NULL
+
+read.counts <- eltable %>% # If two gene ids resulted in the same gene name, this will sum up their counts
+  group_by(hgnc_symbol) %>%
+  summarise(across(everything(), sum, na.rm = TRUE))
+
+read.counts <- as.data.frame(read.counts)
+
+row.names(read.counts) <- read.counts$hgnc_symbol #changes rownames into hgnc symbols
+read.counts$hgnc_symbol <- NULL #We no longer need this column, as we have the rownames.
+```
+
+## Extra Quality Control
+
+Let's check for sample complexity. It is possible that one or more samples have different complexity. In specific, I am going to check if enough reads have been obtained from every sample. If not, we should have a great bias to housekeeping genes. Another way to put it, is to say that even with all reads, we won't obtain a great deal of different genes.
+
+```{r, warning=FALSE, message=FALSE, results='hide'}
+
+# Define color palette
+custom_palette <- qualitative_hcl(16, palette = "Pastel")
+custom_palette <- sample(custom_palette, 16)
+
+# Use SampleColouring from metadata
+SampleColouring <- c(rep("CU",3),rep("CS",3),rep("NU",3),rep("NS",3),rep("G3UI",2),rep("G3SI",3),rep("G3UE",2),rep("G3SE",3),"NLUI","NLSI",rep("NLUE",2),rep("NLSE",2),"NEUI","NESI", rep("NEUE",2), rep("NESE",2),"G3UI","G3SI",rep("G3UE",2),rep("G3SE",2),"NLUI","NLSI",rep("NLUE",2),rep("NLSE",2),"NEUI","NESI",rep("NEUE",2),rep("NESE",2),"G3UI","G3SI",rep("G3UE",2),rep("G3SE",2))
+
+# Build cumulative counts
+final <- sapply(1:ncol(read.counts), function(i) {
+  sort_vals <- read.counts[order(read.counts[, i], decreasing = TRUE), i]
+  cumsum(sort_vals)
+})
+final <- as.data.frame(final)
+colnames(final) <- colnames(read.counts)
+
+# Melt and add gene position + sample info
+finalmelt <- reshape2::melt(final, variable.name = "Sample")
+finalmelt$genes <- rep(1:nrow(final), times = ncol(final))
+finalmelt$SampleColouring <- rep(SampleColouring, each = nrow(final))
+
+# Plot cumulative read coverage
+ggplot(data = finalmelt, aes(x = genes, y = log10(value), group = Sample, color = SampleColouring)) +
+  geom_line() +
+  scale_color_manual(values = custom_palette, name = "Cell Line") +
+  theme_bw() +
+  xlab("Number of Genes Covered") +
+  ylab("Number of Reads (log10)") +
+  xlim(0, 20000) +
+  ylim(0, 7) +
+  theme(
+    axis.line = element_line(colour = "black"),
+    panel.grid.minor = element_blank(),
+    panel.border = element_blank(),
+    panel.background = element_blank()
+  )
+
+# Create percentage-based plot
+orderfinal <- subset(finalmelt, genes == max(finalmelt$genes))
+trial <- merge(orderfinal[, c("Sample", "value")], finalmelt, by = "Sample", suffixes = c(".total", ".current"))
+trial$percent <- (trial$value.current / trial$value.total) * 100
+trial$SampleColouring <- rep(SampleColouring, each = nrow(final))
+
+ggplot(data = trial, aes(x = genes, y = percent, group = Sample, color = SampleColouring)) +
+  geom_line() +
+  geom_hline(yintercept = 50, linetype = "dashed") +
+  scale_color_manual(values = custom_palette, name = "Cell Line") +
+  xlab("Number of Genes Covered") +
+  ylab("Number of Reads (%)") +
+  xlim(0, 20000) +
+  theme_bw() +
+  theme(
+    axis.line = element_line(colour = "black"),
+    panel.grid.minor = element_blank(),
+    panel.border = element_blank(),
+    panel.background = element_blank()
+  )
+```
+
+This time, we see massive differences, both in complexity and read depth. This is mostly likely because eCLIP samples end up being "simple peaks" of binding. Analysing them directly like I am, is probably not the best procedure. Nevertheless, since the problem is present on most samples, comparing these eclip samples directly should still be informative.
+
+# Differential Expression Analysis
+
+## Filtration
+
+### ***Before Filtration***
+
+Let us begin with the filtration. Personally, I find that its easier to do visually. I am aware that my filtration is more violent than most. Usually, from RNA-Seq experiments, we commonly obtain bi-modal distributions, with the first mode corresponding to lowly expressed genes. I remove these by cutting just before the second mode.
+
+```{r, warning=FALSE}
+
+#Cyto and Nuclear Fractions Mock
+alternew.CytoUN <- log10(rowSums(read.counts[,c(1:3)]))
+alternew.CytoUN <- as.data.frame(alternew.CytoUN)
+
+alternew.CytoST <- log10(rowSums(read.counts[,c(4:6)]))
+alternew.CytoST <- as.data.frame(alternew.CytoST)
+
+alternew.NuclearUN <- log10(rowSums(read.counts[,c(7:9)]))
+alternew.NuclearUN <- as.data.frame(alternew.NuclearUN)
+
+alternew.NuclearST <- log10(rowSums(read.counts[,c(10:12)]))
+alternew.NuclearST <- as.data.frame(alternew.NuclearST)
+
+#G3BP1 Apex Samples
+alternew.G3UN_Input <- log10(rowSums(read.counts[,c(13:14,35,53)]))
+alternew.G3UN_Input <- as.data.frame(alternew.G3UN_Input)
+
+alternew.G3ST_Input <- log10(rowSums(read.counts[,c(15:17,36,54)]))
+alternew.G3ST_Input <- as.data.frame(alternew.G3ST_Input)
+
+alternew.G3UN_Enrich <- log10(rowSums(read.counts[,c(18:19,37:38,55:56)]))
+alternew.G3UN_Enrich <- as.data.frame(alternew.G3UN_Enrich)
+
+alternew.G3ST_Enrich <- log10(rowSums(read.counts[,c(20:22, 39:40,57:58)]))
+alternew.G3ST_Enrich <- as.data.frame(alternew.G3ST_Enrich)
+
+#NLS Apex Samples
+alternew.NLUN_Input <- log10(rowSums(read.counts[,c(23,41)]))
+alternew.NLUN_Input <- as.data.frame(alternew.NLUN_Input)
+
+alternew.NLST_Input <- log10(rowSums(read.counts[,c(24,42)]))
+alternew.NLST_Input <- as.data.frame(alternew.NLST_Input)
+
+alternew.NLUN_Enrich <- log10(rowSums(read.counts[,c(25:26,43:44)]))
+alternew.NLUN_Enrich <- as.data.frame(alternew.NLUN_Enrich)
+
+alternew.NLST_Enrich <- log10(rowSums(read.counts[,c(27:28,45:46)]))
+alternew.NLST_Enrich <- as.data.frame(alternew.NLST_Enrich)
+
+#NES Apex Samples
+alternew.NEUN_Input <- log10(rowSums(read.counts[,c(29,47)]))
+alternew.NEUN_Input <- as.data.frame(alternew.NEUN_Input)
+
+alternew.NEST_Input <- log10(rowSums(read.counts[,c(30,48)]))
+alternew.NEST_Input <- as.data.frame(alternew.NEST_Input)
+
+alternew.NEUN_Enrich <- log10(rowSums(read.counts[,c(31:32,49:50)]))
+alternew.NEUN_Enrich <- as.data.frame(alternew.NEUN_Enrich)
+
+alternew.NEST_Enrich <- log10(rowSums(read.counts[,c(33:34,51:52)]))
+alternew.NEST_Enrich <- as.data.frame(alternew.NEST_Enrich)
+
+#All samples
+alternew <- log10(rowSums(read.counts))
+alternew <- as.data.frame(alternew)
+
+
+ggplot(alternew, aes(x=alternew)) + geom_density() + theme_bw() + geom_vline(xintercept = 1.25, linetype = "dashed") + ylab("Events") + xlab("Number of Reads (log10)") +
+  theme(axis.line = element_line(colour = "black"),
+        panel.grid.minor = element_blank(),
+        panel.border = element_blank(),
+        panel.background = element_blank()) + ggtitle("Density of Reads - All Samples")
+
+#Cytoplasmic and Nuclear Fractions
+ggplot(alternew.CytoUN, aes(x=alternew.CytoUN)) + geom_density(fill="#FFB6C1", alpha=0.5) + theme_bw() + geom_vline(xintercept = 2.5, linetype = "dashed") + ylab("Events") + xlab("Number of Reads (log10)") +
+  theme(axis.line = element_line(colour = "black"),
+        panel.grid.minor = element_blank(),
+        panel.border = element_blank(),
+        panel.background = element_blank()) + ggtitle("Density of Reads - Unstressed Cytoplasm")
+
+ggplot(alternew.CytoST, aes(x=alternew.CytoST)) + geom_density(fill="#FFDAB9", alpha=0.5) + theme_bw() + geom_vline(xintercept = 2.5, linetype = "dashed") + ylab("Events") + xlab("Number of Reads (log10)") +
+  theme(axis.line = element_line(colour = "black"),
+        panel.grid.minor = element_blank(),
+        panel.border = element_blank(),
+        panel.background = element_blank()) + ggtitle("Density of Reads - Stressed Cytoplasm")
+
+ggplot(alternew.NuclearUN, aes(x=alternew.NuclearUN)) + geom_density(fill="#E6E6FA", alpha=0.5) + theme_bw() + geom_vline(xintercept = 2.5, linetype = "dashed") + ylab("Events") + xlab("Number of Reads (log10)") +
+  theme(axis.line = element_line(colour = "black"),
+        panel.grid.minor = element_blank(),
+        panel.border = element_blank(),
+        panel.background = element_blank()) + ggtitle("Density of Reads - Unstressed Nucleus")
+
+ggplot(alternew.NuclearST, aes(x=alternew.NuclearST)) + geom_density(fill="#98FB98", alpha=0.5) + theme_bw() + geom_vline(xintercept = 2.5, linetype = "dashed") + ylab("Events") + xlab("Number of Reads (log10)") +
+  theme(axis.line = element_line(colour = "black"),
+        panel.grid.minor = element_blank(),
+        panel.border = element_blank(),
+        panel.background = element_blank()) + ggtitle("Density of Reads - Stressed Nucleus")
+
+#G3BP1 Apex
+ggplot(alternew.G3UN_Input, aes(x=alternew.G3UN_Input)) + geom_density(fill="#87CEFA", alpha=0.5) + theme_bw() + geom_vline(xintercept = 2.5, linetype = "dashed") + ylab("Events") + xlab("Number of Reads (log10)") +
+  theme(axis.line = element_line(colour = "black"),
+        panel.grid.minor = element_blank(),
+        panel.border = element_blank(),
+        panel.background = element_blank()) + ggtitle("Density of Reads - G3 Unstressed Input")
+
+ggplot(alternew.G3ST_Input, aes(x=alternew.G3ST_Input)) + geom_density(fill="#EEE8AA", alpha=0.5) + theme_bw() + geom_vline(xintercept = 2.5, linetype = "dashed") + ylab("Events") + xlab("Number of Reads (log10)") +
+  theme(axis.line = element_line(colour = "black"),
+        panel.grid.minor = element_blank(),
+        panel.border = element_blank(),
+        panel.background = element_blank()) + ggtitle("Density of Reads - G3 Stressed Input")
+
+ggplot(alternew.G3UN_Enrich, aes(x=alternew.G3UN_Enrich)) + geom_density(fill="#87CEFA", alpha=0.5) + theme_bw() + geom_vline(xintercept = 2.5, linetype = "dashed") + ylab("Events") + xlab("Number of Reads (log10)") +
+  theme(axis.line = element_line(colour = "black"),
+        panel.grid.minor = element_blank(),
+        panel.border = element_blank(),
+        panel.background = element_blank()) + ggtitle("Density of Reads - G3 Unstressed Enrich")
+
+ggplot(alternew.G3ST_Enrich, aes(x=alternew.G3ST_Enrich)) + geom_density(fill="#EEE8AA", alpha=0.5) + theme_bw() + geom_vline(xintercept = 2.5, linetype = "dashed") + ylab("Events") + xlab("Number of Reads (log10)") +
+  theme(axis.line = element_line(colour = "black"),
+        panel.grid.minor = element_blank(),
+        panel.border = element_blank(),
+        panel.background = element_blank()) + ggtitle("Density of Reads - G3 Stressed Enrich")
+
+#NLS Apex
+ggplot(alternew.NLUN_Input, aes(x=alternew.NLUN_Input)) + geom_density(fill="#87CEFA", alpha=0.5) + theme_bw() + geom_vline(xintercept = 2.5, linetype = "dashed") + ylab("Events") + xlab("Number of Reads (log10)") +
+  theme(axis.line = element_line(colour = "black"),
+        panel.grid.minor = element_blank(),
+        panel.border = element_blank(),
+        panel.background = element_blank()) + ggtitle("Density of Reads - NLS Unstressed Input")
+
+ggplot(alternew.NLST_Input, aes(x=alternew.NLST_Input)) + geom_density(fill="#EEE8AA", alpha=0.5) + theme_bw() + geom_vline(xintercept = 2.5, linetype = "dashed") + ylab("Events") + xlab("Number of Reads (log10)") +
+  theme(axis.line = element_line(colour = "black"),
+        panel.grid.minor = element_blank(),
+        panel.border = element_blank(),
+        panel.background = element_blank()) + ggtitle("Density of Reads - NLS Stressed Input")
+
+ggplot(alternew.NLUN_Enrich, aes(x=alternew.NLUN_Enrich)) + geom_density(fill="#87CEFA", alpha=0.5) + theme_bw() + geom_vline(xintercept = 2.5, linetype = "dashed") + ylab("Events") + xlab("Number of Reads (log10)") +
+  theme(axis.line = element_line(colour = "black"),
+        panel.grid.minor = element_blank(),
+        panel.border = element_blank(),
+        panel.background = element_blank()) + ggtitle("Density of Reads - NLS Unstressed Enrich")
+
+ggplot(alternew.NLST_Enrich, aes(x=alternew.NLST_Enrich)) + geom_density(fill="#EEE8AA", alpha=0.5) + theme_bw() + geom_vline(xintercept = 2.5, linetype = "dashed") + ylab("Events") + xlab("Number of Reads (log10)") +
+  theme(axis.line = element_line(colour = "black"),
+        panel.grid.minor = element_blank(),
+        panel.border = element_blank(),
+        panel.background = element_blank()) + ggtitle("Density of Reads - NLS Stressed Enrich")
+
+#NES Apex
+ggplot(alternew.NEUN_Input, aes(x=alternew.NEUN_Input)) + geom_density(fill="#87CEFA", alpha=0.5) + theme_bw() + geom_vline(xintercept = 2.5, linetype = "dashed") + ylab("Events") + xlab("Number of Reads (log10)") +
+  theme(axis.line = element_line(colour = "black"),
+        panel.grid.minor = element_blank(),
+        panel.border = element_blank(),
+        panel.background = element_blank()) + ggtitle("Density of Reads - NES Unstressed Input")
+
+ggplot(alternew.NEST_Input, aes(x=alternew.NEST_Input)) + geom_density(fill="#EEE8AA", alpha=0.5) + theme_bw() + geom_vline(xintercept = 2.5, linetype = "dashed") + ylab("Events") + xlab("Number of Reads (log10)") +
+  theme(axis.line = element_line(colour = "black"),
+        panel.grid.minor = element_blank(),
+        panel.border = element_blank(),
+        panel.background = element_blank()) + ggtitle("Density of Reads - NES Stressed Input")
+
+ggplot(alternew.NEUN_Enrich, aes(x=alternew.NEUN_Enrich)) + geom_density(fill="#87CEFA", alpha=0.5) + theme_bw() + geom_vline(xintercept = 2.5, linetype = "dashed") + ylab("Events") + xlab("Number of Reads (log10)") +
+  theme(axis.line = element_line(colour = "black"),
+        panel.grid.minor = element_blank(),
+        panel.border = element_blank(),
+        panel.background = element_blank()) + ggtitle("Density of Reads - NES Unstressed Enrich")
+
+ggplot(alternew.NEST_Enrich, aes(x=alternew.NEST_Enrich)) + geom_density(fill="#EEE8AA", alpha=0.5) + theme_bw() + geom_vline(xintercept = 2.5, linetype = "dashed") + ylab("Events") + xlab("Number of Reads (log10)") +
+  theme(axis.line = element_line(colour = "black"),
+        panel.grid.minor = element_blank(),
+        panel.border = element_blank(),
+        panel.background = element_blank()) + ggtitle("Density of Reads - NES Stressed Enrich")
+
+```
+This time, due to the huge differences in complexity, I could not filter as I usually do. Instead, I did a very simple, and very soft filtration. 
+
+### ***After Filtration***
+
+```{r}
+filterednew <- subset(read.counts, alternew>0)
+
+
+#after cutting, its a good idea to visualize again
+falternew <- log10(rowSums(filterednew))
+falternew <- as.data.frame(falternew)
+ggplot(falternew, aes(x=falternew)) + geom_density() + theme_bw() + ylab("Events") + xlab("Number of Reads (log10)") +
+  theme(axis.line = element_line(colour = "black"),
+        panel.grid.minor = element_blank(),
+        panel.border = element_blank(),
+        panel.background = element_blank())
+
+#lets save the genes which we maintain
+impgenes <- c(row.names(falternew))
+
+
+#Now we need to select only the rows which have those genes.
+finaltable <- read.counts[row.names(read.counts)%in%impgenes,]
+```
+
+
+## Matrices
+
+Good! Now we can proceed by designing our matrices. 
+
+```{r}
+#Let us prepare metadata to add to our samples
+#I start by normalizing them all together
+#This one has all samples
+D0 <- DGEList(finaltable)
+
+
+#Then we calculate the normalization factors for these new generated data frames
+#Bear in mind this step calculates the normalization factors, but does not normalize itself.
+D0 <- calcNormFactors(D0)
+
+
+#Now we do the matrixes
+#the one with everything
+mm <- model.matrix(~0+SampleColouring)
+#the one without pbs
+
+
+#and now we normalize. This step also turns our counts into log2-counts per million.
+#The object with all simple
+y <- voom(D0, mm, plot = T)
+```
+
+
+## Normalisation
+
+For normalisation I convert the read counts into log2CPMs. Its a good way to visualise how the reads are. 
+
+```{r fig.height=8, fig.width=20}
+dfforboxy <- finaltable
+orderforplots <- SampleColouring
+colouring <- data.frame(Sample=colnames(dfforboxy), Types=orderforplots)
+dfforboxy <- reshape2::melt(dfforboxy)
+colnames(dfforboxy) <- c("Sample", "Expression")
+dfforboxy <- merge(dfforboxy, colouring, by="Sample")
+# Convert 'Types' to factor with custom order
+dfforboxy$Types <- factor(dfforboxy$Types, levels = unique(SampleColouring))
+
+custom_palette <- qualitative_hcl(16, palette = "Dark2")
+
+prenorm <- ggplot(dfforboxy, aes(x=Sample, y=(log2(Expression+1)), fill=Types)) + geom_boxplot(alpha=0.6) + theme_bw() + ylab("Read Counts (Log2)") + xlab("Samples") + scale_fill_manual(name = "Sample Type", values = custom_palette, labels=c(unique(orderforplots))) +
+  theme(axis.line = element_line(colour = "black"),
+        panel.grid.minor = element_blank(),
+        panel.border = element_blank(),
+        panel.background = element_blank(),
+        axis.text.x=element_blank(),
+        axis.ticks.x=element_blank(),
+        legend.position = "None") + ggtitle("Prior to Normalisation")
+
+#Using the Standard Matrix
+
+dfforboxy <- y$E
+dfforboxy <- reshape2::melt(dfforboxy)
+dfforboxy <- dfforboxy[,-1]
+colnames(dfforboxy) <- c("Sample", "Expression")
+dfforboxy <- merge(dfforboxy, colouring, by="Sample")
+# Convert 'Types' to factor with custom order
+dfforboxy$Types <- factor(dfforboxy$Types, levels = unique(SampleColouring))
+postnorm <- ggplot(dfforboxy, aes(x=Sample, y=Expression, fill=Types)) + geom_boxplot(alpha=0.6) + theme_bw() + ylab("Read Counts (Log2CPM)") + xlab("Samples") + scale_fill_manual(name = "Sample Type", values = custom_palette, labels=c(unique(orderforplots))) +
+  theme(axis.line = element_line(colour = "black"),
+        panel.grid.minor = element_blank(),
+        panel.border = element_blank(),
+        panel.background = element_blank(),
+        axis.text.x=element_blank(),
+        axis.ticks.x=element_blank(),
+        legend.position = "None") + ggtitle("After Normalisation")
+
+ggarrange(prenorm, postnorm, nrow=1)
+
+```
+
+
+## PCA
+
+```{r}
+#this is done to be able to do traditional PCA
+
+custom_palette <- qualitative_hcl(22, palette = "Pastel")
+custom_palette <- sample(custom_palette,22, FALSE)
+dfforpca <- y$E
+dfforpca <- rbind(dfforpca, SampleColouring)
+dfforpca <- t(dfforpca)
+numcol <- c(1:(ncol(dfforpca)-1))
+dfforpca <- as.data.frame(dfforpca) #for some reason I can only change colum type if its a dataframe
+
+dfforpca[ ,numcol] <- apply(dfforpca[ , numcol], 2,            # to turn our columns into numeric
+                            function(x) as.numeric(as.character(x)))
+
+#sapply(dfforpca, class) #to check class
+
+# Or specify the factor levels in the order you want
+dfforpca$SampleColouring <- factor(dfforpca$SampleColouring, levels = c(unique(SampleColouring)))
+
+pca_res <- prcomp(dfforpca[,numcol], scale=FALSE) #prepare the pca
+
+#to make everything pretty
+p <- autoplot(pca_res, data = dfforpca, x=1, y=2, colour = "SampleColouring", size=8, alpha=0.7)
+p <- p + theme_bw() + scale_colour_manual(name = "Sample Type", values = custom_palette, labels=c(unique(SampleColouring)))
+p <- p + ggtitle("PCA Plot") + theme(plot.title = element_text(hjust = 0.5)) +
+  theme(axis.line = element_line(colour = "black"),
+        panel.grid.minor = element_blank(),
+        panel.border = element_blank(),
+        panel.background = element_blank())
+p
+
+
+#in case you want to see them yourself
+contribs1 <- pca_res$rotation[,1]
+contribs2 <- pca_res$rotation[,2]
+
+#These are the biggest contributors to the PCA1 (right side)
+(pos1genes <- sort(contribs1, decreasing=T)[1:10])
+#These are the biggest contributors to the PCA1 (left side)
+(neg1genes <- sort(contribs1, decreasing=F)[1:10])
+
+#These are the biggest contributors to the PCA2 (up side)
+(pos2genes <- sort(contribs2, decreasing=T)[1:10])
+#These are the biggest contributors to the PCA2 (down side)
+(neg2genes <- sort(contribs2, decreasing=F)[1:10])
+```
+# Simple Linear Models
+
+Now we must perform linear model fitting.
+
+```{r}
+SampleColouring <- c(rep("CU",3),rep("CS",3),rep("NU",3),rep("NS",3),rep("G3UI",2),rep("G3SI",3),rep("G3UE",2),rep("G3SE",3),"NLUI","NLSI",rep("NLUE",2),rep("NLSE",2),"NEUI","NESI", rep("NEUE",2), rep("NESE",2),"G3UI","G3SI",rep("G3UE",2),rep("G3SE",2),"NLUI","NLSI",rep("NLUE",2),rep("NLSE",2),"NEUI","NESI",rep("NEUE",2),rep("NESE",2),"G3UI","G3SI",rep("G3UE",2),rep("G3SE",2))
+
+
+mm <- model.matrix(~0+SampleColouring)
+fitted <- lmFit(y, mm)
+head(coef(fitted))
+# 
+G3BP1 <- makeContrasts(SampleColouringG3SE  - SampleColouringG3SI , levels =colnames(coef(fitted)))
+# 
+tmp_G3BP1 <- contrasts.fit(fitted, G3BP1)
+# 
+# #Correction for multiple testing
+tmp_G3BP1 <- eBayes(tmp_G3BP1)
+# 
+top.table <- topTable(tmp_G3BP1,  sort.by = "logFC", n=Inf)
+DEGenes <- top.table
+
+ndegs <- 20
+```
+
+
+## SG vs Non-SG
+
+```{r, results='hide', warning=FALSE, message=FALSE}
+write.table(x = DEGenes,
+            file = "~/Projects/StressGranules/SGPAPER/SGvsWC/HurAPEX.txt", sep="\t", col.names = TRUE, row.names = TRUE, quote=FALSE)
+
+
+upmarkers <- as.data.frame(DEGenes[DEGenes$logFC>3 & DEGenes$B>20,] )
+downmarkers <- as.data.frame(DEGenes[DEGenes$logFC< -10 & DEGenes$B>30,] )
+
+ggplot(data=DEGenes,
+                 aes(x=logFC,
+                     y=  -log10(adj.P.Val))) +
+  geom_point(color="#CCCCCC")+
+  theme_bw() +
+  theme(axis.line = element_line(colour = "black"),
+        panel.grid.minor = element_blank(),
+        panel.border = element_blank(),
+        panel.background = element_blank()) +
+  ggtitle("SG vs WC")+
+  theme(plot.title = element_text(hjust = 0.5)) +
+  geom_label_repel(upmarkers[1:ndegs,] , mapping=aes(label=row.names(upmarkers)[1:ndegs]),size=3,point.padding=-0.5, color="#A10702",max.overlaps = 20)+
+  geom_label_repel(downmarkers[1:ndegs,] , mapping=aes(label=row.names(downmarkers)[1:ndegs]),size=3,point.padding=-0.5, color="#03256C",max.overlaps = 20)+
+  geom_point(data=upmarkers, aes(x=logFC, y=  B), color="#A10702")+
+  geom_point(data=downmarkers, aes(x=logFC, y=  B), color="#03256C")
+
+```
+
+
+```{r, message=FALSE, warning=FALSE, results='hide'}
+
+DEGenes$Gene <- row.names(DEGenes)
+colnames(genelength) <- c("Length","Gene")
+DEGenes <- merge(DEGenes, genelength, by="Gene")
+
+ggplot(data=DEGenes,
+                 aes(x=logFC,
+                     y=  B)) +
+  geom_point(aes(color=log10(Length)))+
+  theme_bw() +
+  theme(axis.line = element_line(colour = "black"),
+        panel.grid.minor = element_blank(),
+        panel.border = element_blank(),
+        panel.background = element_blank()) +
+  ggtitle("SG vs No-SG")+ xlab(expression(Log[2] ~ Fold ~ Change)) + ylab("B-Statistic") +
+  theme(plot.title = element_text(hjust = 0.5))  +
+  scale_colour_gradient(low = "black", high = "red")+ theme(text=element_text(family = "Quicksand"))
+
+
+smooth.SG <- lm(t~log10(Length), DEGenes)
+liner.SG <- rstandard(smooth.SG)
+DEGenes <-cbind(DEGenes, liner.SG)
+colnames(DEGenes)[9] <- "Residuals"
+row.names(DEGenes) <- DEGenes$Gene
+linemarkers <- as.data.frame(DEGenes[abs(DEGenes$Residuals)>4,])
+
+# Calculate the Spearman correlation coefficient
+spearman_corr <- cor(DEGenes$t, log10(DEGenes$Length), method = "pearson")
+
+
+
+ggplot(DEGenes, aes(y=t, x=log10(Length))) + geom_point(color="#CCCCCC", alpha=1) +   theme_bw()+ geom_density_2d()+
+ ylab("Stress-Enrichment (t-stat)") + xlab(expression(RNA ~ Length ~ Log[10] ~ Base ~ Pairs)) +
+  theme(axis.line = element_line(colour = "black"),
+        panel.grid.minor = element_blank(),
+        panel.border = element_blank(),
+        panel.background = element_blank()) + 
+  theme(plot.title = element_text(hjust = 0.5))  +
+  geom_abline(slope=smooth.SG$coefficients[2], intercept = smooth.SG$coefficients[1], linetype = "dashed")+ stat_cor(method = "spearman", cor.coef.name = "rho", size=5)
+  #geom_label_repel(linemarkers[1:ndegs,] , mapping=aes(label=rownames(linemarkers)[1:ndegs]),size=3,point.padding=-0.5, color="#399e5a",max.overlaps = 200)+
+  #geom_point(data=linemarkers, aes(x=t, y= log10(Length)), color="#399e5a")
+
+
+
+```
+
+# Complex Linear Models
+
+Now we must perform linear model fitting. Once more, we will have 4, one for each matrix we previously designed.
+
+```{r}
+SampleColouring <- c(rep("CU",3),rep("CS",3),rep("NU",3),rep("NS",3),rep("G3UI",2),rep("G3SI",3),rep("G3UE",2),rep("G3SE",3),"NLUI","NLSI",rep("NLUE",2),rep("NLSE",2),"NEUI","NESI", rep("NEUE",2), rep("NESE",2),"G3UI","G3SI",rep("G3UE",2),rep("G3SE",2),"NLUI","NLSI",rep("NLUE",2),rep("NLSE",2),"NEUI","NESI",rep("NEUE",2),rep("NESE",2),"G3UI","G3SI",rep("G3UE",2),rep("G3SE",2))
+
+Target <- c(rep("Cyto",3),rep("Cyto",3),rep("Nucleus",3),rep("Nucleus",3),rep("G3BP1",2),rep("G3BP1",3),rep("G3BP1",2),rep("G3BP1",3),"NL","NL",rep("NL",2),rep("NL",2),"NE","NE", rep("NE",2), rep("NE",2),"G3BP1","G3BP1",rep("G3BP1",2),rep("G3BP1",2),"NL","NL",rep("NL",2),rep("NL",2),"NE","NE",rep("NE",2),rep("NE",2),"G3BP1","G3BP1",rep("G3BP1",2),rep("G3BP1",2))
+
+Type <- c(rep("Frac",3),rep("Frac",3),rep("Frac",3),rep("Frac",3),rep("Input",2),rep("Input",3),rep("Enri",2),rep("Enri",3),"Input","Input",rep("Enri",2),rep("Enri",2),"Input","Input", rep("Enri",2), rep("Enri",2),"Input","Input",rep("Enri",2),rep("Enri",2),"Input","Input",rep("Enri",2),rep("Enri",2),"Input","Input",rep("Enri",2),rep("Enri",2),"Input","Input",rep("Enri",2),rep("Enri",2))
+
+Stress <- c(rep("Unstressed",3),rep("Stressed",3),rep("Unstressed",3),rep("Stressed",3),rep("Unstressed",2),rep("Stressed",3),rep("Unstressed",2),rep("Stressed",3),"Unstressed","Stressed",rep("Unstressed",2),rep("Stressed",2),"Unstressed","Stressed", rep("Unstressed",2), rep("Stressed",2),"Unstressed","Stressed",rep("Unstressed",2),rep("Stressed",2),"Unstressed","Stressed",rep("Unstressed",2),rep("Stressed",2),"Unstressed","Stressed",rep("Unstressed",2),rep("Stressed",2),"Unstressed","Stressed",rep("Unstressed",2),rep("Stressed",2))
+
+SG <- c(rep("NO",3),rep("NO",3),rep("NO",3),rep("NO",3),rep("NO",2),rep("NO",3),rep("NO",2),rep("YES",3),"NO","NO",rep("NO",2),rep("NO",2),"NO","NO", rep("NO",2), rep("NO",2),"NO","NO",rep("NO",2),rep("YES",2),"NO","NO",rep("NO",2),rep("NO",2),"NO","NO",rep("NO",2),rep("NO",2),"NO","NO",rep("NO",2),rep("YES",2))
+
+
+mm <- model.matrix(~0+Target+Type+Stress+SG)
+fitted <- lmFit(y, mm)
+head(coef(fitted))
+# 
+# #Correction for multiple testing
+tmp <- eBayes(fitted)
+# 
+top.table <- topTable(tmp,9,  sort.by = "logFC", n=Inf)
+DEGenes <- top.table
+
+```
+
+
+## SG vs Non-SG
+
+```{r, results='hide', warning=FALSE, message=FALSE}
+
+upmarkers <- as.data.frame(DEGenes[DEGenes$logFC>3 & DEGenes$B>20,] )
+downmarkers <- as.data.frame(DEGenes[DEGenes$logFC< -10 & DEGenes$B>30,] )
+
+ndegs <- 20
+
+ggplot(data=DEGenes,
+                 aes(x=logFC,
+                     y=  -log10(adj.P.Val))) +
+  geom_point(color="#CCCCCC")+
+  theme_bw() +
+  theme(axis.line = element_line(colour = "black"),
+        panel.grid.minor = element_blank(),
+        panel.border = element_blank(),
+        panel.background = element_blank()) +
+  ggtitle("SG vs WC")+
+  theme(plot.title = element_text(hjust = 0.5)) +
+  geom_label_repel(upmarkers[1:ndegs,] , mapping=aes(label=row.names(upmarkers)[1:ndegs]),size=3,point.padding=-0.5, color="#A10702",max.overlaps = 20)+
+  geom_label_repel(downmarkers[1:ndegs,] , mapping=aes(label=row.names(downmarkers)[1:ndegs]),size=3,point.padding=-0.5, color="#03256C",max.overlaps = 20)+
+  geom_point(data=upmarkers, aes(x=logFC, y=  B), color="#A10702")+
+  geom_point(data=downmarkers, aes(x=logFC, y=  B), color="#03256C")
+
+```
+# Session Info
+
+```{r}
+sessionInfo()
+```
+

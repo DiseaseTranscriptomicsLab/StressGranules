@@ -264,6 +264,9 @@ I didn't do it this time, but I've maintained the code to filter by sample type.
 
 
 ```{r}
+
+MitoGenes <- fread("~/MitoGenes.txt", header = FALSE)[[1]]
+
 filterednew <- subset(read.counts, alternew> 3.75)
 filterednew.CMVu <- subset(read.counts, alternew.CMVu>3)
 filterednew.CMVs <- subset(read.counts, alternew.CMVs>3)
@@ -284,7 +287,7 @@ ggplot(falternew, aes(x=falternew)) + geom_density() + theme_bw() + ylab("Events
         panel.background = element_blank())
 
 #lets save the genes which we maintain
-impgenes <- c(row.names(falternew))
+impgenes <- c(row.names(falternew), MitoGenes)
 impgenes.CMVu <- c(row.names(filterednew.CMVu))
 impgenes.CMVs <- c(row.names(filterednew.CMVs))
 impgenes.G3u <- c(row.names(filterednew.G3u))
@@ -1233,7 +1236,7 @@ Massive negative lenght bias.
 Now that we have our genes of interest, it would also be interesting to see what are the **altered gene sets** between upregulated and downregulated transcripts from the above comparison. Therefore, lets perform a *Gene Set Enrichment Analysis*
 
 
-```{r, fig.height=20, fig.width=30}
+```{r, fig.height=10, fig.width=14}
 #for all genes
 DEGenes <- DEGenes[order(DEGenes[,4]),]
 gseatool <- DEGenes[,4]
@@ -1274,7 +1277,10 @@ hallmark.sg.t <- as.data.frame(hallmark.sg.t)
 thresh <- 0.05
 
 #this one is no longer generic
-data_to_plot <- hallmarks.res.tidy %>% filter(padj < thresh)
+data_to_plot <- hallmarks.res.tidy %>%
+  filter(padj < thresh) %>%
+  mutate(pathway = gsub("^HALLMARK_", "", pathway),
+         pathway = gsub("_", " ", pathway))
 
 statvec <- c()
 for (i in 1:nrow(data_to_plot)){
@@ -1290,16 +1296,29 @@ statvec <- c(statvec, status)
 data_to_plot$Status <- statvec
 
 ##-----HALMARK-----
-gsea_plot_hall <- ggplot(data_to_plot, aes(reorder(pathway, NES), NES)) +
-  geom_col(aes(fill= Status), alpha=0.75) + scale_fill_manual(values = c("#53A2BE","#BA3B46"), name = "Regulation Status", labels = c("Downregulated", "Upregulated"), breaks = c("Downregulated", "Upregulated")) +
+(SomaGSEA <- ggplot(data_to_plot, aes(reorder(pathway, NES), NES)) +
+  geom_col(aes(fill = Status), alpha = 0.75) + 
+  scale_fill_manual(values = c("#53A2BE", "#BA3B46"), 
+                    name = "Regulation Status", 
+                    labels = c("Downregulated", "Upregulated"), 
+                    breaks = c("Downregulated", "Upregulated")) +
   coord_flip() +
-  labs(x="Pathway", y="Normalised Enrichment Score (NES)",
-       title= "Hallmark Gene Sets",
-       caption = paste0("p-value < ", thresh)) + theme(plot.title = element_text(hjust = 1)) +
-  theme_bw() + theme(text=element_text(family = "Quicksand")) + theme(legend.position = "none")
+  labs(x = "Gene Set", 
+       y = "Normalized Enrichment Score",
+       title = "Hallmark Gene Sets",
+       caption = paste0("p-value < ", thresh)) +
+  theme_bw() +
+  theme(legend.position = "none",
+        text = element_text(size = 25, family = "Arial MS", face = "bold"),
+        plot.title = element_text(hjust = 0.25, face = "bold"),
+        axis.title = element_text(face = "bold"),
+        axis.text = element_text(face = "bold"),
+        legend.title = element_text(face = "bold"),
+        legend.text = element_text(face = "bold")))
 
-gsea_plot_hall+
-  theme(text=element_text(size=25,  family="Arial MS"))
+png("~/Projects/StressGranules/SGPAPER/Images/PNG/SomaGSEA.png", width = 14, height=10, units = "in", res=300)
+SomaGSEA
+dev.off()
 ```
 
 

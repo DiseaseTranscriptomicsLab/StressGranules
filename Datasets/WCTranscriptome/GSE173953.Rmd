@@ -253,6 +253,8 @@ ggplot(alternew.KO.U2.DS24, aes(x=alternew.KO.U2.DS24)) + geom_density(fill="ora
 I didn't do it this time, but I've maintained the code to filter by sample type. This time, I considered that it was more correct to filter all samples together.
 
 ```{r}
+MitoGenes <- fread("~/MitoGenes.txt", header = FALSE)[[1]]
+
 filterednew <- subset(read.counts, alternew>4)
 filterednew.WT.U2.CT <- subset(read.counts, alternew.WT.U2.CT>2.75)
 filterednew.WT.U2.DS6 <- subset(read.counts, alternew.WT.U2.DS6>2.75)
@@ -275,7 +277,7 @@ ggplot(falternew, aes(x=falternew)) + geom_density() + theme_bw() + ylab("Events
         panel.background = element_blank())
 
 #lets save the genes which we maintain
-impgenes <- c(row.names(falternew))
+impgenes <- c(row.names(falternew), MitoGenes)
 impgenes.WT.U2.CT <- c(row.names(filterednew.WT.U2.CT))
 impgenes.WT.U2.DS6 <- c(row.names(filterednew.WT.U2.DS6))
 impgenes.KO.U2.CT <- c(row.names(filterednew.KO.U2.CT))

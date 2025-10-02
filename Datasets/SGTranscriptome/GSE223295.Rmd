@@ -425,7 +425,7 @@ This time, I considered that it was more correct to filter all samples together.
 
 ```{r}
 filterednew <- subset(read.counts, alternew>3.25)
-
+MitoGenes <- fread("~/MitoGenes.txt", header = FALSE)[[1]]
 
 #after cutting, its a good idea to visualize again
 falternew <- log10(rowSums(filterednew))
@@ -437,7 +437,7 @@ ggplot(falternew, aes(x=falternew)) + geom_density() + theme_bw() + ylab("Events
         panel.background = element_blank())
 
 #lets save the genes which we maintain
-impgenes <- c(row.names(falternew))
+impgenes <- c(row.names(falternew), MitoGenes)
 
 
 #Now we need to select only the rows which have those genes.
@@ -2536,6 +2536,246 @@ gsea_plot_hall+
   theme(text=element_text(size=25,  family="Arial MS"))
 
 ```
+
+# Final Version
+
+```{r}
+StressType <- c(rep("Stress",18),rep("Unstressed",10),rep("Stress",10),rep("Recovering",13),rep("Recovering",10))
+
+Biotype <- c(rep("SG",2),rep("WC",4),rep("Vec",2), #U2
+             rep("SG",2),rep("WC",4),rep("Vec",4), #HekAs
+             rep("SG",2),rep("WC",4),rep("Vec",4), #HekUn
+             rep("SG",2),rep("WC",4),rep("Vec",4), #HekSo
+             rep("SG",3),rep("WC",6),rep("Vec",4), 
+             rep("SG",2),rep("WC",4),rep("Vec",4))
+# Relevel factor with "Vec" first
+Biotype <- factor(Biotype, levels = c("Vec", "SG", "WC"))
+
+mm <- model.matrix(~1+Biotype*StressType)
+y <- voom(corrcounts_v1, mm)
+fitted <- lmFit(y$E, mm)
+
+head(coef(fitted))
+
+#use empirical bayes smoothing of standard erros (shrinks extreme standard erros)
+tmp.SG.vs.VEC <- eBayes(fitted)
+
+top.table.SG.vs.VEC <- topTable(tmp.SG.vs.VEC, 5, sort.by = "logFC", n=Inf)
+
+DEGenes.SG.vs.VEC <- top.table.SG.vs.VEC
+
+
+
+
+ndegs=20
+```
+
+
+## Volcano Plot
+
+```{r, results='hide', warning=FALSE, message=FALSE}
+write.table(x = DEGenes.SG.vs.VEC,
+          file = "~/Projects/StressGranules/SGPAPER/RealSGs/CapSeq.txt", sep="\t", col.names = TRUE, row.names = TRUE, quote=FALSE)
+
+upmarkers <- as.data.frame(DEGenes.SG.vs.VEC[DEGenes.SG.vs.VEC$logFC>4 & DEGenes.SG.vs.VEC$adj.P.Val<0.05,] )
+downmarkers <- as.data.frame(DEGenes.SG.vs.VEC[DEGenes.SG.vs.VEC$logFC< -4 & DEGenes.SG.vs.VEC$adj.P.Val<0.05,] )
+
+
+ggplot(data=DEGenes.SG.vs.VEC,
+                 aes(x=logFC,
+                     y=  B)) +
+  geom_point(color="#DDDDDD")+
+  theme_bw() +
+  theme(axis.line = element_line(colour = "black"),
+        panel.grid.minor = element_blank(),
+        panel.border = element_blank(),
+        panel.background = element_blank()) +
+  ggtitle("SG vs VEC")+
+  theme(plot.title = element_text(hjust = 0.5)) +
+  geom_label_repel(upmarkers[1:ndegs,] , mapping=aes(label=row.names(upmarkers)[1:ndegs]),size=4,point.padding=-0.5, color="#de425b",max.overlaps = 200, fontface="italic")+
+  geom_label_repel(downmarkers[1:ndegs,] , mapping=aes(label=row.names(downmarkers)[1:ndegs]),size=4,point.padding=-0.5, color="#769fca",max.overlaps = 200, fontface="italic")+
+  geom_point(data=upmarkers, aes(x=logFC, y=  B), color="#de425b", size=3)+
+  geom_point(data=downmarkers, aes(x=logFC, y=  B), color="#769fca", size=3) + xlab(expression(Log[2] ~ Fold ~ Change)) + ylab("B-Statistic") + theme(text=element_text(family = "Arial", size = 20))
+
+```
+
+## Volcano Plot with Gene Lenght
+
+```{r, message=FALSE, warning=FALSE, results='hide'}
+
+DEGenes.SG.vs.VEC$Gene <- row.names(DEGenes.SG.vs.VEC)
+colnames(genelength) <- c("Length","Gene")
+DEGenes.SG.vs.VEC <- merge(DEGenes.SG.vs.VEC, genelength, by="Gene")
+
+ggplot(data=DEGenes.SG.vs.VEC,
+                 aes(x=logFC,
+                     y=  B)) +
+  geom_point(aes(color=log10(Length)))+
+  theme_bw() +
+  theme(axis.line = element_line(colour = "black"),
+        panel.grid.minor = element_blank(),
+        panel.border = element_blank(),
+        panel.background = element_blank()) +
+  ggtitle("SG")+ xlab(expression(Log[2] ~ Fold ~ Change)) + ylab("B-Statistic") +
+  theme(plot.title = element_text(hjust = 0.5))  +
+  scale_colour_gradient(low = "black", high = "red")+ theme(text=element_text(family = "Quicksand"))
+
+
+smooth.SG <- lm(t~log10(Length), DEGenes.SG.vs.VEC)
+liner.SG <- rstandard(smooth.SG)
+DEGenes.SG.vs.VEC <-cbind(DEGenes.SG.vs.VEC, liner.SG)
+colnames(DEGenes.SG.vs.VEC)[9] <- "Residuals"
+row.names(DEGenes.SG.vs.VEC) <- DEGenes.SG.vs.VEC$Gene
+linemarkers <- as.data.frame(DEGenes.SG.vs.VEC[abs(DEGenes.SG.vs.VEC$Residuals)>4,])
+
+# Calculate the Spearman correlation coefficient
+spearman_corr <- cor(DEGenes.SG.vs.VEC$t, log10(DEGenes.SG.vs.VEC$Length), method = "pearson")
+
+
+
+ggplot(DEGenes.SG.vs.VEC, aes(y=t, x=log10(Length))) + geom_point(color="#CCCCCC", alpha=1) +   theme_bw()+ geom_density_2d()+
+ ylab("SG Enrichment (t-stat)") + xlab(expression(RNA ~ Length ~ Log[10] ~ Base ~ Pairs)) +
+  theme(axis.line = element_line(colour = "black"),
+        panel.grid.minor = element_blank(),
+        panel.border = element_blank(),
+        panel.background = element_blank()) + 
+  theme(plot.title = element_text(hjust = 0.5))  +
+  geom_abline(slope=smooth.SG$coefficients[2], intercept = smooth.SG$coefficients[1], linetype = "dashed")+ stat_cor(method = "spearman", cor.coef.name = "rho",size=7)
+```
+
+### GSEA Enrichment
+
+Now that we have our genes of interest, it would also be interesting to see what are the **altered gene sets** between upregulated and downregulated transcripts from the above comparison. Therefore, lets perform a *Gene Set Enrichment Analysis*
+
+```{r, fig.height=20, fig.width=30, results=FALSE}
+#for all genes
+DEGenes.SG.vs.VEC <- DEGenes.SG.vs.VEC[order(DEGenes.SG.vs.VEC[,4]),]
+gseatool <- DEGenes.SG.vs.VEC[,4]
+gseatool <- as.data.frame(gseatool)
+colnames(gseatool)[1] <- "t" 
+gseatool[,2] <- DEGenes.SG.vs.VEC$Gene
+colnames(gseatool)[2] <- "Symbol" 
+gseatool <- gseatool[,c(2,1)]
+
+vectorranks <- gseatool$t
+names(vectorranks) <- gseatool$Symbol
+
+### CELL COMPONENT
+
+#to load our pathways
+hallmarks.gs <- msigdbr(species = "Homo sapiens", collection =  "C5", subcollection = "GO:CC")
+
+hallmarks.gsets <- hallmarks.gs %>% split(x = .$gene_symbol, f = .$gs_name)
+
+for (set in names(hallmarks.gsets)){
+  hallmarks.gsets[[set]] <- toupper(hallmarks.gsets[[set]])
+}
+
+hallmarks.res <- fgsea(pathways = hallmarks.gsets, 
+                       stats = vectorranks)
+
+hallmarks.res.tidy <- hallmarks.res %>%
+  as_tibble() %>%
+  arrange(desc(NES))
+
+hallmarks.res.tidy %>% 
+  dplyr::select(-leadingEdge, -ES) %>% 
+  arrange(padj)
+
+hallmark.sg.t <- hallmarks.res.tidy[,c(1,3,6)]
+hallmark.sg.t <- as.data.frame(hallmark.sg.t)
+
+#this small part is generic
+thresh <- 0.05
+
+#this one is no longer generic
+data_to_plot <- hallmarks.res.tidy %>% filter(padj < thresh)
+
+statvec <- c()
+for (i in 1:nrow(data_to_plot)){
+  if (data_to_plot[i,6] > 0){
+    status <- "Upregulated"
+  }
+ else {
+   status <- "Downregulated"
+ }   
+statvec <- c(statvec, status)
+}
+
+data_to_plot$Status <- statvec
+
+##GOCC
+gsea_plot_hall <- ggplot(data_to_plot, aes(reorder(pathway, NES), NES)) +
+  geom_col(aes(fill= Status), alpha=0.75) + scale_fill_manual(values = c("#53A2BE","#BA3B46"), name = "Regulation Status", labels = c("Downregulated", "Upregulated"), breaks = c("Downregulated", "Upregulated")) +
+  coord_flip() +
+  labs(x="Pathway", y="Normalised Enrichment Score (NES)",
+       title= "Cell Component Gene Sets",
+       caption = paste0("p-value < ", thresh)) + theme(plot.title = element_text(hjust = 1)) +
+  theme_bw() + theme(text=element_text(family = "Quicksand")) + theme(legend.position = "none")
+
+
+gsea_plot_hall+
+  theme(text=element_text(size=25,  family="Arial MS"))
+
+
+### HALLMARK
+
+#to load our pathways
+hallmarks.gs <- msigdbr(species = "Homo sapiens", collection =  "H")
+
+hallmarks.gsets <- hallmarks.gs %>% split(x = .$gene_symbol, f = .$gs_name)
+
+for (set in names(hallmarks.gsets)){
+  hallmarks.gsets[[set]] <- toupper(hallmarks.gsets[[set]])
+}
+
+hallmarks.res <- fgsea(pathways = hallmarks.gsets, 
+                       stats = vectorranks)
+
+hallmarks.res.tidy <- hallmarks.res %>%
+  as_tibble() %>%
+  arrange(desc(NES))
+
+hallmarks.res.tidy %>% 
+  dplyr::select(-leadingEdge, -ES) %>% 
+  arrange(padj)
+
+hallmark.sg.t <- hallmarks.res.tidy[,c(1,3,6)]
+hallmark.sg.t <- as.data.frame(hallmark.sg.t)
+
+#this small part is generic
+thresh <- 0.05
+
+#this one is no longer generic
+data_to_plot <- hallmarks.res.tidy %>% filter(padj < thresh)
+
+statvec <- c()
+for (i in 1:nrow(data_to_plot)){
+  if (data_to_plot[i,6] > 0){
+    status <- "Upregulated"
+  }
+ else {
+   status <- "Downregulated"
+ }   
+statvec <- c(statvec, status)
+}
+
+data_to_plot$Status <- statvec
+
+##-----HALMARK-----
+gsea_plot_hall <- ggplot(data_to_plot, aes(reorder(pathway, NES), NES)) +
+  geom_col(aes(fill= Status), alpha=0.75) + scale_fill_manual(values = c("#53A2BE","#BA3B46"), name = "Regulation Status", labels = c("Downregulated", "Upregulated"), breaks = c("Downregulated", "Upregulated")) +
+  coord_flip() +
+  labs(x="Pathway", y="Normalised Enrichment Score (NES)",
+       title= "Hallmark Gene Sets",
+       caption = paste0("p-value < ", thresh)) + theme(plot.title = element_text(hjust = 1)) +
+  theme_bw() + theme(text=element_text(family = "Quicksand")) + theme(legend.position = "none")
+
+
+gsea_plot_hall+
+  theme(text=element_text(size=25,  family="Arial MS"))
+```
+From the Cell Component Gene Sets, we see a lot of cytoskeletal mRNAs.
 
 
 # Session Info

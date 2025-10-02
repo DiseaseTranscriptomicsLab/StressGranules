@@ -273,6 +273,7 @@ By seeing the shape of the graph, we can see where we should cut. We have a **bi
 I didn't do it this time, but I've maintained the code to filter by sample type. This time, I considered that it was more correct to filter all samples together.
 
 ```{r}
+MitoGenes <- fread("~/MitoGenes.txt", header = FALSE)[[1]]
 filterednew <- subset(read.counts, alternew>4)
 filterednew.PE.WTCT <- subset(read.counts, alternew.PE.WTCT>3)
 filterednew.PE.WTAR <- subset(read.counts, alternew.PE.WTAR>3)
@@ -295,7 +296,7 @@ ggplot(falternew, aes(x=falternew)) + geom_density() + theme_bw() + ylab("Events
         panel.background = element_blank())
 
 #lets save the genes which we maintain
-impgenes <- c(row.names(falternew))
+impgenes <- c(row.names(falternew), MitoGenes)
 impgenes.PE.WTCT <- c(row.names(filterednew.PE.WTCT))
 impgenes.PE.WTAR <- c(row.names(filterednew.PE.WTAR))
 impgenes.SE.WTAR <- c(row.names(filterednew.SE.WTAR))
@@ -803,7 +804,7 @@ winnyplot
 
 Now that we have our genes of interest, it would also be interesting to see what are the **altered gene sets** between upregulated and downregulated transcripts from the above comparison. Therefore, lets perform a *Gene Set Enrichment Analysis*
 
-```{r, fig.height=20, fig.width=30, results=FALSE}
+```{r, fig.height=10, fig.width=14, results=FALSE}
 #for all genes
 DEGenes <- DEGenes[order(DEGenes[,3]),]
 gseatool <- DEGenes[,3]
@@ -813,15 +814,12 @@ gseatool[,2] <- row.names(DEGenes)
 colnames(gseatool)[2] <- "Symbol" 
 gseatool <- gseatool[,c(2,1)]
 
-#for only the genes without the contamination
-
-
 vectorranks <- gseatool$t
 names(vectorranks) <- gseatool$Symbol
 
 
 #to load our pathways
-hallmarks.gs <- msigdbr(species = "Homo sapiens", collection = "C5", subcollection = "GO:BP")
+hallmarks.gs <- msigdbr(species = "Homo sapiens", collection = "H")
 
 hallmarks.gsets <- hallmarks.gs %>% split(x = .$gene_symbol, f = .$gs_name)
 
@@ -844,10 +842,13 @@ hallmark.sg.t <- hallmarks.res.tidy[,c(1,6)]
 hallmark.sg.t <- as.data.frame(hallmark.sg.t)
 
 #this small part is generic
-thresh <- 0.005
+thresh <- 0.05
 
 #this one is no longer generic
-data_to_plot <- hallmarks.res.tidy %>% filter(padj < thresh)
+data_to_plot <- hallmarks.res.tidy %>%
+  filter(padj < thresh) %>%
+  mutate(pathway = gsub("^HALLMARK_", "", pathway),
+         pathway = gsub("_", " ", pathway))
 
 statvec <- c()
 for (i in 1:nrow(data_to_plot)){
@@ -863,16 +864,29 @@ statvec <- c(statvec, status)
 data_to_plot$Status <- statvec
 
 ##-----HALMARK-----
-gsea_plot_hall <- ggplot(data_to_plot, aes(reorder(pathway, NES), NES)) +
-  geom_col(aes(fill= Status), alpha=0.75) + scale_fill_manual(values = c("#53A2BE","#BA3B46"), name = "Regulation Status", labels = c("Downregulated", "Upregulated"), breaks = c("Downregulated", "Upregulated")) +
+(gsea_plot_hall <- ggplot(data_to_plot, aes(reorder(pathway, NES), NES)) +
+  geom_col(aes(fill = Status), alpha = 0.75) + 
+  scale_fill_manual(values = c("#53A2BE", "#BA3B46"), 
+                    name = "Regulation Status", 
+                    labels = c("Downregulated", "Upregulated"), 
+                    breaks = c("Downregulated", "Upregulated")) +
   coord_flip() +
-  labs(x="Pathway", y="Normalized Enrichment Score (NES)",
-       title= "Hallmark Pathways",
-       caption = paste0("p-value < ", thresh)) + theme(plot.title = element_text(hjust = 1)) +
-  theme_bw() + theme(text=element_text(family = "Quicksand")) + theme(legend.position = "none")
+  labs(x = "Gene Set", 
+       y = "Normalized Enrichment Score",
+       title = "Hallmark Gene Sets",
+       caption = paste0("p-value < ", thresh)) +
+  theme_bw() +
+  theme(legend.position = "none",
+        text = element_text(size = 25, family = "Arial MS", face = "bold"),
+        plot.title = element_text(hjust = 0.5, face = "bold"),
+        axis.title = element_text(face = "bold"),
+        axis.text = element_text(face = "bold"),
+        legend.title = element_text(face = "bold"),
+        legend.text = element_text(face = "bold")))
 
-gsea_plot_hall+ 
-  theme(text=element_text(size=25,  family="Arial MS"))
+png("~/Projects/StressGranules/SGPAPER/Images/PNG/TmatWC.png", width = 14, height=10, units = "in", res=300)
+gsea_plot_hall
+dev.off()
 ```
 
 We have a downregulation  in inflammation pathways.

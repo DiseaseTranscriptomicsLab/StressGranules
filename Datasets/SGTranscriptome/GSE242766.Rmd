@@ -1213,6 +1213,9 @@ ggplot(wtvsnt, aes(x=bins, y=(Residuals)))  + geom_jitter(alpha=0.2) + geom_boxp
         panel.background = element_blank()) + 
   theme(plot.title = element_text(hjust = 0.5)) 
 
+write.table(x = wtvsnt,
+            file = "~/Projects/StressGranules/SGPAPER/M6ADATAORIG.txt", sep="\t", col.names = TRUE, row.names = TRUE, quote=FALSE)
+
 ```
 Enrichment is very similar between WT and m6A KO stress granules. There does seem to be a very slight enrichment for transcripts with many m6A modifications.
 
@@ -1696,7 +1699,7 @@ ggplot(alternew, aes(x=alternew)) + geom_density() + theme_bw() + geom_vline(xin
 
 ```{r}
 filterednew <- subset(SG_City, alternew>3.75)
-
+MitoGenes <- fread("~/MitoGenes.txt", header = FALSE)[[1]]
 #after cutting, its a good idea to visualize again
 falternew <- log10(rowSums(filterednew))
 falternew <- as.data.frame(falternew)
@@ -1707,7 +1710,7 @@ ggplot(falternew, aes(x=falternew)) + geom_density() + theme_bw() + ylab("Events
         panel.background = element_blank())
 
 #lets save the genes which we maintain
-impgenes <- c(row.names(falternew))
+impgenes <- c(row.names(falternew), MitoGenes)
 
 #Now we need to select only the rows which have those genes.
 finaltable <- SG_City[row.names(SG_City)%in%impgenes,]
@@ -1731,6 +1734,7 @@ CellType <- c("ALS","WT","ALS","WT","WT","ALS","ALS","WT","WT","ALS","ALS","WT",
 StressType <- c("CT","CT","KO","KO","CT","KO","CT","KO","CT","KO","CT","KO","CT","KO","CT","KO", rep("CT",2), rep("EX",2),rep("CT",2), rep("EX",2))
 SampleType <- c(rep("WC",3),rep("SG",4),rep("WC",4),rep("SG",4),"WC", rep("SimSG",8))
 
+metadata <- data.frame(Cell=CellType, Stress=StressType, Sample=SampleType)
 
 
 #Now we do our matrix itself
@@ -1739,7 +1743,6 @@ mm <- model.matrix(~0+SampleType+CellType+StressType)
 #and now we normalize. This step also turns our counts into log2-counts per million.
 y <- voom(D0, mm, plot = T)
 ```
-
 
 ## Normalisation
 
@@ -1832,7 +1835,34 @@ contribs2 <- pca_res$rotation[,2]
 (neg2genes <- sort(contribs2, decreasing=F)[1:10])
 ```
 
+## Batch Effect Correction
+
+Looking at the PCA I considered that patient origin could be considered a batch effect. I opted to remove this batch effect.
+
 ```{r}
+
+batch_cols <- c("Cell", "Stress")
+metadata_cols <- c("Sample")
+mmbatch <- model.matrix(reformulate(paste0("~0 + ",paste0( batch_cols,collapse = " + "))), data=metadata)
+mmkeep <- model.matrix(reformulate(paste0("~0 + ",paste0( metadata_cols,collapse =  "+" ))), data=metadata)
+mm <- cbind(mmkeep,mmbatch)
+D0 <- DGEList(2^y$E) #senescence_normcounts
+D0 <- calcNormFactors(D0)
+y <- voom(D0, mm, plot = F)
+fit <- lmFit(y, mm)
+beta <- fit$coefficients[,-(1:ncol(mmkeep)),drop=FALSE]
+#beta <- fit$coefficients
+beta[is.na(beta)] <- 0
+corrcounts_v1 <- as.matrix(y$E) - beta %*% t(mmbatch)
+offset <- apply(corrcounts_v1,1,min) - apply(y$E,1,min)
+corrcounts_v1 <- as.data.frame(corrcounts_v1-offset)
+corrcounts_v1 <- 2^corrcounts_v1
+y <- voom(corrcounts_v1, mm, plot = T)
+```
+
+
+```{r}
+mm <- model.matrix(~0+SampleType)
 
 fitted <- lmFit(y, mm)
 

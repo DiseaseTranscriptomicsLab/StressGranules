@@ -2057,6 +2057,7 @@ ggplot(alternew, aes(x=alternew)) + geom_density() + theme_bw() + geom_vline(xin
 ### ***After Filtration***
 
 ```{r filtration 2}
+MitoGenes <- fread("~/MitoGenes.txt", header = FALSE)[[1]]
 filterednew <- subset(SG_City, alternew>4)
 
 #after cutting, its a good idea to visualize again
@@ -2069,7 +2070,7 @@ ggplot(falternew, aes(x=falternew)) + geom_density() + theme_bw() + ylab("Events
         panel.background = element_blank())
 
 #lets save the genes which we maintain
-impgenes <- c(row.names(falternew))
+impgenes <- c(row.names(falternew), MitoGenes)
 
 #Now we need to select only the rows which have those genes.
 finaltable <- SG_City[row.names(SG_City)%in%impgenes,]
@@ -2200,6 +2201,9 @@ forsample <- c("SG", "SG", "SG", "Bulk", "Bulk", "Bulk", "SG", "SG", "Bulk", "Bu
 
 forcelltype <- c("WT", "WT", "WT", "WT", "WT", "WT", "WT", "WT", "WT", "WT", "KO", "KO", "KO", "KO", "KO", "KO", "GFP", "GFP", "GFP", "KO", "KO", "KO", "GFP", "GFP","GFP", "GFP", "GFP", "GFP", rep("WT",6), "KO", "KO", rep("GFP",3))
 
+metadata <- data.frame(Stress=forstress, Cell=forcelltype, Sample=forsample) #Once again, I remove the KOKO samples
+
+
 mm <- model.matrix(~0+forsample+forcelltype+forstress)
 
 fitted <- lmFit(y, mm)
@@ -2223,6 +2227,44 @@ DEGenes <- top.table
 ndegs <- 20
 ```
 
+
+
+## Batch Effect Correction
+
+
+```{r}
+batch_cols <- c("Cell", "Stress")
+metadata_cols <- c("Sample")
+mmbatch <- model.matrix(reformulate(paste0("~0 + ",paste0( batch_cols,collapse = " + "))), data=metadata)
+mmkeep <- model.matrix(reformulate(paste0("~0 + ",paste0( metadata_cols,collapse =  "+" ))), data=metadata)
+mm <- cbind(mmkeep,mmbatch)
+D0 <- DGEList(2^y$E)
+D0 <- calcNormFactors(D0)
+y <- voom(D0, mm, plot = F)
+fit <- lmFit(y, mm)
+beta <- fit$coefficients[,-(1:ncol(mmkeep)),drop=FALSE]
+beta[is.na(beta)] <- 0
+corrcounts_v1 <- as.matrix(y$E) - beta %*% t(mmbatch)
+offset <- apply(corrcounts_v1,1,min) - apply(y$E,1,min)
+corrcounts_v1 <- as.data.frame(corrcounts_v1-offset)
+corrcounts_v1 <- 2^corrcounts_v1
+
+mm <- model.matrix(~0+Sample, metadata)
+y <- voom(corrcounts_v1, mm, plot = T)
+
+fitted <- lmFit(y$E, mm)
+
+head(coef(fitted))
+
+contr <- makeContrasts(SampleSG  - SampleSimSG , levels = colnames(coef(fitted)))
+
+tmp_contr <- contrasts.fit(fitted, contr)
+
+tmp <- eBayes(tmp_contr)
+top.table <- topTable(tmp, sort.by = "logFC", n=Inf)
+DEGenes <- top.table
+ndegs=20
+```
 
 ## Stressed SG vs Unstressed SG ("Normal" Volcano Plot)
 

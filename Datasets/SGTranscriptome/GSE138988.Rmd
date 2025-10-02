@@ -597,6 +597,9 @@ ggplot(data=DEGenes.sgvsgs,
   theme(text=element_text(size=15,  family="Arial MS"))
 
 stress_t <- data.frame(Gene=row.names(DEGenes.sgvsgs), st_t=DEGenes.sgvsgs$t)
+
+write.table(x = DEGenes.sgvsgs,
+            file = "~/Projects/StressGranules/SGPAPER/Stressresponse_u2os_rnp.txt", sep="\t", col.names = TRUE, row.names = TRUE, quote=FALSE)
 ```
 
 ## Stressed SG vs Unstressed SG (Volcano Plot with Gene Length)
@@ -2115,20 +2118,21 @@ ggplot(hallmark.scatter_ak, aes(x=sg, y=size)) + geom_point(color="black", alpha
 # Correlation SGS vs SGU Enrichment
 
 ```{r}
-sgs_t <- merge(stress_t, unstress_t, by="Gene")
+sgs_t <- merge(stress_rnpt, unstress_t, by="Gene")
 sgs_t <- merge(sgs_t, genelength, by="Gene")
 
 
-smooth.SG <- lm(uns_t~(st_t), sgs_t)
+
+smooth.SG <- lm(uns_t~(srnp_t), sgs_t)
 liner.SG <- rstandard(smooth.SG)
 sgs_t <-cbind(sgs_t, liner.SG)
 colnames(sgs_t)[5] <- "Residuals"
 row.names(sgs_t) <- sgs_t$Gene
 linemarkers <- as.data.frame(sgs_t[(sgs_t$st)>20,])
 
-cor.test(sgs_t$uns_t, (sgs_t$st_t), method="spearman")
+cor.test(sgs_t$uns_t, (sgs_t$srnp_t), method="spearman")
 
-ggplot(sgs_t, aes(y=uns_t, x=(st_t))) +geom_point(color="#CCCCCC", alpha=1) +   theme_bw()+
+ggplot(sgs_t, aes(y=uns_t, x=(srnp_t))) +geom_point(color="#CCCCCC", alpha=1) +   theme_bw()+
  xlab("Stressed SG Enrichment") + ylab("Unstressed SG Enrichment") + geom_density2d(colour="red")+ scale_colour_gradient(low="black", high="red")+
   theme(axis.line = element_line(colour = "black"),
         panel.grid.minor = element_blank(),
@@ -2137,7 +2141,7 @@ ggplot(sgs_t, aes(y=uns_t, x=(st_t))) +geom_point(color="#CCCCCC", alpha=1) +   
   theme(plot.title = element_text(hjust = 0.5))  +
   geom_abline(slope=smooth.SG$coefficients[2], intercept = smooth.SG$coefficients[1], linetype = "dashed") +
   geom_label_repel(linemarkers[1:ndegs,] , mapping=aes(label=rownames(linemarkers)[1:ndegs]),size=3,point.padding=-0.5, color="#399e5a",max.overlaps = 200)+
-  geom_point(data=linemarkers, aes(x=st_t, y= uns_t), color="#399e5a")
+  geom_point(data=linemarkers, aes(x=srnp_t, y= uns_t), color="#399e5a")
 ```
 
 # Alternative Methods (after centrifugation findings)
