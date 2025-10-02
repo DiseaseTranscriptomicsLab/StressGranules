@@ -8,10 +8,9 @@ This folder contains essential reference files and key outputs from our analyses
   Contains canonical transcript lengths, obtained from [Ensembl BioMart](https://www.ensembl.org/biomart/martview/).  
   The file includes a header for clarity.
 
-- **`SG1.txt` and `SG2.txt`**  
-  Stress granule (SG) gene signatures defined using elastic net regression:
+- **`SG1.txt`**  
+  Stress granule (SG) gene signature defined using elastic net regression:
   - `SG1`: Generated with an alpha parameter of 0.75  
-  - `SG2`: Generated with an alpha parameter of 0.5  
 
   Discovery datasets:
   - [GSE138988](https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=GSE138988) (T. Matheny, 2019)
@@ -36,7 +35,8 @@ This folder contains essential reference files and key outputs from our analyses
   Based on:
   - [GSE138058](https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=GSE138058) (S.N. Somasekharan, 2020)
   - [GSE212380](https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=GSE212380) (P. Kudrin, 2024)
-  - [PRJNA1152621](https://www.ncbi.nlm.nih.gov/bioproject/?term=PRJNA1152621) (S. Rajachandran)
+  - [GSE218180](https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=GSE218180) (Y. Zhou, 2024)
+  - [PRJNA1152621](https://www.ncbi.nlm.nih.gov/bioproject/?term=PRJNA1152621) (S. Rajachandran 2024)
 
 ## Citation
 
