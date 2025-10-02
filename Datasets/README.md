@@ -4,6 +4,11 @@ This folder contains code necessary to run the analyses I performed on each data
 
 ## Repository Structure
 
+### SG_Paper_Fig_code.Rmd 
+
+- **`SG_Paper_Fig_code`**
+This file contains most of the code necessary to redo all the images in the publication. Exceptions are commented within the file.
+
 ### Centrifugation 
 
 Analyses related to the SedSeq dataset used, 
@@ -39,7 +44,7 @@ In this folder, I present all analyses pertaining to the dataset by **V. López-
 
 ### WCTranscriptome 
 
-Analyses related to whole-cell transcriptome datasets used, and process used to develop the stress granule signatures, and corresponding testing on TCGA data. 
+Analyses related to whole-cell transcriptome datasets used. 
 
 - **`GSE173953`**
 In these files, I present all analyses pertaining to the dataset by **M. Paget, 2023**.
@@ -56,12 +61,20 @@ In these files, I present all analyses pertaining to the integration of the data
 **GSE138988** ([NCBI GEO Link](https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=GSE138988))
 **GSE119977** ([NCBI GEO Link](https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=GSE119977))
 
+### Signature
+
+Analyses related to the  process used to develop the stress granule signatures, and corresponding testing on TCGA data. 
+
 - **`Signature_markeR_Bi.Rmd`**
 In this file, I present all analyses pertaining to the development of the SGScore signatures, using the markeR package originally developed by **R. Martins-Silva, 2025**. Due to the long knitting duration, only markdown format is available.
 **markeR** ([GitHub Link](https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=GSE173953](https://github.com/DiseaseTranscriptomicsLab/markeR)))
 
 - **`SIGNATURE_TCGA.Rmd`**
-In this file, I present all analyses pertaining to the usage of the SGScore signatures, testing them on **GDC TCGA Data**. Due to the long knitting duration, only markdown format is available.
+In this file, I present the first part of the analyses pertaining to the usage of the SGScore signatures, testing them on **GDC TCGA Data**. Due to the long knitting duration, only markdown format is available.
+**TCGA** ([GDC Portal Link](https://portal.gdc.cancer.gov/)))
+
+- **`TCGA_SG_Signature_Part2.Rmd`**
+In this file, I present the second part of the analyses pertaining to the usage of the SGScore signatures, testing them on **GDC TCGA Data**. Due to the long knitting duration, only markdown format is available.
 **TCGA** ([GDC Portal Link](https://portal.gdc.cancer.gov/)))
 
 ### SGTranscriptome 
