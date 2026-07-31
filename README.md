@@ -1,8 +1,8 @@
 # StressGranules - WIP
 
-[![DOI](https://zenodo.org/badge/1040091867.svg)](https://doi.org/10.5281/zenodo.21724194)
+[![DOI](https://zenodo.org/badge/984654102.svg)](https://doi.org/10.5281/zenodo.21724124)
 
-This repository contains all analyses and code associated with our study on stress granule signatures, as described in [10.5281/zenodo.21724194](https://doi.org/10.5281/zenodo.21724194).
+This repository contains all analyses and code associated with our study on stress granule signatures.
 
 **DISCLAIMER: The code and analyses are commented, but in an informal manner.**
 
