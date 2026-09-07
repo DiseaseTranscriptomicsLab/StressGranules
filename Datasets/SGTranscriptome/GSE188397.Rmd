@@ -87,6 +87,7 @@ read.counts <- as.data.frame(read.counts)
 
 row.names(read.counts) <- read.counts$hgnc_symbol #changes rownames into hgnc symbols
 read.counts$hgnc_symbol <- NULL #We no longer need this column, as we have the rownames.
+colnames(read.counts) <- sub("Aligned.*", "", colnames(read.counts))
 ```
 
 
@@ -204,11 +205,16 @@ alternew <- log10(rowSums(read.counts))
 
 alternew <- as.data.frame(alternew)
 
-ggplot(alternew, aes(x=alternew)) + geom_density() + theme_bw() + geom_vline(xintercept = 3.25, linetype = "dashed") + ylab("Events") + xlab("Number of Reads (log10)") +
-  theme(axis.line = element_line(colour = "black"),
-        panel.grid.minor = element_blank(),
-        panel.border = element_blank(),
-        panel.background = element_blank()) + ggtitle("Density of Reads - All Samples")
+prefilt <- ggplot(alternew, aes(x=alternew)) + geom_density() + geom_vline(xintercept = 3.25, linetype = "dashed") + ylab("Density\n") + xlab("Number of Reads") + theme_classic() +
+  theme(axis.line = element_line(colour = "black")) + ggtitle("Pre-Filtering")+
+  theme(text=element_text(size=20,  family="Arial MS"))+
+  scale_x_continuous(
+    breaks = 1:6,
+    labels = c("10", "100", expression(10^3),
+               expression(10^4),
+               expression(10^5),
+               expression(10^6))
+  )
 
 ggplot(alternew.WCS, aes(x=alternew.WCS)) + geom_density(fill="#207567", alpha=0.5) + theme_bw() + geom_vline(xintercept = 2.5, linetype = "dashed") + ylab("Events") + xlab("Number of Reads (log10)") +
   theme(axis.line = element_line(colour = "black"),
@@ -301,11 +307,17 @@ filterednew.SG <- subset(read.counts, alternew.SG>2)
 #after cutting, its a good idea to visualize again
 falternew <- log10(rowSums(filterednew))
 falternew <- as.data.frame(falternew)
-ggplot(falternew, aes(x=falternew)) + geom_density() + theme_bw() + ylab("Events") + xlab("Number of Reads (log10)") +
-  theme(axis.line = element_line(colour = "black"),
-        panel.grid.minor = element_blank(),
-        panel.border = element_blank(),
-        panel.background = element_blank())
+postfilt <- ggplot(falternew, aes(x=falternew)) + geom_density() + ylab("Density\n") + xlab("Number of Reads") +
+   theme_classic() +
+  theme(axis.line = element_line(colour = "black"))+ ggtitle("Post-Filtering")+
+  theme(text=element_text(size=20,  family="Arial MS")) +
+  scale_x_continuous(
+    breaks = 1:6,
+    labels = c("10", "100", expression(10^3),
+               expression(10^4),
+               expression(10^5),
+               expression(10^6))
+  )
 
 #lets save the genes which we maintain
 impgenes <- c(row.names(falternew))
@@ -325,7 +337,7 @@ impgenes.SG <- c(row.names(filterednew.SG))
 finaltable <- read.counts[row.names(read.counts)%in%impgenes,]
 finaltable <- finaltable[row.names(finaltable)%in%impgenes.WCS,]
 finaltable <- finaltable[row.names(finaltable)%in%impgenes.WCU,]
-inaltable <- finaltable[row.names(finaltable)%in%impgenes.ECBP2AR,]
+finaltable <- finaltable[row.names(finaltable)%in%impgenes.ECBP2AR,]
 finaltable <- finaltable[row.names(finaltable)%in%impgenes.ECBP1AR,]
 finaltable <- finaltable[row.names(finaltable)%in%impgenes.ECCTAR,]
 finaltable <- finaltable[row.names(finaltable)%in%impgenes.ECCTUN,]
@@ -334,6 +346,15 @@ finaltable <- finaltable[row.names(finaltable)%in%impgenes.ECBP1UN,]
 finaltable <- finaltable[row.names(finaltable)%in%impgenes.WCBP2SI,]
 finaltable <- finaltable[row.names(finaltable)%in%impgenes.WCBP1SI,]
 finaltable <- finaltable[row.names(finaltable)%in%impgenes.SG,]
+```
+
+
+```{r fig.height=7, fig.width=14}
+(filtplot <- ggarrange(prefilt, postfilt, nrow=1))
+
+png("~/Images/Filt_Example.png", width = 14, height=4, units = "in", res=300)
+filtplot
+dev.off()
 ```
 
 ## Matrices
@@ -452,6 +473,8 @@ heatmap(cor(y$E, method="spearman"), symm=T, labRow = colnames(y$E), labCol = Sa
 From the PCA we can see that the two versions of WCU and WCS do not appear close in the plot. For simplicity's sake, I opted to remove the old version of these samples. As we can see from the heatmap, excluding the controls, the differences between eCLIP samples appears to be minimal.
 
 
+
+
 # Simple Linear Models
 
 Now we must perform linear model fitting. 
@@ -507,6 +530,171 @@ tmp_BP1.vs.CT <- eBayes(tmp_BP1.vs.CT)
 tmp_BP2.vs.CT <- eBayes(tmp_BP2.vs.CT)
 tmp_BP1.vs.BP1 <- eBayes(tmp_BP1.vs.BP1)
 tmp_BP2.vs.BP2 <- eBayes(tmp_BP2.vs.BP2)
+```
+
+```{r fig.height=10, fig.width=10}
+eclip_groups <- c("ECBPAR1", "ECBPAR2", "ECCTUN", "ECBP2UN", "ECCTAR", "ECBP1UN")
+eclip_idx <- which(fordescriptive %in% eclip_groups)
+
+cormat <- cor(y$E[, eclip_idx], method = "spearman")
+colnames(cormat) <- rownames(cormat) <- fordescriptive[eclip_idx]
+sample_names <- colnames(y$E)[eclip_idx]
+
+result <- do.call(rbind, lapply(seq_along(eclip_idx), function(i) {
+  own_group <- fordescriptive[eclip_idx][i]
+  partner_idx <- which(fordescriptive[eclip_idx] == own_group & seq_along(eclip_idx) != i)
+
+  own_cor <- cormat[i, partner_idx]
+
+  others <- cormat[i, -c(i, partner_idx)]
+  best_other_cor <- max(others)
+  best_other_group <- names(others)[which.max(others)]
+
+  data.frame(
+    Sample = sample_names[i],
+    Group = own_group,
+    OwnReplicateCor = own_cor,
+    BestOtherCor = best_other_cor,
+    BestOtherGroup = best_other_group,
+    Mismatched = best_other_cor > own_cor
+  )
+}))
+
+result[order(-result$Mismatched, result$OwnReplicateCor), ]
+
+result_long <- rbind(
+  data.frame(Sample = result$Sample, Correlation = result$OwnReplicateCor, Comparison = "Own replicate"),
+  data.frame(Sample = result$Sample, Correlation = result$BestOtherCor, Comparison = "Best non-replicate")
+)
+
+ggplot(result_long, aes(x = reorder(Sample, -Correlation), y = Correlation, color = Comparison)) +
+  geom_point(size = 4) +
+  geom_line(aes(group = Sample), color = "grey60") +
+  coord_flip() +
+  scale_color_manual(values = c("Own replicate" = "#de425b", "Best non-replicate" = "#a2d1e6")) +
+  theme_bw() +
+  ylab("Spearman correlation") + xlab("") +
+  ggtitle("Own replicate vs. best alternative match, per sample") +
+  theme(axis.line = element_line(colour = "black"),
+        panel.grid.minor = element_blank(),
+        panel.border = element_blank(),
+        panel.background = element_blank(),
+        text = element_text(size = 14, family = "Arial MS"))
+```
+```{r fig.height=12, fig.width=14}
+plot_pair <- function(sample1, sample2, label1, label2, title) {
+  df <- data.frame(Rep1 = y$E[, sample1], Rep2 = y$E[, sample2])
+
+  ggplot(df, aes(x = Rep1, y = Rep2)) +
+    geom_point(fill = "#DDDDDD", alpha = 0.3, size = 5, shape = 21, colour = 'black') +
+    geom_density2d(color = "#800020", size = 1.2) +
+    geom_abline(slope = 1, intercept = 0, linetype = "dashed", color = "grey40") +
+    theme_bw() +
+    ylab(paste0(label2, "\n")) + xlab(label1) +
+    ggtitle(title) +
+    theme(axis.line = element_line(colour = "black"),
+          panel.grid.minor = element_blank(),
+          panel.border = element_blank(),
+          panel.background = element_blank()) +
+    theme(plot.title = element_text(hjust = 0.5)) +
+    theme(text = element_text(size = 16, family = "Arial MS")) +
+    stat_cor(method = "spearman", cor.coef.name = "rho", size = 6) +
+    theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank())
+}
+
+## ---- Find the specific "best other sample," not just the group ----------
+get_best_match <- function(group_name) {
+  idx <- which(fordescriptive[eclip_idx] == group_name)
+  # Pull the worse-behaving sample of the pair (lower own-replicate cor)
+  own_cors <- sapply(idx, function(i) {
+    partner <- which(fordescriptive[eclip_idx] == group_name & seq_along(eclip_idx) != i)
+    cormat[i, partner]
+  })
+  worst_i <- idx[which.min(own_cors)]
+  own_partner_i <- idx[idx != worst_i]
+
+  others <- cormat[worst_i, -c(worst_i, own_partner_i)]
+  best_other_i <- which(colnames(cormat) == names(others)[which.max(others)])
+  # colnames(cormat) are group labels, not sample names — map back via position
+  best_other_pos <- which(cormat[worst_i, ] == max(others))
+  best_other_pos <- best_other_pos[!(best_other_pos %in% c(worst_i, own_partner_i))][1]
+
+  list(
+    worst_sample   = sample_names[worst_i],
+    own_partner    = sample_names[own_partner_i],
+    best_other     = sample_names[best_other_pos],
+    best_other_grp = fordescriptive[eclip_idx][best_other_pos]
+  )
+}
+
+bp1 <- get_best_match("ECBPAR1")
+bp2 <- get_best_match("ECBPAR2")
+
+## ---- ECBPAR1: own replicate pair, and vs its best non-replicate match ---
+p1a <- plot_pair(bp1$own_partner, bp1$worst_sample, "ECBPAR1 rep A", "ECBPAR1 rep B",
+                  "ECBPAR1: own replicate pair")
+p1b <- plot_pair(bp1$own_partner, bp1$best_other, "ECBPAR1 rep A", bp1$best_other_grp,
+                  paste0("ECBPAR1 vs best match: ", bp1$best_other_grp))
+
+## ---- ECBPAR2: same ----
+p2a <- plot_pair(bp2$own_partner, bp2$worst_sample, "ECBPAR2 rep A", "ECBPAR2 rep B",
+                  "ECBPAR2: own replicate pair")
+p2b <- plot_pair(bp2$own_partner, bp2$best_other, "ECBPAR2 rep A", bp2$best_other_grp,
+                  paste0("ECBPAR2 vs best match: ", bp2$best_other_grp))
+
+p_corr <- ggpubr::ggarrange(p1a, p1b, p2a, p2b, ncol = 2, nrow = 2)
+
+png("~/Projects/StressGranules/SGPAPER/Images/PNG/Sup_Sato.png", width = 14, height=12, units = "in", res=300)
+p_corr
+dev.off()
+```
+
+```{r fig.height=12, fig.width=14}
+get_original_label <- function(sample_id) {
+  # sample_id can be a column name or a numeric/position index into y$E
+  if (is.character(sample_id) && sample_id %in% colnames(read.counts)) {
+    return(sample_id)
+  }
+  # Fallback: match by position (same column order between read.counts and y$E)
+  pos <- if (is.character(sample_id)) which(colnames(y$E) == sample_id) else sample_id
+  colnames(read.counts)[pos]
+}
+
+plot_pair <- function(sample1, sample2, title) {
+  df <- data.frame(Rep1 = y$E[, sample1], Rep2 = y$E[, sample2])
+  label1 <- get_original_label(sample1)
+  label2 <- get_original_label(sample2)
+  ggplot(df, aes(x = Rep1, y = Rep2)) +
+    geom_point(fill = "#DDDDDD", alpha = 0.3, size = 5, shape = 21, colour = 'black') +
+    geom_density2d(color = "#800020", size = 1.2) +
+    geom_abline(slope = 1, intercept = 0, linetype = "dashed", color = "grey40") +
+    theme_bw() +
+    ylab(bquote(.(label2) ~ "gene expression" ~ (log[2] ~ CPM))) +
+    xlab(bquote(.(label1) ~ "gene expression" ~ (log[2] ~ CPM))) +
+    ggtitle(title) +
+    theme(axis.line = element_line(colour = "black"),
+          panel.grid.minor = element_blank(),
+          panel.border = element_blank(),
+          panel.background = element_blank()) +
+    theme(plot.title = element_text(hjust = 0.5)) +
+    theme(text = element_text(size = 16, family = "Arial MS")) +
+    stat_cor(method = "spearman", cor.coef.name = "rho", size = 6) +
+    theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank())
+}
+
+## ---- ECBPAR1 ----
+p1a <- plot_pair(bp1$own_partner, bp1$worst_sample, "ECBPAR1: own replicate pair")
+p1b <- plot_pair(bp1$own_partner, bp1$best_other, paste0("ECBPAR1 vs best match: ", bp1$best_other_grp))
+
+## ---- ECBPAR2 ----
+p2a <- plot_pair(bp2$own_partner, bp2$worst_sample, "ECBPAR2: own replicate pair")
+p2b <- plot_pair(bp2$own_partner, bp2$best_other, paste0("ECBPAR2 vs best match: ", bp2$best_other_grp))
+
+p_corr <- ggpubr::ggarrange(p1a, p1b, p2a, p2b, ncol = 2, nrow = 2)
+
+png("~/Projects/StressGranules/SGPAPER/Images/PNG/KSato.png", width = 12, height=12, units = "in", res=300)
+p_corr
+dev.off()
 ```
 
 

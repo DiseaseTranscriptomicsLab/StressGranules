@@ -111,7 +111,7 @@ custom_palette <- qualitative_hcl(20, palette = "Pastel")
 custom_palette <- sample(custom_palette, 20)
 
 # Use SampleColouring from metadata
-SampleColouring <- c("CBX1_Input", "CBX1_Input", "C1_Input", "C1_Input", "GFP_Input", "GFP_Input", "eIF4E_Input", "eIF4E_Input", "eIF4A_Naive_Input", "eIF4A_Naive_Input", "eIF4A_Hippuristanol_Input", "eIF4A_Hippuristanol_Input", "eIF4A_DMSO_Input", "eIF4A_T0_Input", "eIF4A_T0_Input", "eIF4A_T4_Input", "eIF4A_T20_Input", "eIF4A_T20_Input", "CBX1_Pulldown", "CBX1_Pulldown", "C1_Pulldown", "C1_Pulldown", "GFP_Pulldown", "GFP_Pulldown", "eIF4E_Pulldown", "eIF4E_Pulldown", "eIF4A_Naive_Pulldown", "eIF4A_Naive_Pulldown", "eIF4A_Hippuristanol_Pulldown", "eIF4A_Hippuristanol_Pulldown", "eIF4A_T0_Pulldown", "eIF4A_T0_Pulldown", "eIF4A_T4_Pulldown", "eIF4A_T20_Pulldown", "eIF4A_T20_Pulldown", "eIF4A_DMSO_Pulldown", "eIF4A_DMSO_Pulldown")
+SampleColouring <- c("CBX1 Input", "CBX1 Input", "C1 Input", "C1 Input", "GFP Input", "GFP Input", "eIF4E Input", "eIF4E Input", "eIF4A Naive Input", "eIF4A Naive Input", "eIF4A Hippuristanol Input", "eIF4A Hippuristanol Input", "eIF4A DMSO Input", "eIF4A T0 Input", "eIF4A T0 Input", "eIF4A T4 Input", "eIF4A T20 Input", "eIF4A T20 Input", "CBX1 Pulldown", "CBX1 Pulldown", "C1 Pulldown", "C1 Pulldown", "GFP Pulldown", "GFP Pulldown", "eIF4E Pulldown", "eIF4E Pulldown", "eIF4A Naive Pulldown", "eIF4A Naive Pulldown", "eIF4A Hippuristanol Pulldown", "eIF4A Hippuristanol Pulldown", "eIF4A T0 Pulldown", "eIF4A T0 Pulldown", "eIF4A T4 Pulldown", "eIF4A T20 Pulldown", "eIF4A T20 Pulldown", "eIF4A DMSO Pulldown", "eIF4A DMSO Pulldown")
 
 # Build cumulative counts
 final <- sapply(1:ncol(read.counts), function(i) {
@@ -179,12 +179,26 @@ Let us begin with the filtration. Personally, I find that its easier to do visua
 alternew <- log10(rowSums(read.counts))
 alternew <- as.data.frame(alternew)
 
-ggplot(alternew, aes(x=alternew)) + geom_density() + theme_bw() + geom_vline(xintercept = 2.75, linetype = "dashed") + ylab("Events") + xlab("Number of Reads (log10)") +
+genes_of_interest <- c("CEBPE", "GLIPR2", "RN7SKP9", "SLC16A7", "EEF1A2", "TSIX")
+
+gene_lines <- data.frame(
+  Gene  = genes_of_interest,
+  value = alternew[genes_of_interest, "alternew"]
+)
+
+ggplot(alternew, aes(x = alternew)) +
+  geom_density() +
+  theme_bw() +
+  geom_vline(xintercept = 2.75, linetype = "dashed") +
+  geom_vline(data = gene_lines, aes(xintercept = value), linetype = "dashed", color = "#DB5375") +
+  geom_text(data = gene_lines, aes(x = value, y = 0, label = Gene),
+            angle = 90, hjust = -0.2, vjust = -0.4, size = 3.5, color = "#DB5375") +
+  ylab("Events") + xlab("Number of Reads (log10)") +
   theme(axis.line = element_line(colour = "black"),
         panel.grid.minor = element_blank(),
         panel.border = element_blank(),
-        panel.background = element_blank()) + ggtitle("Density of Reads - All Samples")
-
+        panel.background = element_blank()) +
+  ggtitle("Density of Reads - All Samples")
 filterednew <- subset(read.counts, alternew>2.75)
 
 #after cutting, its a good idea to visualize again
@@ -213,7 +227,7 @@ Good! Now we can proceed by designing our matrices.
 ```{r}
 #Let us prepare metadata to add to our samples
 #Generic full sample name
-forall <- c("CBX1_Input", "CBX1_Input", "C1_Input", "C1_Input", "GFP_Input", "GFP_Input", "eIF4E_Input", "eIF4E_Input", "eIF4A_Naive_Input", "eIF4A_Naive_Input", "eIF4A_Hippuristanol_Input", "eIF4A_Hippuristanol_Input", "eIF4A_DMSO_Input", "eIF4A_T0_Input", "eIF4A_T0_Input", "eIF4A_T4_Input", "eIF4A_T20_Input", "eIF4A_T20_Input", "CBX1_Pulldown", "CBX1_Pulldown", "C1_Pulldown", "C1_Pulldown", "GFP_Pulldown", "GFP_Pulldown", "eIF4E_Pulldown", "eIF4E_Pulldown", "eIF4A_Naive_Pulldown", "eIF4A_Naive_Pulldown", "eIF4A_Hippuristanol_Pulldown", "eIF4A_Hippuristanol_Pulldown", "eIF4A_T0_Pulldown", "eIF4A_T0_Pulldown", "eIF4A_T4_Pulldown", "eIF4A_T20_Pulldown", "eIF4A_T20_Pulldown", "eIF4A_DMSO_Pulldown", "eIF4A_DMSO_Pulldown")
+forall <- c("CBX1 Input", "CBX1 Input", "C1 Input", "C1 Input", "GFP Input", "GFP Input", "eIF4E Input", "eIF4E Input", "eIF4A Naive Input", "eIF4A Naive Input", "eIF4A Hippuristanol Input", "eIF4A Hippuristanol Input", "eIF4A DMSO Input", "eIF4A T0 Input", "eIF4A T0 Input", "eIF4A T4 Input", "eIF4A T20 Input", "eIF4A T20 Input", "CBX1 Pulldown", "CBX1 Pulldown", "C1 Pulldown", "C1 Pulldown", "GFP Pulldown", "GFP Pulldown", "eIF4E Pulldown", "eIF4E Pulldown", "eIF4A Naive Pulldown", "eIF4A Naive Pulldown", "eIF4A Hippuristanol Pulldown", "eIF4A Hippuristanol Pulldown", "eIF4A T0 Pulldown", "eIF4A T0 Pulldown", "eIF4A T4 Pulldown", "eIF4A T20 Pulldown", "eIF4A T20 Pulldown", "eIF4A DMSO Pulldown", "eIF4A DMSO Pulldown")
 #Input vs Pulldown
 fortype <- c("Input", "Input", "Input", "Input", "Input", "Input", "Input", "Input", "Input", "Input", "Input", "Input", "Input", "Input", "Input", "Input", "Input", "Input", "Pulldown", "Pulldown", "Pulldown", "Pulldown", "Pulldown", "Pulldown", "Pulldown", "Pulldown", "Pulldown", "Pulldown", "Pulldown", "Pulldown", "Pulldown", "Pulldown", "Pulldown", "Pulldown", "Pulldown", "Pulldown", "Pulldown")
 #Each of these samples has one of these proteins linked to apex
@@ -297,15 +311,52 @@ As expected due to the big differences in complexity and read depth, there are s
 
 I like to start with a Principal Component Analysis (PCA), which helps to identify what drives the largest variation in the data. This time, I also plotted a simple correlation heatmap between samples.
 
-```{r, fig.height=7, fig.width=9}
+```{r fig.height=10, fig.width=10}
 # Define color palette
 custom_palette <- qualitative_hcl(7, palette = "Pastel")
 custom_palette <- sample(custom_palette, 7)
 
 
-#this is done to be able to do traditional PCA
-heatmap(cor(y$E, method="spearman"), symm=T, labCol = colnames(y$E), labRow = forall)
+library(reshape2)
+library(dplyr)
+library(ggplot2)
+cormat <- cor(y$E, method = "spearman")
 
+# Euclidean clustering on the correlation matrix itself — each sample's
+# correlation profile vs. every other sample as coordinates — not on
+# raw expression (dist(t(y$E))) or on 1-cormat (correlation-distance)
+hc <- hclust(dist(cormat))
+sample_order <- colnames(cormat)[hc$order]
+
+cormat_melt <- reshape2::melt(cormat)
+N <- length(sample_order)
+
+heat_df <- cormat_melt %>%
+  mutate(Var1 = factor(Var1, levels = sample_order),
+         Var2 = factor(Var2, levels = sample_order)) %>%
+  arrange(Var1) %>%
+  filter(as.numeric(Var1) + as.numeric(Var2) <= N + 1)   # right angle at bottom-left
+
+# Labels must be reordered to match the clustering order — SampleColouring
+# is aligned to the original column order of y$E, not to sample_order,
+# so it needs re-indexing or the wrong group names end up on the axis
+sample_labels <- SampleColouring[match(sample_order, colnames(y$E))]
+
+(p_corr <- ggplot(heat_df, aes(x = Var1, y = Var2, fill = value)) +
+  geom_tile(color = "#5e5e5e", size = 0.5) +
+  scale_fill_gradient(low = "white", high = "#DB5375") +
+  labs(fill = "Spearman's Rho") +
+  theme_classic() +
+  theme(
+    axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.5, size = 10, face = "bold"),
+    axis.text.y = element_text(angle = 0, hjust = 1, size = 10, face = "bold"),
+    plot.title = element_text(hjust = 0.5),
+    text = element_text(size = 20, family = "Arial MS", face = "bold"),
+    legend.position = "top"
+  ) +
+  ylab("") + xlab("") +
+  scale_y_discrete(labels = sample_labels) +
+  scale_x_discrete(labels = colnames(y$E)))
 #This prepares my data for the PCA
 dfforpca <- y$E
 dfforpca <- t(dfforpca)
@@ -381,9 +432,50 @@ contribs2 <- pca_res$rotation[,2]
 #These are the biggest contributors to the PCA2 (down side)
 (neg2genes <- sort(contribs2, decreasing=F)[1:10])
 
+
 ```
 
 There are some samples which aren't as similar as expected. Nevertheless, I opted to continue. This heatmap was also useful to decide what comparisons to do. Also, as T20 pulldowns are closer to each other than Hipu, for simple comparisons I focused on these.
+
+```{r fig.height=10, fig.width=10}
+eif4a_idx <- which(forgenome == "eIF4A" & fortype == "Pulldown")
+eif4a_expr <- y$E[, eif4a_idx]
+eif4a_condition <- forall[eif4a_idx]   # full label: keeps Naive and T0 distinct
+colnames(eif4a_expr) <- eif4a_condition
+
+conditions_of_interest <- c("eIF4A Naive Pulldown", "eIF4A Hippuristanol Pulldown",
+                             "eIF4A T20 Pulldown", "eIF4A T0 Pulldown")
+plot_list <- lapply(conditions_of_interest, function(cond) {
+  idx <- which(eif4a_condition == cond)
+  df <- data.frame(Rep1 = eif4a_expr[, idx[1]], Rep2 = eif4a_expr[, idx[2]])
+  rho <- cor(df$Rep1, df$Rep2, method = "spearman")
+  ggplot(df, aes(x = Rep1, y = Rep2)) +
+    geom_point(fill = "#DDDDDD", alpha = 0.3, size = 5, shape = 21, colour = 'black') +
+    geom_density2d(color = "#800020", size = 1.2) +
+    geom_abline(slope = 1, intercept = 0, linetype = "dashed", color = "grey40") +
+    theme_bw() +
+    ylab(bquote(.(colnames(y$E)[eif4a_idx[idx[2]]]) ~ "gene expression" ~ (log[2] ~ CPM))) +
+    xlab(bquote(.(colnames(y$E)[eif4a_idx[idx[1]]]) ~ "gene expression" ~ (log[2] ~ CPM))) +
+    ggtitle(cond) +
+    theme(axis.line = element_line(colour = "black"),
+          panel.grid.minor = element_blank(),
+          panel.border = element_blank(),
+          panel.background = element_blank()) +
+    theme(plot.title = element_text(hjust = 0.5)) +
+    theme(text = element_text(size = 16, family = "Arial MS")) +
+    stat_cor(method = "spearman", cor.coef.name = "rho", size = 6) +
+    theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank())
+})
+
+p_corr <- ggpubr::ggarrange(plotlist = plot_list, ncol = 2, nrow = 2)
+
+png("~/Projects/StressGranules/SGPAPER/Images/PNG/Sup_PadronA.png", width = 12, height=12, units = "in", res=300)
+p_corr
+dev.off()
+
+
+```
+
 
 ## Linear Models
 

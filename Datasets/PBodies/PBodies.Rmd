@@ -1179,12 +1179,420 @@ write.table(DEGenes, "~/Projects/StressGranules/SGPAPER/RealSGs/Tmathenypb.txt",
 #sg_t <- data.frame(Gene=row.names(DEGenes), sg_t=DEGenes$t, sg_logFC=DEGenes$logFC)
 ```
 
+```{r}
+
+MitoGenes <- fread("~/MitoGenes.txt")[[1]]
+MitoData <- DEGenes[rownames(DEGenes) %in% MitoGenes, ]
+NucGenes <- fread("~/rnalocate_mito_filt.csv")[[1]]
+NucData <- DEGenes[rownames(DEGenes) %in% NucGenes, ]
+(m <- ggplot(data=DEGenes,
+                 aes(x=logFC,
+                     y=B)) +
+  geom_point(color="#CCCCCC") +
+  geom_point(data=NucData, aes(x=logFC, y=B), color="#CB643F", size=4) +
+  geom_point(data=MitoData, aes(x=logFC, y=B), color="#73937E", size=4) +
+  ylab("B-Statistic") +
+  xlab(expression(Log[2]~"Fold-Change")) +
+  theme(
+    axis.line = element_line(colour = "black"),
+    panel.grid.major = element_blank(),   # remove major gridlines
+    panel.grid.minor = element_blank(),   # remove minor gridlines
+    panel.border = element_blank(),
+    panel.background = element_blank(),
+    axis.title = element_blank()
+  ) +
+  theme(plot.title = element_text(hjust = 0.5), plot.subtitle = element_text(hjust = 0.5)) +
+  theme(text=element_text(size=25, family="Arial MS")))
+
+
+png("~/Projects/StressGranules/SGPAPER/Images/PNG/Tmat19Mito.png", width = 7, height=6, units = "in", res=300)
+m
+dev.off()
+
+```
+
+# MA Plot
+
+```{r}
+# MA plot: mean expression (x) vs logFC (y), same highlighting scheme as the volcano
+
+ggplot(data=DEGenes,
+                 aes(x=AveExpr,
+                     y=logFC)) +
+  geom_point(color="#CCCCCC") +
+  geom_point(data=MitoData, aes(x=AveExpr, y=logFC), color="#73937E", size=4) +
+  geom_point(data=NucData, aes(x=AveExpr, y=logFC), color="#CB643F", size=4) +
+  geom_hline(yintercept = 0, linetype="dashed", color="grey40") +
+  theme_bw() + ylab(expression(Log[2]~"Fold-Change")) + xlab("Average Expression (Log2 CPM)") +
+  theme(axis.line = element_line(colour = "black"),
+        panel.grid.minor = element_blank(),
+        panel.border = element_blank(),
+        panel.background = element_blank()) +
+  ggtitle("T. Matheny Both - MA Plot") +
+  theme(plot.title = element_text(hjust = 0.5), plot.subtitle = element_text(hjust = 0.5)) +
+  geom_label_repel(upmarkers[1:ndegs,], mapping=aes(x=AveExpr, y=logFC, label=row.names(upmarkers)[1:ndegs]), size=4, point.padding=-0.5, color="#A10702", max.overlaps=20, fontface="italic") +
+  geom_label_repel(downmarkers[1:ndegs,], mapping=aes(x=AveExpr, y=logFC, label=row.names(downmarkers)[1:ndegs]), size=4, point.padding=-0.5, color="#03256C", max.overlaps=20, fontface="italic") +
+  geom_point(data=upmarkers, aes(x=AveExpr, y=logFC), color="#A10702", size=4) +
+  geom_point(data=downmarkers, aes(x=AveExpr, y=logFC), color="#03256C", size=4) +
+  theme(text=element_text(size=15, family="Arial MS"))
+
+# Publication-style version, stripped of axis titles, matching your "m" plot
+(ma <- ggplot(data=DEGenes,
+                 aes(x=AveExpr,
+                     y=logFC)) +
+  geom_point(color="#CCCCCC") +
+  geom_point(data=MitoData, aes(x=AveExpr, y=logFC), color="#73937E", size=4) +
+  geom_point(data=NucData, aes(x=AveExpr, y=logFC), color="#CB643F", size=4) +
+  geom_hline(yintercept = 0, linetype="dashed", color="grey40") +
+  ylab(expression(Log[2]~"Fold-Change")) +
+  xlab("Average Expression (Log2 CPM)") + geom_density2d(color = "#800020", size = 1.2) + stat_cor(method = "spearman", cor.coef.name = "rho", size=7)+
+  stat_cor(data = MitoData, aes(x=AveExpr, y=logFC), method = "spearman",
+           cor.coef.name = "rho", size=7, color = "#73937E", label.y.npc = 0.1) +
+  stat_cor(data = NucData, aes(x=AveExpr, y=logFC), method = "spearman",
+           cor.coef.name = "rho", size=7, color = "#CB643F", label.y.npc = 0.2) +
+  theme(
+    axis.line = element_line(colour = "black"),
+    panel.grid.major = element_blank(),
+    panel.grid.minor = element_blank(),
+    panel.border = element_blank(),
+    panel.background = element_blank(),
+    axis.title = element_blank()
+  ) +
+  theme(plot.title = element_text(hjust = 0.5), plot.subtitle = element_text(hjust = 0.5)) +
+  theme(text=element_text(size=25, family="Arial MS")))
+
+png("~/Projects/StressGranules/SGPAPER/Images/PNG/Tmat19Mito_MA.png", width = 7, height=6, units = "in", res=300)
+ma
+dev.off()
+```
+
+## MA Plot
+
+```{r}
+MitoGenes <- fread("~/MitoGenes.txt")[[1]]
+
+genelength <- read.csv("~/Projects/StressGranules/SG_Transcriptome/RP_Data_2021/TrimmedSamples/alignment_STAR/TranscriptLenght.txt", header=T)
+genelength <- subset(genelength, Ensembl.Canonical==1)
+genelength <- subset(genelength, Gene.name!="")
+genelength <- genelength %>%
+  group_by(Gene.name) %>%
+  slice(which.max(Transcript.length..including.UTRs.and.CDS.)) %>%
+  ungroup()
+genelength <- genelength[,-c(2,3)]
+colnames(genelength) <- c("Length", "Gene")
+
+genelength$Cromo <- ifelse(genelength$Gene %in% MitoGenes, "Mito", "Other")
+
+# Apply the length-based weight formula
+genelength$S <- ifelse(
+  genelength$Cromo == "Mito",
+  (genelength$Length)^(1/3) * 3.23e-11 + 1.17e-9,   # Formula for mitochondrial RNAs
+  (genelength$Length)^(1/3) * 6.09e-11 + 3.88e-10    # Formula for other RNAs
+)
+DEGenes$Gene <- row.names(DEGenes)
+DEGenes <- merge(DEGenes, genelength, by="Gene")
+MitoGenes <- fread("~/MitoGenes.txt")[[1]]
+MitoData <- DEGenes[DEGenes$Gene %in% MitoGenes, ]
+NucGenes <- fread("~/rnalocate_mito_filt.csv")[[1]]
+NucData <- DEGenes[DEGenes$Gene %in% NucGenes, ]
+
+# Publication-style version, stripped of axis titles, matching your "m" plot
+(ma <- ggplot(data=DEGenes,
+                 aes(x=log10(Length),
+                     y=logFC)) +
+  geom_point(color="#CCCCCC") +
+  geom_point(data=MitoData, aes(x=log10(Length), y=logFC), color="#73937E", size=4) +
+  geom_point(data=NucData, aes(x=log10(Length), y=logFC), color="#CB643F", size=4) +
+  geom_hline(yintercept = 0, linetype="dashed", color="grey40") +
+  ylab(expression(Log[2]~"Fold-Change")) + geom_density2d(color = "#800020", size = 1.2) + stat_cor(method = "spearman", cor.coef.name = "rho", size=7)+
+  stat_cor(data = MitoData, aes(x=log10(Length), y=logFC), method = "spearman",
+           cor.coef.name = "rho", size=7, color = "#73937E", label.y.npc = 0.1) +
+  stat_cor(data = NucData, aes(x=log10(Length), y=logFC), method = "spearman",
+           cor.coef.name = "rho", size=7, color = "#CB643F", label.y.npc = 0.2) +
+  scale_x_continuous(
+    breaks = log10(c(10, 100, 1000, 10000)),  # tick positions (in log10 scale)
+    labels = c("10", "100", "1000", "10000") # what you want to show
+  )+
+  xlab("RNA Length (log10)") +
+  theme(
+    axis.line = element_line(colour = "black"),
+    panel.grid.major = element_blank(),
+    panel.grid.minor = element_blank(),
+    panel.border = element_blank(),
+    panel.background = element_blank(),
+    axis.title = element_blank()
+  ) +
+  theme(plot.title = element_text(hjust = 0.5), plot.subtitle = element_text(hjust = 0.5)) +
+  theme(text=element_text(size=25, family="Arial MS")))
+
+png("~/Projects/StressGranules/SGPAPER/Images/PNG/Tmat19Mito_MA_length.png", width = 7, height=6, units = "in", res=300)
+ma
+dev.off()
+
+# Publication-style version, stripped of axis titles, matching your "m" plot
+(ma <- ggplot(data=DEGenes,
+                 aes(x=(S),
+                     y=logFC)) +
+  geom_point(color="#CCCCCC") +
+  geom_point(data=MitoData, aes(x=(S), y=logFC), color="#73937E", size=4) +
+  geom_point(data=NucData, aes(x=(S), y=logFC), color="#CB643F", size=4) +
+  geom_hline(yintercept = 0, linetype="dashed", color="grey40") +
+  ylab(expression(Log[2]~"Fold-Change")) + geom_density2d(color = "#800020", size = 1.2) + stat_cor(method = "spearman", cor.coef.name = "rho", size=7)+
+  stat_cor(data = MitoData, aes(x=S, y=logFC), method = "spearman",
+           cor.coef.name = "rho", size=7, color = "#73937E", label.y.npc = 0.1) +
+  stat_cor(data = NucData, aes(x=S, y=logFC), method = "spearman",
+           cor.coef.name = "rho", size=7, color = "#CB643F", label.y.npc = 0.2) +
+  xlab("S") +
+  theme(
+    axis.line = element_line(colour = "black"),
+    panel.grid.major = element_blank(),
+    panel.grid.minor = element_blank(),
+    panel.border = element_blank(),
+    panel.background = element_blank()
+  ) +
+  theme(plot.title = element_text(hjust = 0.5), plot.subtitle = element_text(hjust = 0.5)) +
+  theme(text=element_text(size=25, family="Arial MS")))
+
+png("~/Projects/StressGranules/SGPAPER/Images/PNG/Tmat19Mito_MA_S.png", width = 7, height=6, units = "in", res=300)
+ma
+dev.off()
+```
+
+
+### Violins
+
+```{r}
+## Signature Violin (Mito/Nuc) - SG vs PB
+
+library(data.table)
+library(dplyr)
+library(ggplot2)
+library(rstatix)
+
+# Restrict to just the SG and PB samples (exclude WC and RNP)
+sgpb_idx <- which(sampletype %in% c("SG", "PB"))
+
+expression.df <- y$E[, sgpb_idx]
+cond <- factor(sampletype[sgpb_idx], levels = c("PB", "SG"))
+
+custom_palette <- c(
+  "PB" = "#399e5a",
+  "SG" = "#769fca"
+)
+
+# ── 1. Gene sets already loaded earlier in the script (MitoGenes, NucGenes) ──
+mito_genes_present <- MitoGenes[MitoGenes %in% rownames(expression.df)]
+nuc_genes_present  <- NucGenes[NucGenes %in% rownames(expression.df)]
+cat(length(mito_genes_present), "Mito genes found in expression matrix\n")
+cat(length(nuc_genes_present), "Nuc genes found in expression matrix\n")
+
+# ── 2. Rank all genes per sample (1 = least expressed) ───────────────────────
+rank_matrix <- apply(expression.df, 2, function(x) rank(x, ties.method = "average"))
+rank_matrix <- as.data.frame(rank_matrix)
+
+# ── 3. Compute a rank-sum score per sample, one gene set at a time ───────────
+compute_score <- function(genes, rank_matrix, n_total) {
+  colSums(rank_matrix[genes, , drop = FALSE]) / n_total
+}
+
+mito_score <- compute_score(mito_genes_present, rank_matrix, nrow(expression.df))
+nuc_score  <- compute_score(nuc_genes_present, rank_matrix, nrow(expression.df))
+
+# ── 4. Assemble plot dataframe, long format across both gene sets ────────────
+score_df <- rbind(
+  data.frame(Sample = colnames(expression.df), Score = as.numeric(mito_score),
+             Condition = cond, GeneSet = "Mito"),
+  data.frame(Sample = colnames(expression.df), Score = as.numeric(nuc_score),
+             Condition = cond, GeneSet = "Nuc")
+)
+
+# ── 5. Statistics per gene set: one-way ANOVA (equivalent to t-test, 2 groups) ──
+stat_labels <- score_df %>%
+  group_by(GeneSet) %>%
+  group_modify(~{
+    aov_res  <- aov(Score ~ Condition, data = .x)
+    aov_tidy <- summary(aov_res)
+    p_raw  <- aov_tidy[[1]][["Pr(>F)"]][1]
+    p_adj  <- p.adjust(p_raw, method = "BH")
+    ss_between <- aov_tidy[[1]][["Sum Sq"]][1]
+    ss_total   <- sum(aov_tidy[[1]][["Sum Sq"]])
+    eta_sq     <- ss_between / ss_total
+    cohens_f   <- sqrt(eta_sq / (1 - eta_sq))
+    data.frame(
+      label = paste0("Cohen's f = ", round(cohens_f, 3),
+                      "\nadj. p = ", formatC(p_adj, format = "e", digits = 2))
+    )
+  })
+
+# ── 6. Plot ───────────────────────────────────────────────────────────────────
+vilsigplot <- ggplot(score_df, aes(x = Condition, y = Score, fill = Condition)) +
+  geom_violin(colour = "black", alpha = 0.6, trim = FALSE) +
+  geom_point(
+    position = position_jitter(width = 0.1),
+    alpha    = 0.7,
+    size     = 2
+  ) +
+  stat_summary(fun = mean,   geom = "point", shape = 18,
+               size = 4, colour = "blue") +
+  stat_summary(fun = median, geom = "point", shape = 17,
+               size = 4, colour = "blue") +
+  geom_text(
+    data  = stat_labels,
+    aes(x = -Inf, y = Inf, label = label),
+    hjust = -0.05, vjust = 1.2,
+    size  = 4, fontface = "bold", lineheight = 1.1,
+    inherit.aes = FALSE
+  ) +
+  facet_wrap(~GeneSet, scales = "free_y") +
+  scale_fill_manual(values = custom_palette) +
+  labs(
+    x     = "Fraction",
+    y     = "Signature Score (Rank Sum)",
+    title = "Mitochondrial vs Nuclear-Localised Gene Scores"
+  ) +
+  theme_bw() +
+  theme(
+    plot.title      = element_text(hjust = 0.5, size = 14, face = "bold"),
+    axis.text.x     = element_text(size = 12),
+    strip.text      = element_text(size = 12, face = "bold"),
+    legend.position = "none",    
+    text = element_text(size = 20, family = "Arial MS", face = "bold")
+  )
+
+png("~/Projects/StressGranules/SGPAPER/Images/PNG/Tmat19SGvsPB_MitoSigs.png", width = 14, height=6, units = "in", res=300)
+vilsigplot
+dev.off()
+
+vilsigplot
+```
+
+# GSEA
+
+### For Mito
+
+```{r}
+### For Mito
+
+DEGenes_SG.vs.PB <- DEGenes
+# --- Rank genes by t-statistic as usual ---
+DEGenes_SG.vs.PB <- DEGenes_SG.vs.PB[order(DEGenes_SG.vs.PB$t),]
+gseatool <- data.frame(Symbol = DEGenes_SG.vs.PB$Gene, t = DEGenes_SG.vs.PB$t)
+vectorranks <- gseatool$t
+names(vectorranks) <- gseatool$Symbol
+
+# ... rest unchanged ...
+
+# --- Define MitoGenes as a custom gene set ---
+MitoGenes <- fread("~/MitoGenes.txt")[[1]]
+custom.gsets <- list(MitoGenes = toupper(MitoGenes))
+
+# --- Run fgsea ---
+mito.res <- fgsea(pathways = custom.gsets,
+                  stats = vectorranks)
+
+mito.plot.base <- plotEnrichment(custom.gsets[["MitoGenes"]], vectorranks)
+curve.data <- mito.plot.base$data
+
+# --- key fix: match the curve's internal descending order ---
+ord <- order(vectorranks, decreasing = TRUE)
+ranked.names <- names(vectorranks)[ord]
+gene.positions <- which(ranked.names %in% custom.gsets[["MitoGenes"]])
+
+rug.top    <- min(curve.data$y) - 0.03
+rug.bottom <- rug.top - 0.04
+
+y.min <- rug.bottom - 0.03
+y.max <- max(curve.data$y) + 0.05
+
+(mito.plot <- ggplot(curve.data, aes(x = x, y = y)) +
+  geom_area(fill = "#73937E", alpha = 0.4) +
+  geom_line(color = "#73937E", linewidth = 1.2) +
+  geom_hline(yintercept = 0, linetype = "dashed", color = "grey40") +
+  geom_segment(data = data.frame(x = gene.positions),
+               aes(x = x, xend = x, y = rug.top, yend = rug.bottom),
+               color = "#73937E", alpha = 0.6, linewidth = 0.9,
+               inherit.aes = FALSE) +
+  annotate("text", x = 1500, y = -0.4,
+           label = paste0("NES = ", round(mito.res$NES, 2),
+                          "\nadj.p = ", round(mito.res$padj, 4)),
+           size = 5, family = "Arial MS", fontface = "bold") +
+  coord_cartesian(ylim = c(y.min, y.max), clip = "off") +
+  theme_bw() +
+  theme(text = element_text(size = 25, family = "Arial MS"),
+        plot.title = element_text(hjust = 0.5, face = "bold"),
+        axis.title = element_blank(),
+        axis.text = element_text(face = "bold"),
+        panel.grid.minor = element_blank(),
+        panel.grid.major = element_blank()))
+
+png("~/Projects/StressGranules/SGPAPER/Images/PNG/MitoGSEA_Tmat19.png", width=7, height=6, units="in", res=300)
+mito.plot
+dev.off()
+```
+### For Nuc
+
+```{r}
+### For Mito
+
+DEGenes_SG.vs.PB <- DEGenes
+# --- Rank genes by t-statistic as usual ---
+DEGenes_SG.vs.PB <- DEGenes_SG.vs.PB[order(DEGenes_SG.vs.PB$t),]
+gseatool <- data.frame(Symbol = DEGenes_SG.vs.PB$Gene, t = DEGenes_SG.vs.PB$t)
+vectorranks <- gseatool$t
+names(vectorranks) <- gseatool$Symbol
+
+# ... rest unchanged ...
+
+# --- Define MitoGenes as a custom gene set ---
+MitoGenes <- fread("~/rnalocate_mito_filt.csv")[[1]]
+custom.gsets <- list(MitoGenes = toupper(MitoGenes))
+
+# --- Run fgsea ---
+mito.res <- fgsea(pathways = custom.gsets,
+                  stats = vectorranks)
+
+mito.plot.base <- plotEnrichment(custom.gsets[["MitoGenes"]], vectorranks)
+curve.data <- mito.plot.base$data
+
+# --- key fix: match the curve's internal descending order ---
+ord <- order(vectorranks, decreasing = TRUE)
+ranked.names <- names(vectorranks)[ord]
+gene.positions <- which(ranked.names %in% custom.gsets[["MitoGenes"]])
+
+rug.top    <- min(curve.data$y) - 0.03
+rug.bottom <- rug.top - 0.04
+
+y.min <- rug.bottom - 0.03
+y.max <- max(curve.data$y) + 0.05
+
+(mito.plot <- ggplot(curve.data, aes(x = x, y = y)) +
+  geom_area(fill = "#CB643F", alpha = 0.4) +
+  geom_line(color = "#CB643F", linewidth = 1.2) +
+  geom_hline(yintercept = 0, linetype = "dashed", color = "grey40") +
+  geom_segment(data = data.frame(x = gene.positions),
+               aes(x = x, xend = x, y = rug.top, yend = rug.bottom),
+               color = "#CB643F", alpha = 0.6, linewidth = 0.9,
+               inherit.aes = FALSE) +
+  annotate("text", x = 2500, y = -0.2,
+           label = paste0("NES = ", round(mito.res$NES, 2),
+                          "\nadj.p = ", round(mito.res$padj, 4)),
+           size = 5, family = "Arial MS", fontface = "bold") +
+  coord_cartesian(ylim = c(y.min, y.max), clip = "off") +
+  theme_bw() +
+  theme(text = element_text(size = 25, family = "Arial MS"),
+        plot.title = element_text(hjust = 0.5, face = "bold"),
+        axis.title = element_blank(),
+        axis.text = element_text(face = "bold"),
+        panel.grid.minor = element_blank(),
+        panel.grid.major = element_blank()))
+
+png("~/Projects/StressGranules/SGPAPER/Images/PNG/NucGSEA_TMat19.png", width=7, height=6, units="in", res=300)
+mito.plot
+dev.off()
+```
 
 ```{r, message=FALSE, warning=FALSE, results='hide'}
 
-DEGenes$Gene <- row.names(DEGenes)
-colnames(genelength) <- c("Length","Gene")
-DEGenes <- merge(DEGenes, genelength, by="Gene")
 
 Pbody <- DEGenes[,c(1,2,4,8)]
 

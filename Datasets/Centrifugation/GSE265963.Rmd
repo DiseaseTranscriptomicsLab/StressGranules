@@ -51,7 +51,7 @@ In this part I load up the table from SedSeq which I then used to model my own S
 
 ```{r}
 #This file can be obtained from the GEO repository. See Introduction for this link.
-OGTable <- fread("../Projects/StressGranules/SG_Transcriptome/Sed-Seq/GSE265963_sedseq_out.tsv")[,c(2,1,4)]
+OGTable <- fread("~/Projects/StressGranules/SG_Transcriptome/Sed-Seq/GSE265963_sedseq_out.tsv")[,c(2,1,4)]
 Samples <- unique(OGTable$Lysate_sample)
 
 OGTable <- dcast(OGTable, ORF ~ Lysate_sample, value.var = "pSup")
@@ -88,17 +88,17 @@ Ethanol <- pSUPtable[,Ethanol]
 Control <- pSUPtable[,Control]
 
 #Now, I save these data frames so that I have the pSUP from different stress types, and different samples.
-write.table(HSStress, "../Projects/StressGranules/Simulator/New/SEDSEQ_S/HSStress.txt", row.names = F, col.names = F)
-write.table(Azide0.5, "../Projects/StressGranules/Simulator/New/SEDSEQ_S/Azide0.5.txt", row.names = F, col.names = F)
-write.table(Ethanol, "../Projects/StressGranules/Simulator/New/SEDSEQ_S/Ethanol.txt", row.names = F, col.names = F)
-write.table(Control, "../Projects/StressGranules/Simulator/New/SEDSEQ_S/Control.txt", row.names = F, col.names = F)
+write.table(HSStress, "~/Projects/StressGranules/Simulator/New/SEDSEQ_S/HSStress.txt", row.names = F, col.names = F)
+write.table(Azide0.5, "~/Projects/StressGranules/Simulator/New/SEDSEQ_S/Azide0.5.txt", row.names = F, col.names = F)
+write.table(Ethanol, "~/Projects/StressGranules/Simulator/New/SEDSEQ_S/Ethanol.txt", row.names = F, col.names = F)
+write.table(Control, "~/Projects/StressGranules/Simulator/New/SEDSEQ_S/Control.txt", row.names = F, col.names = F)
 #Afterwards, I simply calculate the average S of each RNA transcripts, in these different conditions. For the exact formula used, please refer to the publication itself, to the Methods section.
 
 #In here, I simply upload the resulting files from this reverse engineering. Obviously, they are provided on the repository for ease of access.
-SAzide <- fread("../Projects/StressGranules/Simulator/New/SEDSEQ_S/Azide0.5_processed.txt")
-SHS <- fread("../Projects/StressGranules/Simulator/New/SEDSEQ_S/HSStress_processed.txt")
-SEthanol <- fread("../Projects/StressGranules/Simulator/New/SEDSEQ_S/Ethanol_processed.txt")
-SControl <- fread("../Projects/StressGranules/Simulator/New/SEDSEQ_S/Control_processed.txt")
+SAzide <- fread("~/Projects/StressGranules/Simulator/New/SEDSEQ_S/Azide0.5_processed.txt")
+SHS <- fread("~/Projects/StressGranules/Simulator/New/SEDSEQ_S/HSStress_processed.txt")
+SEthanol <- fread("~/Projects/StressGranules/Simulator/New/SEDSEQ_S/Ethanol_processed.txt")
+SControl <- fread("~/Projects/StressGranules/Simulator/New/SEDSEQ_S/Control_processed.txt")
 
 
 
@@ -114,8 +114,8 @@ Even though the process is the same, I opted to keep the sections separate, even
 ```{r}
 #This file can be obtained from the GEO repository. See Introduction for this link.
 #In this case to facilitate comprehension, I separate the table in two parts.
-unformatedTable <- fread("../Projects/StressGranules/SG_Transcriptome/Sed-Seq/GSE265963_sedseq_out.tsv")[,c(1,2,10:12)]
-metaTable <- fread("../Projects/StressGranules/SG_Transcriptome/Sed-Seq/GSE265963_sedseq_out.tsv")[,c(1,17:19,21:23)]
+unformatedTable <- fread("~/Projects/StressGranules/SG_Transcriptome/Sed-Seq/GSE265963_sedseq_out.tsv")[,c(1,2,10:12)]
+metaTable <- fread("~/Projects/StressGranules/SG_Transcriptome/Sed-Seq/GSE265963_sedseq_out.tsv")[,c(1,17:19,21:23)]
 
 #These are simply some formatting fixes. We only needed one metadata row per Lysate sample, so we are taking care of that.
 metaTable <- metaTable[!duplicated(metaTable$Lysate_sample), ]
@@ -523,104 +523,8 @@ contribs2 <- pca_res$rotation[,2]
 
 As one can observe from the PCAs, our PC1 is mostly explained by sample type. That is, if a sample is of total sample, or if the supernatant or pellet subsets. Interestingly, albeit expected, the total samples appear to be in the middle of these.
 
-Now, in my opinion, yeast strand is not really relevant in this case. Therefore, I will treat it as "batch-effect", and will remove it. This way, we can compare samples from different strands, as they were the same.
+Now, only the BY4741 presents every single contrast. I thus focused solely on these samples.
 
-## Batch Effect Correction
-
-```{r, warning=FALSE}
-#This is the code I used to correct batch effect. It is based on the one we used in Schneider et al. (2024), aka voyAGEr.
-batch_cols <- c("Strain") #We define which variable we want to treat as batch effects
-metadata_cols <- c("Type", "Simple", "Biorep") #And those we dont want to treat as such
-#This creates a new matrix with all our variables of interest
-mmbatch <- model.matrix(reformulate(paste0("~0 + ",paste0( batch_cols,collapse = " + "))), data=metaTable)
-mmkeep <- model.matrix(reformulate(paste0("~0 + ",paste0( metadata_cols,collapse =  "+" ))), data=metaTable)
-mm <- cbind(mmkeep,mmbatch)
-#Now, we apply the new model
-D0 <- DGEList(2^y$E) #I use the normalised counts, but these must be "unloged". Hence the 2^
-D0 <- calcNormFactors(D0) 
-y <- voom(D0, mm, plot = F)
-fit <- lmFit(y, mm)
-
-#Basicly, we determine what coefficients are originated from our batch variable, and we remove those across the data
-beta <- fit$coefficients[,-(1:ncol(mmkeep)),drop=FALSE]
-beta[is.na(beta)] <- 0 #In the case of binary variables, one of them wont have "any effect" and will thus be NA. This corrects for that step.
-corrcounts_v1 <- as.matrix(y$E) - beta %*% t(mmbatch)
-offset <- apply(corrcounts_v1,1,min) - apply(y$E,1,min) #This gives the offset itself that needs to be applied
-corrcounts_v1 <- as.data.frame(corrcounts_v1-offset)
-corrcounts_v1 <- 2^corrcounts_v1 #I prefer to unlog them, to have a dataframe of non-log CPMs, in case I need.
-```
-
-
-## Batch Corrected PCA
-
-
-```{r}
-# Now we simply generate new log CPM expression values, starting from the correct expression values.
-y <- voom(corrcounts_v1, mm, plot = T)
-
-# Prepare PCA data
-dfforpca <- y$E
-dfforpca <- t(dfforpca)
-dfforpca <- as.data.frame(dfforpca)
-dfforpca <- apply(dfforpca, 2, as.numeric)  # Ensure numeric
-dfforpca <- as.data.frame(dfforpca)
-
-# Add metaTable columns
-dfforpca$Strain <- metaTable$Strain
-dfforpca$Type <- metaTable$Type
-dfforpca$Simple <- metaTable$Simple
-
-# PCA computation
-pca_res <- prcomp(dfforpca[, 1:(ncol(dfforpca)-3)], scale = FALSE)
-
-# PCA plot for Strain
-p_strain <- autoplot(pca_res, data = dfforpca, x = 1, y = 2, colour = "Strain", size = 8) +
-  theme_bw() +
-  scale_colour_manual(name = "Strain", values = custom_palette) +
-  ggtitle("PCA - Coloured by Strain") +
-  theme(plot.title = element_text(hjust = 0.5),
-        axis.line = element_line(colour = "black"),
-        panel.grid.minor = element_blank(),
-        panel.border = element_blank(),
-        panel.background = element_blank())
-
-# PCA plot for Type
-p_type <- autoplot(pca_res, data = dfforpca, x = 1, y = 2, colour = "Type", size = 8) +
-  theme_bw() +
-  scale_colour_manual(name = "Type", values = custom_palette) +
-  ggtitle("PCA - Coloured by Type") +
-  theme(plot.title = element_text(hjust = 0.5),
-        axis.line = element_line(colour = "black"),
-        panel.grid.minor = element_blank(),
-        panel.border = element_blank(),
-        panel.background = element_blank())
-
-# PCA plot for Simple
-p_simple <- autoplot(pca_res, data = dfforpca, x = 1, y = 2, colour = "Simple", size = 8) +
-  theme_bw() +
-  scale_colour_manual(name = "Simple", values = custom_palette) +
-  ggtitle("PCA - Coloured by Simple") +
-  theme(plot.title = element_text(hjust = 0.5),
-        axis.line = element_line(colour = "black"),
-        panel.grid.minor = element_blank(),
-        panel.border = element_blank(),
-        panel.background = element_blank())
-
-# Show plots
-p_strain
-p_type
-p_simple
-
-# PCA contributors
-contribs1 <- pca_res$rotation[,1]
-contribs2 <- pca_res$rotation[,2]
-
-(pos1genes <- sort(contribs1, decreasing = TRUE)[1:10])
-(neg1genes <- sort(contribs1, decreasing = FALSE)[1:10])
-(pos2genes <- sort(contribs2, decreasing = TRUE)[1:10])
-(neg2genes <- sort(contribs2, decreasing = FALSE)[1:10])
-
-```
 
 ## Linear Models
 
@@ -628,15 +532,18 @@ Finally, we move on to differential gene expression! In this chunk, I define the
 
 ```{r}
 #As linear models usually take the first "string" as the baseline, I am instead going to refactor them so that the baseline is Total, in terms of sample type, and control, in terms of stress.
+
+
 metaTable$Type <- factor(metaTable$Type)
 metaTable$Type <- relevel(metaTable$Type,"Total")
 metaTable$Simple <- factor(metaTable$Simple)
 metaTable$Simple <- relevel(metaTable$Simple,"Control")
 
-#In here, I use all the variables I considered biologically (and technically) relevant. Note that I removed Strain, as that was removed by batch correction.
-mm <- model.matrix(~0+Type+Biorep+Simple,metaTable)
-
-fitted <- lmFit(y$E, mm)
+meta_by4741 <- metaTable[metaTable$Strain == "BY4741", ]
+expr_by4741 <- finaltable[, metaTable$Strain == "BY4741"]
+mm_main <- model.matrix(~0 + Type + Simple + Biorep, data = meta_by4741)
+y <- voom(expr_by4741, mm_main)
+fitted <- eBayes(lmFit(y, mm_main))
 
 head(coef(fitted))
 ```
@@ -665,8 +572,8 @@ ndegs=20
 
 ```{r, results='hide', warning=FALSE, message=FALSE}
 
-upmarkers <- as.data.frame(DEGenes[DEGenes$logFC>1 & DEGenes$B>80,] )
-downmarkers <- as.data.frame(DEGenes[DEGenes$logFC< -1 & DEGenes$B>80,] )
+upmarkers <- as.data.frame(DEGenes[DEGenes$logFC>1 & DEGenes$B>40,] )
+downmarkers <- as.data.frame(DEGenes[DEGenes$logFC< -1 & DEGenes$B>40,] )
 
 ggplot(data=DEGenes,
                  aes(x=logFC,
@@ -700,13 +607,13 @@ custom_palette <- sample(custom_palette,22, FALSE)
 dfforexpression <- y$E
 dfforexpression <- as.data.frame(dfforexpression)
 
-sampletype <- data.frame(samples=colnames(dfforexpression), sampletype=metaTable$Type)
+sampletype <- data.frame(samples=colnames(dfforexpression), sampletype=meta_by4741$Type)
 genesforexp <- dfforexpression[row.names(dfforexpression)%in%row.names(finagenes),]
 genesforexp$Genes <- row.names(genesforexp)
 genesforexp <- reshape2::melt(genesforexp)
 colnames(genesforexp) <- c("Gene", "samples", "expression")
 genesforexp <- merge(genesforexp, sampletype, by="samples")
-stresstype <- data.frame(samples=colnames(dfforexpression), stress=metaTable$Simple)
+stresstype <- data.frame(samples=colnames(dfforexpression), stress=meta_by4741$Simple)
 genesforexp <- merge(genesforexp, stresstype, by="samples")
 
 winnyplot <- ggplot(genesforexp, aes(x=sampletype, y=expression))  + geom_jitter(aes(colour=stress), size=1) + facet_wrap(.~ Gene, ncol=5, scales = "free")+ geom_violin(colour="black", alpha=0.3)
@@ -730,7 +637,7 @@ winnyplot
 Now, the important part we have to check, is whether the differences in supernatant enriched appear to correlate with gene length.
 
 ```{r, message=FALSE, warning=FALSE, results='hide'}
-genelength <- fread("../Yeast_length.txt")[,c(2,1)]
+genelength <- fread("~/Yeast_length.txt")[,c(2,1)]
 
 
 DEGenes$Gene <- row.names(DEGenes)
@@ -791,7 +698,7 @@ ndegs=20
 
 ```{r, results='hide', warning=FALSE, message=FALSE}
 upmarkers <- as.data.frame(DEGenes[DEGenes$logFC>1 & DEGenes$B>80,] )
-downmarkers <- as.data.frame(DEGenes[DEGenes$logFC< -1.25 & DEGenes$B>100,] )
+downmarkers <- as.data.frame(DEGenes[DEGenes$logFC< -1.25 & DEGenes$B>80,] )
 
 ggplot(data=DEGenes,
                  aes(x=logFC,
@@ -824,13 +731,13 @@ custom_palette <- sample(custom_palette,22, FALSE)
 dfforexpression <- y$E
 dfforexpression <- as.data.frame(dfforexpression)
 
-sampletype <- data.frame(samples=colnames(dfforexpression), sampletype=metaTable$Type)
+sampletype <- data.frame(samples=colnames(dfforexpression), sampletype=meta_by4741$Type)
 genesforexp <- dfforexpression[row.names(dfforexpression)%in%row.names(finagenes),]
 genesforexp$Genes <- row.names(genesforexp)
 genesforexp <- reshape2::melt(genesforexp)
 colnames(genesforexp) <- c("Gene", "samples", "expression")
 genesforexp <- merge(genesforexp, sampletype, by="samples")
-stresstype <- data.frame(samples=colnames(dfforexpression), stress=metaTable$Simple)
+stresstype <- data.frame(samples=colnames(dfforexpression), stress=meta_by4741$Simple)
 genesforexp <- merge(genesforexp, stresstype, by="samples")
 
 winnyplot <- ggplot(genesforexp, aes(x=sampletype, y=expression))  + geom_jitter(aes(colour=stress), size=1) + facet_wrap(.~ Gene, ncol=5, scales = "free")+ geom_violin(colour="black", alpha=0.3)
@@ -855,7 +762,7 @@ winnyplot
 And once again, to check the issue with correlation with gene length. 
 
 ```{r, message=FALSE, warning=FALSE, results='hide'}
-genelength <- fread("../Yeast_length.txt")[,c(2,1)]
+genelength <- fread("~/Yeast_length.txt")[,c(2,1)]
 
 
 DEGenes$Gene <- row.names(DEGenes)
@@ -914,8 +821,8 @@ ndegs=20
 
 ```{r, results='hide', warning=FALSE, message=FALSE}
 
-upmarkers <- as.data.frame(DEGenes[DEGenes$logFC>2 & DEGenes$B>150,] )
-downmarkers <- as.data.frame(DEGenes[DEGenes$logFC< -1.5 & DEGenes$B>150,] )
+upmarkers <- as.data.frame(DEGenes[DEGenes$logFC>2 & DEGenes$B>100,] )
+downmarkers <- as.data.frame(DEGenes[DEGenes$logFC< -1.5 & DEGenes$B>100,] )
 
 ggplot(data=DEGenes,
                  aes(x=logFC,
@@ -949,13 +856,13 @@ custom_palette <- sample(custom_palette,22, FALSE)
 dfforexpression <- y$E
 dfforexpression <- as.data.frame(dfforexpression)
 
-sampletype <- data.frame(samples=colnames(dfforexpression), sampletype=metaTable$Type)
+sampletype <- data.frame(samples=colnames(dfforexpression), sampletype=meta_by4741$Type)
 genesforexp <- dfforexpression[row.names(dfforexpression)%in%row.names(finagenes),]
 genesforexp$Genes <- row.names(genesforexp)
 genesforexp <- reshape2::melt(genesforexp)
 colnames(genesforexp) <- c("Gene", "samples", "expression")
 genesforexp <- merge(genesforexp, sampletype, by="samples")
-stresstype <- data.frame(samples=colnames(dfforexpression), stress=metaTable$Simple)
+stresstype <- data.frame(samples=colnames(dfforexpression), stress=meta_by4741$Simple)
 genesforexp <- merge(genesforexp, stresstype, by="samples")
 
 winnyplot <- ggplot(genesforexp, aes(x=sampletype, y=expression))  + geom_jitter(aes(colour=stress), size=1) + facet_wrap(.~ Gene, ncol=5, scales = "free")+ geom_violin(colour="black", alpha=0.3)
@@ -980,7 +887,7 @@ winnyplot
 Directly checking the lenght:
 
 ```{r, message=FALSE, warning=FALSE, results='hide'}
-genelength <- fread("../Yeast_length.txt")[,c(2,1)]
+genelength <- fread("~/Yeast_length.txt")[,c(2,1)]
 
 
 DEGenes$Gene <- row.names(DEGenes)
@@ -1031,7 +938,7 @@ In this section, I show the results from the reverse engineering process to obta
 
 ```{r}
 #Loading up the data from A. Khong 2017
-KhongYeast <- fread("../Projects/StressGranules/SG_Transcriptome/RP_Data_2017/alignment_STAR/featureCounts_results.txt")[,c(1,7:12)]
+KhongYeast <- fread("~/Projects/StressGranules/SG_Transcriptome/RP_Data_2017/alignment_STAR/featureCounts_results.txt")[,c(1,7:12)]
 
 
 colnames(KhongYeast)[1] <- "ensembl_gene_id" #this is simply to be able to apply the function
@@ -1082,11 +989,11 @@ goalsum_SG2 <- sum(KhongYeastCounts$SRR5605170Aligned.sortedByCoord.out.bam)
 goalsum_SG3 <- sum(KhongYeastCounts$SRR5605171Aligned.sortedByCoord.out.bam)
 
 #For the old samples
-sim_sg1 <- read.table("../Projects/StressGranules/Simulator/SimulatedSamples/SG2017/SG1_Yeast.csv", sep = ",")[-1,c(1,3)]
+sim_sg1 <- read.table("~/Projects/StressGranules/Simulator/SimulatedSamples/SG2017/SG1_Yeast.csv", sep = ",")[-1,c(1,3)]
 colnames(sim_sg1) <- c("Gene", "SSG1")
-sim_sg2 <- read.table("../Projects/StressGranules/Simulator/SimulatedSamples/SG2017/SG2_Yeast.csv", sep = ",")[-1,c(1,3)]
+sim_sg2 <- read.table("~/Projects/StressGranules/Simulator/SimulatedSamples/SG2017/SG2_Yeast.csv", sep = ",")[-1,c(1,3)]
 colnames(sim_sg2) <- c("Gene", "SSG2")
-sim_sg3 <- read.table("../Projects/StressGranules/Simulator/SimulatedSamples/SG2017/SG3_Yeast.csv", sep = ",")[-1,c(1,3)]
+sim_sg3 <- read.table("~/Projects/StressGranules/Simulator/SimulatedSamples/SG2017/SG3_Yeast.csv", sep = ",")[-1,c(1,3)]
 colnames(sim_sg3) <- c("Gene", "SSG3")
 
 
@@ -1387,8 +1294,8 @@ ggplot(data=DEGenes,
 realsig <- data.frame(Gene=row.names(DEGenes), real_t=DEGenes$t)
 ```
 ```{r, message=FALSE, warning=FALSE, results='hide'}
-genelength <- fread("../Yeast_length.txt")[,c(2,1)]
-Chromossomes <- fread("../Yeast_Chromossomes.txt")
+genelength <- fread("~/Yeast_length.txt")[,c(2,1)]
+Chromossomes <- fread("~/Yeast_Chromossomes.txt")
 
 DEGenes$Gene <- row.names(DEGenes)
 colnames(genelength) <- c("Length","Gene")
@@ -1489,8 +1396,8 @@ simsig <- data.frame(Gene=row.names(DEGenes), sim_t=DEGenes$t)
 ```
 
 ```{r, message=FALSE, warning=FALSE, results='hide'}
-genelength <- fread("../Yeast_length.txt")[,c(2,1)]
-Chromossomes <- fread("../Yeast_Chromossomes.txt")
+genelength <- fread("~/Yeast_length.txt")[,c(2,1)]
+Chromossomes <- fread("~/Yeast_Chromossomes.txt")
 
 DEGenes$Gene <- row.names(DEGenes)
 colnames(genelength) <- c("Length","Gene")
@@ -1576,11 +1483,11 @@ Now, by seeing how RNA behaves in Yeast, and how each RNA relates to its length 
 
 ```{r, message=FALSE, warning=FALSE}
 #As "sedimentation  coeficcients" seemingly change in accordance to stress, we can choose which one we use to modulate it. In this case, I use Azide as an example.
-Stressed_S <- fread("../Projects/StressGranules/Simulator/New/SEDSEQ_S/Azide0.5_processed.txt")[,c(1,5)]
+Stressed_S <- fread("~/Projects/StressGranules/Simulator/New/SEDSEQ_S/Azide0.5_processed.txt")[,c(1,5)]
 colnames(Stressed_S) <- c("Gene","Scof_St")
 
 #In this file, I previously calculated the weight of every yeast transcript
-WeightyBoy <- fread("../Projects/StressGranules/SG_Transcriptome/Sed-Seq/Yeast_Weight.txt")
+WeightyBoy <- fread("~/Projects/StressGranules/SG_Transcriptome/Sed-Seq/Yeast_Weight.txt")
 
 #To remove infinite values that may have occured with the simulation
 Stressed_S <- Stressed_S[!apply(Stressed_S, 1, function(x) any(is.infinite(as.numeric(x)))), ]
@@ -1592,7 +1499,7 @@ dfforformula <- merge(genelength, WeightyBoy, by="Gene")
 dfforformula <- merge(dfforformula, Stressed_S, by="Gene")
 
 #So that I am able to identify mitochondrial genes
-cromos <- fread("../Yeast_Chromossomes.txt")
+cromos <- fread("~/Yeast_Chromossomes.txt")
 colnames(cromos) <- c("Cromo","Gene")
 dfforformula <- merge(dfforformula, cromos, by="Gene")
 

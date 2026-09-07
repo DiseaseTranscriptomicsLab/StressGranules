@@ -393,7 +393,7 @@ ggplot(falternew, aes(x=falternew)) + geom_density() + theme_bw() + ylab("Events
         panel.background = element_blank())
 
 #lets save the genes which we maintain
-impgenes <- c(row.names(falternew), MitoGenes)
+impgenes <- row.names(falternew)
 impgenes.WC <- c(row.names(filterednew.WC))
 impgenes.BP <- c(row.names(filterednew.BP))
 impgenes.SG <- c(row.names(filterednew.SG))
@@ -1038,15 +1038,187 @@ ggplot(data=DEGenes_SG.vs.PB,
 
 #tcell_t <- data.frame(Gene=row.names(DEGenes_WC.vs.SG), stcell_t=DEGenes_WC.vs.SG$t, stcell_logFC=DEGenes_WC.vs.SG$logFC)
 
+DEGenes <- DEGenes_SG.vs.PB
+
+MitoGenes <- fread("~/MitoGenes.txt")[[1]]
+MitoData <- DEGenes[rownames(DEGenes) %in% MitoGenes, ]
+NucGenes <- fread("~/rnalocate_mito_filt.csv")[[1]]
+NucData <- DEGenes[rownames(DEGenes) %in% NucGenes, ]
+(m <- ggplot(data=DEGenes,
+                 aes(x=logFC,
+                     y=B)) +
+  geom_point(color="#CCCCCC") +
+  geom_point(data=NucData, aes(x=logFC, y=B), color="#CB643F", size=4) +
+  geom_point(data=MitoData, aes(x=logFC, y=B), color="#73937E", size=4) +
+  ylab("B-Statistic") +
+  xlab(expression(Log[2]~"Fold-Change")) +
+  theme(
+    axis.line = element_line(colour = "black"),
+    panel.grid.major = element_blank(),   # remove major gridlines
+    panel.grid.minor = element_blank(),   # remove minor gridlines
+    panel.border = element_blank(),
+    panel.background = element_blank(),
+    axis.title = element_blank()
+  ) +
+  theme(plot.title = element_text(hjust = 0.5), plot.subtitle = element_text(hjust = 0.5)) +
+  theme(text=element_text(size=25, family="Arial MS")))
+
+
+png("~/Projects/StressGranules/SGPAPER/Images/PNG/CurdyMito.png", width = 7, height=6, units = "in", res=300)
+m
+dev.off()
+
 ```
 The differences are very small.
+
+# MA Plot
+
+```{r}
+# MA plot: mean expression (x) vs logFC (y), same highlighting scheme as the volcano
+
+ggplot(data=DEGenes,
+                 aes(x=AveExpr,
+                     y=logFC)) +
+  geom_point(color="#CCCCCC") +
+  geom_point(data=MitoData, aes(x=AveExpr, y=logFC), color="#73937E", size=4) +
+  geom_point(data=NucData, aes(x=AveExpr, y=logFC), color="#CB643F", size=4) +
+  geom_hline(yintercept = 0, linetype="dashed", color="grey40") +
+  theme_bw() + ylab(expression(Log[2]~"Fold-Change")) + xlab("Average Expression (Log2 CPM)") +
+  theme(axis.line = element_line(colour = "black"),
+        panel.grid.minor = element_blank(),
+        panel.border = element_blank(),
+        panel.background = element_blank()) +
+  ggtitle("T. Matheny Both - MA Plot") +
+  theme(plot.title = element_text(hjust = 0.5), plot.subtitle = element_text(hjust = 0.5)) +
+  geom_label_repel(upmarkers[1:ndegs,], mapping=aes(x=AveExpr, y=logFC, label=row.names(upmarkers)[1:ndegs]), size=4, point.padding=-0.5, color="#A10702", max.overlaps=20, fontface="italic") +
+  geom_label_repel(downmarkers[1:ndegs,], mapping=aes(x=AveExpr, y=logFC, label=row.names(downmarkers)[1:ndegs]), size=4, point.padding=-0.5, color="#03256C", max.overlaps=20, fontface="italic") +
+  geom_point(data=upmarkers, aes(x=AveExpr, y=logFC), color="#A10702", size=4) +
+  geom_point(data=downmarkers, aes(x=AveExpr, y=logFC), color="#03256C", size=4) +
+  theme(text=element_text(size=15, family="Arial MS"))
+
+# Publication-style version, stripped of axis titles, matching your "m" plot
+(ma <- ggplot(data=DEGenes,
+                 aes(x=AveExpr,
+                     y=logFC)) +
+  geom_point(color="#CCCCCC") + geom_density2d(color = "#800020", size = 1.2)+
+  geom_point(data=MitoData, aes(x=AveExpr, y=logFC), color="#73937E", size=4) +
+  geom_point(data=NucData, aes(x=AveExpr, y=logFC), color="#CB643F", size=4) +
+  geom_hline(yintercept = 0, linetype="dashed", color="grey40") +
+  ylab(expression(Log[2]~"Fold-Change")) +
+  xlab("Average Expression (Log2 CPM)") + stat_cor(method = "spearman", cor.coef.name = "rho", size=7)+
+  stat_cor(data = MitoData, aes(x=AveExpr, y=logFC), method = "spearman",
+           cor.coef.name = "rho", size=7, color = "#73937E", label.y.npc = 0.1) +
+  stat_cor(data = NucData, aes(x=AveExpr, y=logFC), method = "spearman",
+           cor.coef.name = "rho", size=7, color = "#CB643F", label.y.npc = 0.2) +
+  theme(
+    axis.line = element_line(colour = "black"),
+    panel.grid.major = element_blank(),
+    panel.grid.minor = element_blank(),
+    panel.border = element_blank(),
+    panel.background = element_blank(),
+    axis.title = element_blank()
+  ) +
+  theme(plot.title = element_text(hjust = 0.5), plot.subtitle = element_text(hjust = 0.5)) +
+  theme(text=element_text(size=25, family="Arial MS")))
+
+png("~/Projects/StressGranules/SGPAPER/Images/PNG/CurdyMito_MA.png", width = 7, height=6, units = "in", res=300)
+ma
+dev.off()
+```
+
+## MA Plot
+
+```{r}
+MitoGenes <- fread("~/MitoGenes.txt")[[1]]
+
+genelength <- read.csv("~/Projects/StressGranules/SG_Transcriptome/RP_Data_2021/TrimmedSamples/alignment_STAR/TranscriptLenght.txt", header=T)
+genelength <- subset(genelength, Ensembl.Canonical==1)
+genelength <- subset(genelength, Gene.name!="")
+genelength <- genelength %>%
+  group_by(Gene.name) %>%
+  slice(which.max(Transcript.length..including.UTRs.and.CDS.)) %>%
+  ungroup()
+genelength <- genelength[,-c(2,3)]
+colnames(genelength) <- c("Length", "Gene")
+
+genelength$Cromo <- ifelse(genelength$Gene %in% MitoGenes, "Mito", "Other")
+
+# Apply the length-based weight formula
+genelength$S <- ifelse(
+  genelength$Cromo == "Mito",
+  (genelength$Length)^(1/3) * 3.23e-11 + 1.17e-9,   # Formula for mitochondrial RNAs
+  (genelength$Length)^(1/3) * 6.09e-11 + 3.88e-10    # Formula for other RNAs
+)
+DEGenes$Gene <- row.names(DEGenes)
+DEGenes <- merge(DEGenes, genelength, by="Gene")
+MitoGenes <- fread("~/MitoGenes.txt")[[1]]
+MitoData <- DEGenes[DEGenes$Gene %in% MitoGenes, ]
+NucGenes <- fread("~/rnalocate_mito_filt.csv")[[1]]
+NucData <- DEGenes[DEGenes$Gene %in% NucGenes, ]
+
+# Publication-style version, stripped of axis titles, matching your "m" plot
+(ma <- ggplot(data=DEGenes,
+                 aes(x=log10(Length),
+                     y=logFC)) +
+  geom_point(color="#CCCCCC") +
+  geom_point(data=MitoData, aes(x=log10(Length), y=logFC), color="#73937E", size=4) +
+  geom_point(data=NucData, aes(x=log10(Length), y=logFC), color="#CB643F", size=4) +
+  geom_hline(yintercept = 0, linetype="dashed", color="grey40") +
+  ylab(expression(Log[2]~"Fold-Change")) + stat_cor(method = "spearman", cor.coef.name = "rho", size=7)+
+  stat_cor(data = MitoData, aes(x=log10(Length), y=logFC), method = "spearman",
+           cor.coef.name = "rho", size=7, color = "#73937E", label.y.npc = 0.1) +
+  stat_cor(data = NucData, aes(x=log10(Length), y=logFC), method = "spearman",
+           cor.coef.name = "rho", size=7, color = "#CB643F", label.y.npc = 0.2) +
+  xlab("RNA Length (log10)") +geom_density2d(color = "#800020", size = 1.2)+
+  scale_x_continuous(
+    breaks = log10(c(10, 100, 1000, 10000)),  # tick positions (in log10 scale)
+    labels = c("10", "100", "1000", "10000") # what you want to show
+  )+
+  theme(
+    axis.line = element_line(colour = "black"),
+    panel.grid.major = element_blank(),
+    panel.grid.minor = element_blank(),
+    panel.border = element_blank(),
+    panel.background = element_blank(),
+    axis.title = element_blank()
+  ) +
+  theme(plot.title = element_text(hjust = 0.5), plot.subtitle = element_text(hjust = 0.5)) +
+  theme(text=element_text(size=25, family="Arial MS")))
+
+png("~/Projects/StressGranules/SGPAPER/Images/PNG/CurdMito_MA_length.png", width = 7, height=6, units = "in", res=300)
+ma
+dev.off()
+
+# Publication-style version, stripped of axis titles, matching your "m" plot
+(ma <- ggplot(data=DEGenes,
+                 aes(x=(S),
+                     y=logFC)) +
+  geom_point(color="#CCCCCC") +
+  geom_point(data=MitoData, aes(x=(S), y=logFC), color="#73937E", size=4) +
+  geom_point(data=NucData, aes(x=(S), y=logFC), color="#CB643F", size=4) +
+  geom_hline(yintercept = 0, linetype="dashed", color="grey40") +
+  ylab(expression(Log[2]~"Fold-Change")) +geom_density2d(color = "#800020", size = 1.2)+
+  xlab("S") +
+  theme(
+    axis.line = element_line(colour = "black"),
+    panel.grid.major = element_blank(),
+    panel.grid.minor = element_blank(),
+    panel.border = element_blank(),
+    panel.background = element_blank()
+  ) +
+  theme(plot.title = element_text(hjust = 0.5), plot.subtitle = element_text(hjust = 0.5)) +
+  theme(text=element_text(size=25, family="Arial MS")))
+
+png("~/Projects/StressGranules/SGPAPER/Images/PNG/CurMito_MA_S.png", width = 7, height=6, units = "in", res=300)
+ma
+dev.off()
+```
 
 ## Volcano Plot with Gene Length
 
 ```{r, message=FALSE, warning=FALSE, results='hide'}
 
 DEGenes_SG.vs.PB$Gene <- row.names(DEGenes_SG.vs.PB)
-colnames(genelength) <- c("Length","Gene")
 DEGenes_SG.vs.PB <- merge(DEGenes_SG.vs.PB, genelength, by="Gene")
 
 ggplot(data=DEGenes_SG.vs.PB,
@@ -1066,7 +1238,7 @@ ggplot(data=DEGenes_SG.vs.PB,
 smooth.SG <- lm(t~log10(Length), DEGenes_SG.vs.PB)
 liner.SG <- rstandard(smooth.SG)
 DEGenes_SG.vs.PB <-cbind(DEGenes_SG.vs.PB, liner.SG)
-colnames(DEGenes_SG.vs.PB)[9] <- "Residuals"
+colnames(DEGenes_SG.vs.PB)[11] <- "Residuals"
 row.names(DEGenes_SG.vs.PB) <- DEGenes_SG.vs.PB$Gene
 linemarkers <- as.data.frame(DEGenes_SG.vs.PB[abs(DEGenes_SG.vs.PB$Residuals)>4,])
 
@@ -1129,6 +1301,111 @@ winnyplot <- winnyplot + theme_bw() + xlab("Samples (SG to Bulk Rna)") + ylab("G
     legend.box.just = "right",
     ) + theme(legend.title = element_text(size = 12)) + ggtitle("Expression of DEA genes") + theme(plot.title = element_text(hjust = 0.5, size=14, face="bold"))
 winnyplot
+```
+
+```{r}
+## Signature Violin (Mito/Nuc) - SG vs PB
+
+library(data.table)
+library(dplyr)
+library(ggplot2)
+library(rstatix)
+
+# Restrict to just the SG and PB samples used in DEGenes_SG.vs.PB (exclude WC)
+sgpb_idx <- which(forsimple %in% c("SG", "PB"))
+
+expression.df <- y$E[, sgpb_idx]
+cond <- factor(forsimple[sgpb_idx], levels = c("PB", "SG"))
+
+custom_palette <- c(
+  "PB" = "#399e5a",
+  "SG" = "#769fca"
+)
+
+# ── 1. Gene sets already loaded earlier in the script (MitoGenes, NucGenes) ──
+mito_genes_present <- MitoGenes[MitoGenes %in% rownames(expression.df)]
+nuc_genes_present  <- NucGenes[NucGenes %in% rownames(expression.df)]
+cat(length(mito_genes_present), "Mito genes found in expression matrix\n")
+cat(length(nuc_genes_present), "Nuc genes found in expression matrix\n")
+
+# ── 2. Rank all genes per sample (1 = least expressed) ───────────────────────
+rank_matrix <- apply(expression.df, 2, function(x) rank(x, ties.method = "average"))
+rank_matrix <- as.data.frame(rank_matrix)
+
+# ── 3. Compute a rank-sum score per sample, one gene set at a time ───────────
+compute_score <- function(genes, rank_matrix, n_total) {
+  colSums(rank_matrix[genes, , drop = FALSE]) / n_total
+}
+
+mito_score <- compute_score(mito_genes_present, rank_matrix, nrow(expression.df))
+nuc_score  <- compute_score(nuc_genes_present, rank_matrix, nrow(expression.df))
+
+# ── 4. Assemble plot dataframe, long format across both gene sets ────────────
+score_df <- rbind(
+  data.frame(Sample = colnames(expression.df), Score = as.numeric(mito_score),
+             Condition = cond, GeneSet = "Mito"),
+  data.frame(Sample = colnames(expression.df), Score = as.numeric(nuc_score),
+             Condition = cond, GeneSet = "Nuc")
+)
+
+# ── 5. Statistics per gene set: one-way ANOVA (equivalent to t-test, 2 groups) ──
+stat_labels <- score_df %>%
+  group_by(GeneSet) %>%
+  group_modify(~{
+    aov_res  <- aov(Score ~ Condition, data = .x)
+    aov_tidy <- summary(aov_res)
+    p_raw  <- aov_tidy[[1]][["Pr(>F)"]][1]
+    p_adj  <- p.adjust(p_raw, method = "BH")
+    ss_between <- aov_tidy[[1]][["Sum Sq"]][1]
+    ss_total   <- sum(aov_tidy[[1]][["Sum Sq"]])
+    eta_sq     <- ss_between / ss_total
+    cohens_f   <- sqrt(eta_sq / (1 - eta_sq))
+    data.frame(
+      label = paste0("Cohen's f = ", round(cohens_f, 3),
+                      "\nadj. p = ", formatC(p_adj, format = "e", digits = 2))
+    )
+  })
+
+# ── 6. Plot ───────────────────────────────────────────────────────────────────
+vilsigplot <- ggplot(score_df, aes(x = Condition, y = Score, fill = Condition)) +
+  geom_violin(colour = "black", alpha = 0.6, trim = FALSE) +
+  geom_point(
+    position = position_jitter(width = 0.1),
+    alpha    = 0.7,
+    size     = 2
+  ) +
+  stat_summary(fun = mean,   geom = "point", shape = 18,
+               size = 4, colour = "blue") +
+  stat_summary(fun = median, geom = "point", shape = 17,
+               size = 4, colour = "blue") +
+  geom_text(
+    data  = stat_labels,
+    aes(x = -Inf, y = Inf, label = label),
+    hjust = -0.05, vjust = 1.2,
+    size  = 4, fontface = "bold", lineheight = 1.1,
+    inherit.aes = FALSE
+  ) +
+  facet_wrap(~GeneSet, scales = "free_y") +
+  scale_fill_manual(values = custom_palette) +
+  labs(
+    x     = "Fraction",
+    y     = "Signature Score (Rank Sum)",
+    title = "Mitochondrial vs Nuclear-Localised Gene Scores"
+  ) +
+  theme_bw() +
+  theme(
+    plot.title      = element_text(hjust = 0.5, size = 14, face = "bold"),
+    axis.text.x     = element_text(size = 12),
+    strip.text      = element_text(size = 12, face = "bold"),
+    legend.position = "none",    
+    text = element_text(size = 20, family = "Arial MS", face = "bold")
+  )
+
+png("~/Projects/StressGranules/SGPAPER/Images/PNG/CurdySGvsPB_MitoSigs.png", width = 14, height=6, units = "in", res=300)
+vilsigplot
+dev.off()
+
+vilsigplot
 ```
 
 
@@ -1206,6 +1483,128 @@ gsea_plot_hall+
   theme(text=element_text(size=25,  family="Arial MS"))
 ```
 
+### For Mito
+
+```{r}
+# --- Rank genes by t-statistic as usual ---
+DEGenes_SG.vs.PB <- DEGenes_SG.vs.PB[order(DEGenes_SG.vs.PB[,4]),]
+gseatool <- DEGenes_SG.vs.PB[,4]
+gseatool <- as.data.frame(gseatool)
+colnames(gseatool)[1] <- "t" 
+gseatool[,2] <- row.names(DEGenes_SG.vs.PB)
+colnames(gseatool)[2] <- "Symbol" 
+gseatool <- gseatool[,c(2,1)]
+vectorranks <- gseatool$t
+names(vectorranks) <- gseatool$Symbol
+
+# --- Define MitoGenes as a custom gene set ---
+MitoGenes <- fread("~/MitoGenes.txt")[[1]]
+custom.gsets <- list(MitoGenes = toupper(MitoGenes))
+
+# --- Run fgsea ---
+mito.res <- fgsea(pathways = custom.gsets,
+                  stats = vectorranks)
+
+mito.plot.base <- plotEnrichment(custom.gsets[["MitoGenes"]], vectorranks)
+curve.data <- mito.plot.base$data
+
+# --- key fix: match the curve's internal descending order ---
+ord <- order(vectorranks, decreasing = TRUE)
+ranked.names <- names(vectorranks)[ord]
+gene.positions <- which(ranked.names %in% custom.gsets[["MitoGenes"]])
+
+rug.top    <- min(curve.data$y) - 0.03
+rug.bottom <- rug.top - 0.04
+
+y.min <- rug.bottom - 0.03
+y.max <- max(curve.data$y) + 0.05
+
+(mito.plot <- ggplot(curve.data, aes(x = x, y = y)) +
+  geom_area(fill = "#73937E", alpha = 0.4) +
+  geom_line(color = "#73937E", linewidth = 1.2) +
+  geom_hline(yintercept = 0, linetype = "dashed", color = "grey40") +
+  geom_segment(data = data.frame(x = gene.positions),
+               aes(x = x, xend = x, y = rug.top, yend = rug.bottom),
+               color = "#73937E", alpha = 0.6, linewidth = 0.9,
+               inherit.aes = FALSE) +
+  annotate("text", x = 1500, y = 0.2,
+           label = paste0("NES = ", round(mito.res$NES, 2),
+                          "\nadj.p = ", round(mito.res$padj, 4)),
+           size = 5, family = "Arial MS", fontface = "bold") +
+  coord_cartesian(ylim = c(y.min, y.max), clip = "off") +
+  theme_bw() +
+  theme(text = element_text(size = 25, family = "Arial MS"),
+        plot.title = element_text(hjust = 0.5, face = "bold"),
+        axis.title = element_blank(),
+        axis.text = element_text(face = "bold"),
+        panel.grid.minor = element_blank(),
+        panel.grid.major = element_blank()))
+
+png("~/Projects/StressGranules/SGPAPER/Images/PNG/MitoGSEA_Curdy.png", width=7, height=6, units="in", res=300)
+mito.plot
+dev.off()
+```
+### For Nuc
+
+```{r}
+# --- Rank genes by t-statistic as usual ---
+DEGenes_SG.vs.PB <- DEGenes_SG.vs.PB[order(DEGenes_SG.vs.PB[,4]),]
+gseatool <- DEGenes_SG.vs.PB[,4]
+gseatool <- as.data.frame(gseatool)
+colnames(gseatool)[1] <- "t" 
+gseatool[,2] <- row.names(DEGenes_SG.vs.PB)
+colnames(gseatool)[2] <- "Symbol" 
+gseatool <- gseatool[,c(2,1)]
+vectorranks <- gseatool$t
+names(vectorranks) <- gseatool$Symbol
+
+# --- Define MitoGenes as a custom gene set ---
+MitoGenes <- fread("~/rnalocate_mito_filt.csv")[[1]]
+custom.gsets <- list(MitoGenes = toupper(MitoGenes))
+
+# --- Run fgsea ---
+mito.res <- fgsea(pathways = custom.gsets,
+                  stats = vectorranks)
+
+mito.plot.base <- plotEnrichment(custom.gsets[["MitoGenes"]], vectorranks)
+curve.data <- mito.plot.base$data
+
+# --- key fix: match the curve's internal descending order ---
+ord <- order(vectorranks, decreasing = TRUE)
+ranked.names <- names(vectorranks)[ord]
+gene.positions <- which(ranked.names %in% custom.gsets[["MitoGenes"]])
+
+rug.top    <- min(curve.data$y) - 0.03
+rug.bottom <- rug.top - 0.04
+
+y.min <- rug.bottom - 0.03
+y.max <- max(curve.data$y) + 0.05
+
+(mito.plot <- ggplot(curve.data, aes(x = x, y = y)) +
+  geom_area(fill = "#CB643F", alpha = 0.4) +
+  geom_line(color = "#CB643F", linewidth = 1.2) +
+  geom_hline(yintercept = 0, linetype = "dashed", color = "grey40") +
+  geom_segment(data = data.frame(x = gene.positions),
+               aes(x = x, xend = x, y = rug.top, yend = rug.bottom),
+               color = "#CB643F", alpha = 0.6, linewidth = 0.9,
+               inherit.aes = FALSE) +
+  annotate("text", x = 2500, y = -0.2,
+           label = paste0("NES = ", round(mito.res$NES, 2),
+                          "\nadj.p = ", round(mito.res$padj, 4)),
+           size = 5, family = "Arial MS", fontface = "bold") +
+  coord_cartesian(ylim = c(y.min, y.max), clip = "off") +
+  theme_bw() +
+  theme(text = element_text(size = 25, family = "Arial MS"),
+        plot.title = element_text(hjust = 0.5, face = "bold"),
+        axis.title = element_blank(),
+        axis.text = element_text(face = "bold"),
+        panel.grid.minor = element_blank(),
+        panel.grid.major = element_blank()))
+
+png("~/Projects/StressGranules/SGPAPER/Images/PNG/NucGSEA_Curdy.png", width=7, height=6, units="in", res=300)
+mito.plot
+dev.off()
+```
 
 ## GSEA Length
 
@@ -1280,433 +1679,7 @@ ggplot(hallmark.scatter_ak, aes(x=sg, y=size)) + geom_point(color="black", alpha
 
 Barring some exceptions which I labeled on the plot, most gene set enrichment is driven by transcript size.
 
-# SPINSIM v.2
-
-NOTE: I ended up not using this section, as I considered that comparing SG vs PB was more correct, since that way the technique of isolation was directly controled.
-
-
-After my SpinSim pipeline, this is how I compared these simulated SGs with bulk and their original counterparts. For more details on this pipeline, please refer to its corresponding files in the Simulations/ folder in the GitHub repository.
-
-
 ```{r}
-read.counts$Gene <- row.names(read.counts)
-
-goalsum_SG1 <- sum(read.counts[,1])
-goalsum_SG2 <- sum(read.counts[,2])
-goalsum_SG3 <- sum(read.counts[,7])
-goalsum_SG4 <- sum(read.counts[,8])
-goalsum_SG5 <- sum(read.counts[,13])
-goalsum_SG6 <- sum(read.counts[,14])
-goalsum_SG7 <- sum(read.counts[,19])
-goalsum_SG8 <- sum(read.counts[,20])
-goalsum_SG9 <- sum(read.counts[,25])
-goalsum_SG10 <- sum(read.counts[,26])
-
-
-colnames(genelength) <- c("Length","Gene")
-
-#For the simulated samples
-SG1 <- read.table("~/Projects/StressGranules/Simulator/SimulatedSamples/SG2023/SG1.txt", sep = ",")
-SG1 <- na.omit(SG1)
-colnames(SG1) <- c("Gene", "SG1")
-SG2 <- read.table("~/Projects/StressGranules/Simulator/SimulatedSamples/SG2023/SG2.txt", sep = ",")
-SG2 <- na.omit(SG2)
-colnames(SG2) <- c("Gene", "SG2")
-SG3 <- read.table("~/Projects/StressGranules/Simulator/SimulatedSamples/SG2023/SG3.txt", sep = ",")
-SG3 <- na.omit(SG3)
-colnames(SG3) <- c("Gene", "SG3")
-SG4 <- read.table("~/Projects/StressGranules/Simulator/SimulatedSamples/SG2023/SG4.txt", sep = ",")
-SG4 <- na.omit(SG4)
-colnames(SG4) <- c("Gene", "SG4")
-SG5 <- read.table("~/Projects/StressGranules/Simulator/SimulatedSamples/SG2023/SG5.txt", sep = ",")
-SG5 <- na.omit(SG5)
-colnames(SG5) <- c("Gene", "SG5")
-SG6 <- read.table("~/Projects/StressGranules/Simulator/SimulatedSamples/SG2023/SG6.txt", sep = ",")
-SG6 <- na.omit(SG6)
-colnames(SG6) <- c("Gene", "SG6")
-SG7 <- read.table("~/Projects/StressGranules/Simulator/SimulatedSamples/SG2023/SG7.txt", sep = ",")
-SG7 <- na.omit(SG7)
-colnames(SG7) <- c("Gene", "SG7")
-SG8 <- read.table("~/Projects/StressGranules/Simulator/SimulatedSamples/SG2023/SG8.txt", sep = ",")
-SG8 <- na.omit(SG8)
-colnames(SG8) <- c("Gene", "SG8")
-SG9 <- read.table("~/Projects/StressGranules/Simulator/SimulatedSamples/SG2023/SG9.txt", sep = ",")
-SG9 <- na.omit(SG9)
-colnames(SG9) <- c("Gene", "SG9")
-SG10 <- read.table("~/Projects/StressGranules/Simulator/SimulatedSamples/SG2023/SG10.txt", sep = ",")
-SG10 <- na.omit(SG10)
-colnames(SG10) <- c("Gene", "SG10")
-
-
-#merging simulated samples up
-simsamples <- merge(SG1, SG2, by="Gene")
-simsamples <- merge(simsamples, SG3, by="Gene")
-simsamples <- merge(simsamples, SG4, by="Gene")
-simsamples <- merge(simsamples, SG5, by="Gene")
-simsamples <- merge(simsamples, SG6, by="Gene")
-simsamples <- merge(simsamples, SG7, by="Gene")
-simsamples <- merge(simsamples, SG8, by="Gene")
-simsamples <- merge(simsamples, SG9, by="Gene")
-simsamples <- merge(simsamples, SG10, by="Gene")
-simsamples <- merge(simsamples, genelength, by="Gene")
-
-#De-Tpming old samples
-simsamples$Counts_SG1 <- simsamples$SG1*simsamples$Length
-simsamples$Counts_SG1 <- simsamples$Counts_SG1/sum(simsamples$Counts_SG1)*goalsum_SG1
-simsamples$Counts_SG2 <- simsamples$SG2*simsamples$Length
-simsamples$Counts_SG2 <- simsamples$Counts_SG2/sum(simsamples$Counts_SG2)*goalsum_SG2
-simsamples$Counts_SG3 <- simsamples$SG3*simsamples$Length
-simsamples$Counts_SG3 <- simsamples$Counts_SG3/sum(simsamples$Counts_SG3)*goalsum_SG3
-simsamples$Counts_SG4 <- simsamples$SG4*simsamples$Length
-simsamples$Counts_SG4 <- simsamples$Counts_SG4/sum(simsamples$Counts_SG4)*goalsum_SG4
-simsamples$Counts_SG5 <- simsamples$SG5*simsamples$Length
-simsamples$Counts_SG5 <- simsamples$Counts_SG5/sum(simsamples$Counts_SG5)*goalsum_SG5
-simsamples$Counts_SG6 <- simsamples$SG6*simsamples$Length
-simsamples$Counts_SG6 <- simsamples$Counts_SG6/sum(simsamples$Counts_SG6)*goalsum_SG6
-simsamples$Counts_SG7 <- simsamples$SG7*simsamples$Length
-simsamples$Counts_SG7 <- simsamples$Counts_SG7/sum(simsamples$Counts_SG7)*goalsum_SG7
-simsamples$Counts_SG8 <- simsamples$SG8*simsamples$Length
-simsamples$Counts_SG8 <- simsamples$Counts_SG8/sum(simsamples$Counts_SG8)*goalsum_SG8
-simsamples$Counts_SG9 <- simsamples$SG9*simsamples$Length
-simsamples$Counts_SG9 <- simsamples$Counts_SG9/sum(simsamples$Counts_SG9)*goalsum_SG9
-simsamples$Counts_SG10 <- simsamples$SG10*simsamples$Length
-simsamples$Counts_SG10 <- simsamples$Counts_SG10/sum(simsamples$Counts_SG10)*goalsum_SG10
-
-simsamples <- simsamples[,c(1,13:22)] 
-
-
-OGsamples <- read.counts
-
-SG_City <- merge(OGsamples, simsamples, by="Gene")
-SG_City <- SG_City %>% distinct(Gene, .keep_all = TRUE)
-row.names(SG_City) <- SG_City$Gene
-SG_City$Gene <- NULL
+sessionInfo()
 ```
 
-
-## Filtration
-
-### ***Before Filtration***
-
-Let us begin with the filtration. Before moving on, it is important to note that according to the authors, these RNA granules are not pure and contain several contaminants. 
-
-```{r filtration, warning=FALSE}
-alternew <- log10(rowSums(SG_City))
-alternew <- as.data.frame(alternew)
-
-ggplot(alternew, aes(x=alternew)) + geom_density() + theme_bw() + geom_vline(xintercept = 3.75, linetype = "dashed") + ylab("Events") + xlab("Number of Reads (log10)") +
-  theme(axis.line = element_line(colour = "black"),
-        panel.grid.minor = element_blank(),
-        panel.border = element_blank(),
-        panel.background = element_blank()) + ggtitle("Density of Reads - All Samples")
-```
-
-### ***After Filtration***
-
-```{r filtration 2}
-filterednew <- subset(SG_City, alternew>3.75)
-
-#after cutting, its a good idea to visualize again
-falternew <- log10(rowSums(filterednew))
-falternew <- as.data.frame(falternew)
-ggplot(falternew, aes(x=falternew)) + geom_density() + theme_bw() + ylab("Events") + xlab("Number of Reads (log10)") +
-  theme(axis.line = element_line(colour = "black"),
-        panel.grid.minor = element_blank(),
-        panel.border = element_blank(),
-        panel.background = element_blank())
-
-#lets save the genes which we maintain
-impgenes <- c(row.names(falternew))
-
-#Now we need to select only the rows which have those genes.
-finaltable <- SG_City[row.names(SG_City)%in%impgenes,]
-```
-
-## Matrices
-
-Good! Now we can proceed by designing our matrices. 
-
-```{r matrixes and normalization}
-#To be able to use Voom, we must first convert our read count table into a special DGE object.
-D0 <- DGEList(finaltable)
-
-#Then we calculate the normalization factors.
-#Bear in mind this step calculates the normalization factors, but does not normalize itself.
-D0 <- calcNormFactors(D0)
-
-forsimple <- c("SG", "SG", "PB", "PB", "WC", "WC","SG", "SG", "PB", "PB", "WC", "WC","SG", "SG", "PB", "PB", "WC", "WC","SG", "SG", "PB", "PB", "WC", "WC","SG", "SG", "PB", "PB", "WC", "WC", rep("SimSG",10))
-
-#Now we do our matrix itself
-mm <- model.matrix(~0+forsimple)
-
-#and now we normalize. This step also turns our counts into log2-counts per million.
-y <- voom(D0, mm, plot = T)
-```
-
-
-## Normalization
-
-For normalization I convert the read counts into log2CPMs. Its a good way to visualize how the reads are. 
-
-```{r normalization}
-
-dfforboxy <- finaltable
-custom_palette <- qualitative_hcl(20, palette = "Pastel")
-custom_palette <- sample(custom_palette,20)
-
-
-orderforplots <- forsimple
-colouring <- data.frame(Sample=colnames(dfforboxy), Types=orderforplots)
-dfforboxy <- reshape2::melt(dfforboxy)
-colnames(dfforboxy) <- c("Sample", "Expression")
-dfforboxy <- merge(dfforboxy, colouring, by="Sample")
-prenorm <- ggplot(dfforboxy, aes(x=Sample, y=(log2(Expression+1)), fill=Types)) + geom_boxplot(alpha=0.6) + theme_bw() + ylab("Read Counts (Log2)") + xlab("Samples") + scale_fill_manual(name = "Sample Type", values = (custom_palette), labels=unique(forsimple), breaks =unique(forsimple)) +
-  theme(axis.line = element_line(colour = "black"),
-        panel.grid.minor = element_blank(),
-        panel.border = element_blank(),
-        panel.background = element_blank(),
-        axis.text.x=element_blank(),
-        axis.ticks.x=element_blank(),
-        legend.position = "None") + ggtitle("Prior to Normalisation")
-
-dfforboxy <- y$E
-dfforboxy <- reshape2::melt(dfforboxy)
-dfforboxy <- dfforboxy[,-1]
-colnames(dfforboxy) <- c("Sample", "Expression")
-dfforboxy <- merge(dfforboxy, colouring, by="Sample")
-postnorm <- ggplot(dfforboxy, aes(x=Sample, y=Expression, fill=Types)) + geom_boxplot(alpha=0.6) + theme_bw() + ylab("Read Counts (Log2CPM)") + xlab("Samples") + scale_fill_manual(name = "Sample Type", values = unique(custom_palette), labels=unique(forsimple), breaks =unique(forsimple)) +
-  theme(axis.line = element_line(colour = "black"),
-        panel.grid.minor = element_blank(),
-        panel.border = element_blank(),
-        panel.background = element_blank(),
-        axis.text.x=element_blank(),
-        axis.ticks.x=element_blank(),
-        legend.position = "None") + ggtitle("After Normalisation")
-
-ggarrange(prenorm, postnorm, nrow=1)
-
-```
-
-
-## PCA
-
-```{r PCA}
-#this is done to be able to do traditional PCA
-dfforpca <- y$E
-dfforpca <- rbind(dfforpca, forsimple)
-row.names(dfforpca)[nrow(dfforpca)] <- "forsimple"
-dfforpca <- t(dfforpca)
-numcol <- c(1:(ncol(dfforpca)-1))
-dfforpca <- as.data.frame(dfforpca) #for some reason I can only change colum type if its a dataframe
-
-dfforpca[ ,numcol] <- apply(dfforpca[ , numcol], 2,            # to turn our columns into numeric
-                            function(x) as.numeric(as.character(x)))
-
-#sapply(dfforpca, class) #to check class
-
-# Or specify the factor levels in the order you want
-dfforpca$forsimple <- factor(dfforpca$forsimple, levels = unique(forsimple))
-
-pca_res <- prcomp(dfforpca[,numcol], scale=FALSE) #prepare the pca
-
-#to make everything pretty
-p <- autoplot(pca_res, data = dfforpca, x=1, y=2, colour = "forsimple", size=8, alpha=0.7)
-p <- p + theme_bw() + scale_colour_manual((name = "Samples"), values = custom_palette, labels=unique(forsimple))
-p <- p + ggtitle("PCA Plot") + theme(plot.title = element_text(hjust = 0.5)) +
-  theme(axis.line = element_line(colour = "black"),
-        panel.grid.minor = element_blank(),
-        panel.border = element_blank(),
-        panel.background = element_blank())
-p
-
-
-#in case you want to see them yourself
-contribs1 <- pca_res$rotation[,1]
-contribs2 <- pca_res$rotation[,2]
-
-#These are the biggest contributors to the PCA1 (right side)
-(pos1genes <- sort(contribs1, decreasing=T)[1:10])
-#These are the biggest contributors to the PCA1 (left side)
-(neg1genes <- sort(contribs1, decreasing=F)[1:10])
-
-#These are the biggest contributors to the PCA2 (up side)
-(pos2genes <- sort(contribs2, decreasing=T)[1:10])
-#These are the biggest contributors to the PCA2 (down side)
-(neg2genes <- sort(contribs2, decreasing=F)[1:10])
-```
-
-
-## Linear Models
-
-Now we must perform linear model fitting. Although we can perform several comparisons, which I leave the contrasts off here, I will focus on the comparison of the Simulated SGs with the Original SGs, as this is what reveals what is more or less enriched than what would be expected with centrifugation alone.
-
-```{r Linear Models}
-fitted <- lmFit(y, mm)
-
-head(coef(fitted))
-
-#next we measure contrasts between groups (log-fold change is obtained from these fitted linear models)
-contr <- makeContrasts(forsimpleSG - forsimpleSimSG, levels = colnames(coef(fitted)))
-
-#next we estimate the contrast for each gene
-tmp <- contrasts.fit(fitted, contr)
-
-
-#use empirical bayes smoothing of standard erros (shrinks extreme standard erros)
-tmp <- eBayes(tmp)
-
-top.table <- topTable(tmp, sort.by = "logFC", n = Inf)
-
-DEGenes <- top.table
-
-ndegs <- 20
-```
-
-
-# Stressed SG vs Unstressed SG ("Normal" Volcano Plot)
-
-```{r sgvsgs-vulcan, results='hide', warning=FALSE, message=FALSE}
- write.table(x = DEGenes,
-            file = "~/Projects/StressGranules/SGPAPER/RealSGs/TcellDCmet.txt", sep="\t", col.names = TRUE, row.names = TRUE, quote=FALSE)
-
-upmarkers <- as.data.frame(DEGenes[DEGenes$logFC>2.75 & DEGenes$B>10,] )
-downmarkers <- as.data.frame(DEGenes[DEGenes$logFC< -2.75 & DEGenes$B>10,] )
-
-ggplot(data=DEGenes,
-                 aes(x=logFC,
-                     y=  B)) +
-  geom_point(color="#CCCCCC")+
-  theme_bw() +
-  theme(axis.line = element_line(colour = "black"),
-        panel.grid.minor = element_blank(),
-        panel.border = element_blank(),
-        panel.background = element_blank()) +
-  ggtitle("Sim vs Real")+
-  theme(plot.title = element_text(hjust = 0.5)) +
-  geom_label_repel(upmarkers[1:ndegs,] , mapping=aes(label=row.names(upmarkers)[1:ndegs]),size=3,point.padding=-0.5, color="#769fca",max.overlaps = 20)+
-  geom_label_repel(downmarkers[1:ndegs,] , mapping=aes(label=row.names(downmarkers)[1:ndegs]),size=3,point.padding=-0.5, color="#a2d1e6",max.overlaps = 20)+
-  geom_point(data=upmarkers, aes(x=logFC, y=  B), color="#769fca")+
-  geom_point(data=downmarkers, aes(x=logFC, y=  B), color="#a2d1e6")
-
-```
-
-
-## Volcano Plot with Gene Length
-
-```{r gene lenght SG, message=FALSE, warning=FALSE, results='hide'}
-
-DEGenes$Gene <- row.names(DEGenes)
-colnames(genelength)[2] <- "Gene"
-DEGenes <- merge(DEGenes, genelength, by="Gene")
-
-ggplot(data=DEGenes,
-                 aes(x=logFC,
-                     y=  B)) +
-  geom_point(aes(color=log10(Length)))+
-  theme_bw() +
-  theme(axis.line = element_line(colour = "black"),
-        panel.grid.minor = element_blank(),
-        panel.border = element_blank(),
-        panel.background = element_blank()) +
-  ggtitle("Stressed vs Unstressed SG")+ ylab("B stat")+xlab("Log 2 Fold Change") +
-  theme(plot.title = element_text(hjust = 0.5))  +
-  scale_colour_gradient(low = "blue", high = "red")
-
-
-smooth.SG <- lm(log10(Length) ~ t, DEGenes)
-liner.SG <- rstandard(smooth.SG)
-DEGenes <-cbind(DEGenes, liner.SG)
-colnames(DEGenes)[9] <- "Residuals"
-row.names(DEGenes) <- DEGenes$Gene
-linemarkers <- as.data.frame(DEGenes[abs(DEGenes$Residuals)>4,])
-
-ggplot(DEGenes, aes(x=t, y=log10(Length))) + geom_point(color="#CCCCCC", alpha=1) +   theme_bw()+
- xlab("t stat") + ylab("Gene Length (Log10 Base Pairs)") +
-  theme(axis.line = element_line(colour = "black"),
-        panel.grid.minor = element_blank(),
-        panel.border = element_blank(),
-        panel.background = element_blank()) + ggtitle("t stat vs Gene Length")+
-  theme(plot.title = element_text(hjust = 0.5))  +
-  geom_abline(slope=smooth.SG$coefficients[2], intercept = smooth.SG$coefficients[1], linetype = "dashed") +
-  geom_label_repel(linemarkers[1:ndegs,] , mapping=aes(label=rownames(linemarkers)[1:ndegs]),size=3,point.padding=-0.5, color="#399e5a",max.overlaps = 200)+
-  geom_point(data=linemarkers, aes(x=t, y= log10(Length)), color="#399e5a")
-
-```
-
-
-## GSEA Enrichment
-
-Now that we have our genes of interest, it would also be interesting to see what are the **altered pathways** between enriched and depleted RNAs from the stress granules. Therefore, lets perform a *Gene Set Enrichment Analysis*
-
-```{r, fig.height=20, fig.width=30, results=FALSE}
-#for all genes
-DEGenes <- DEGenes[order(DEGenes[,4]),]
-gseatool <- DEGenes[,4]
-gseatool <- as.data.frame(gseatool)
-colnames(gseatool)[1] <- "t" 
-gseatool[,2] <- DEGenes$Gene
-colnames(gseatool)[2] <- "Symbol" 
-gseatool <- gseatool[,c(2,1)]
-
-#for only the genes without the contamination
-
-
-vectorranks <- gseatool$t
-names(vectorranks) <- gseatool$Symbol
-
-
-#to load our pathways
-hallmarks.gs <- msigdbr(species = "Homo sapiens", collection = "H")
-
-hallmarks.gsets <- hallmarks.gs %>% split(x = .$gene_symbol, f = .$gs_name)
-
-for (set in names(hallmarks.gsets)){
-  hallmarks.gsets[[set]] <- toupper(hallmarks.gsets[[set]])
-}
-
-hallmarks.res <- fgsea(pathways = hallmarks.gsets, 
-                       stats = vectorranks)
-
-hallmarks.res.tidy <- hallmarks.res %>%
-  as_tibble() %>%
-  arrange(desc(NES))
-
-hallmarks.res.tidy %>% 
-  dplyr::select(-leadingEdge, -ES) %>% 
-  arrange(padj)
-
-hallmark.sg.t <- hallmarks.res.tidy[,c(1,6)]
-hallmark.sg.t <- as.data.frame(hallmark.sg.t)
-
-#this small part is generic
-thresh <- 0.05
-
-#this one is no longer generic
-data_to_plot <- hallmarks.res.tidy %>% filter(padj < thresh)
-
-statvec <- c()
-for (i in 1:nrow(data_to_plot)){
-  if (data_to_plot[i,6] > 0){
-    status <- "Upregulated"
-  }
- else {
-   status <- "Downregulated"
- }   
-statvec <- c(statvec, status)
-}
-
-data_to_plot$Status <- statvec
-
-##-----HALMARK-----
-gsea_plot_hall <- ggplot(data_to_plot, aes(reorder(pathway, NES), NES)) +
-  geom_col(aes(fill= Status), alpha=0.75) + scale_fill_manual(values = c("#53A2BE","#BA3B46"), name = "Regulation Status", labels = c("Downregulated", "Upregulated"), breaks = c("Downregulated", "Upregulated")) +
-  coord_flip() +
-  labs(x="Pathway", y="Normalised Enrichment Score (NES)",
-       title= "Hallmark Gene Sets",
-       caption = paste0("p-value < ", thresh)) + theme(plot.title = element_text(hjust = 1)) +
-  theme_bw() + theme(text=element_text(family = "Quicksand")) + theme(legend.position = "none")
-
-
-gsea_plot_hall+ 
-  theme(text=element_text(size=25,  family="Arial MS"))
-```

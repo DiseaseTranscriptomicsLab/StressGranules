@@ -40,7 +40,7 @@ library(fgsea)
 library(msigdbr)
 library(data.table)
 library(rstatix)
-
+set.seed(1906)
 
 genelength <- read.csv("~/Projects/StressGranules/SG_Transcriptome/RP_Data_2021/TrimmedSamples/alignment_STAR/TranscriptLenght.txt", header=T)
 
@@ -89,7 +89,7 @@ A1 <- ggplot(fig1, aes(y = s_t, x = log10(Length))) +
   )+
   ylab("DGE SG-WC (t-stat)") +
 theme(axis.title.y = element_text(margin = margin(r = 10))) + 
-  xlab(expression(paste("RNA Length (log"[10]*" (nt))"))) + # Subscript "10"
+  xlab(expression(paste("RNA Length (nt)"))) + # Subscript "10"
   theme(axis.line = element_line(colour = "black"),
         panel.grid.minor = element_blank(),
         panel.border = element_blank(),
@@ -107,7 +107,7 @@ A2 <- ggplot(fig1, aes(y = so_t, x = log10(Length))) +
   theme_bw() +
  ylab("DGE SG-WC (t-stat)") +
 theme(axis.title.y = element_text(margin = margin(r = 10))) + 
-  xlab(expression(paste("RNA Length (log"[10]*" (nt))"))) +
+  xlab(expression(paste("RNA Length (nt)"))) +
   theme(
     axis.line = element_line(colour = "black"),
     panel.grid.major = element_blank(),   # Remove major gridlines
@@ -126,9 +126,9 @@ theme(axis.title.y = element_text(margin = margin(r = 10))) +
   ) +
   stat_cor(method = "spearman", cor.coef.name = "rho", size = 7)
 
-(A <- ggarrange(A1, A2, ncol = 2, labels = c("A","", ""), font.label = list(size=25), widths = c(0.45,0.45)))
+(A <- ggarrange(A1, A2, ncol = 2, labels = c("","", ""), font.label = list(size=25), widths = c(0.45,0.45)))
 
-png("../Projects/StressGranules/SGPAPER/Images/PNG/Figure1/FigureA.png", width = 14, height=6, units = "in", res=300)
+png("~/Projects/StressGranules/SGPAPER/Images/PNG/Figure1/FigureA.png", width = 14, height=6, units = "in", res=300)
 A
 dev.off()
 ```
@@ -136,69 +136,69 @@ dev.off()
 ### B
 
 ```{r fig.width=28, fig.height=28}
-PIC <- fread("../Projects/StressGranules/SGPAPER/SGvsWC/PIC.txt")[,c(1,4)]
+PIC <- fread("~/Projects/StressGranules/SGPAPER/SGvsWC/PIC.txt")[,c(1,4)]
 colnames(PIC) <- c("Gene","PIC")
-artr <- fread("../Projects/StressGranules/SGPAPER/SGvsWC/Artr.txt")[,c(1,4)]
+artr <- fread("~/Projects/StressGranules/SGPAPER/SGvsWC/Artr.txt")[,c(1,4)]
 colnames(artr) <- c("Gene","artr")
-padron_hs <- fread("../Projects/StressGranules/SGPAPER/SGvsWC/APadron_Heatshock.txt")[,c(1,4)]
+padron_hs <- fread("~/Projects/StressGranules/SGPAPER/SGvsWC/APadron_Heatshock.txt")[,c(1,4)]
 colnames(padron_hs) <- c("Gene","pad_hs")
-padron_hip <- fread("../Projects/StressGranules/SGPAPER/SGvsWC/APadron_Hippuristanol.txt")[,c(1,4)]
+padron_hip <- fread("~/Projects/StressGranules/SGPAPER/SGvsWC/APadron_Hippuristanol.txt")[,c(1,4)]
 colnames(padron_hip) <- c("Gene","pad_hip")
-soma <- fread("../Projects/StressGranules/SGPAPER/SGvsWC/Somasekharan.txt")[,c(1,4)]
+soma <- fread("~/Projects/StressGranules/SGPAPER/SGvsWC/Somasekharan.txt")[,c(1,4)]
 colnames(soma) <- c("Gene","soma")
-shenx <- fread("../Projects/StressGranules/SGPAPER/SGvsWC/Shen_X.txt")[,c(1,4)]
+shenx <- fread("~/Projects/StressGranules/SGPAPER/SGvsWC/Shen_X.txt")[,c(1,4)]
 colnames(shenx) <- c("Gene","shenx")
-sheny <- fread("../Projects/StressGranules/SGPAPER/SGvsWC/Shen_Y.txt")[,c(1,4)]
+sheny <- fread("~/Projects/StressGranules/SGPAPER/SGvsWC/Shen_Y.txt")[,c(1,4)]
 colnames(sheny) <- c("Gene","sheny")
-renu2ar <- fread("../Projects/StressGranules/SGPAPER/SGvsWC/Ren_U2Ar.txt")[,c(1,4)]
+renu2ar <- fread("~/Projects/StressGranules/SGPAPER/SGvsWC/Ren_U2Ar.txt")[,c(1,4)]
 colnames(renu2ar) <- c("Gene","renu2ar")
-renhekar <- fread("../Projects/StressGranules/SGPAPER/SGvsWC/Ren_HEKAr.txt")[,c(1,4)]
+renhekar <- fread("~/Projects/StressGranules/SGPAPER/SGvsWC/Ren_HEKAr.txt")[,c(1,4)]
 colnames(renhekar) <- c("Gene","renhekar")
-renhekso <- fread("../Projects/StressGranules/SGPAPER/SGvsWC/Ren_HEKSo.txt")[,c(1,4)]
+renhekso <- fread("~/Projects/StressGranules/SGPAPER/SGvsWC/Ren_HEKSo.txt")[,c(1,4)]
 colnames(renhekso) <- c("Gene","renhekso")
-rajawt <- fread("../Projects/StressGranules/SGPAPER/SGvsWC/Rajachandran_WT.txt")[,c(1,4)]
+rajawt <- fread("~/Projects/StressGranules/SGPAPER/SGvsWC/Rajachandran_WT.txt")[,c(1,4)]
 colnames(rajawt) <- c("Gene","rajawt")
-rajako <- fread("../Projects/StressGranules/SGPAPER/SGvsWC/Rajachandran_KO.txt")[,c(1,4)]
+rajako <- fread("~/Projects/StressGranules/SGPAPER/SGvsWC/Rajachandran_KO.txt")[,c(1,4)]
 colnames(rajako) <- c("Gene","rajako")
-fancias <- fread("../Projects/StressGranules/SGPAPER/SGvsWC/FANCI_AS.txt")[,c(1,4)]
+fancias <- fread("~/Projects/StressGranules/SGPAPER/SGvsWC/FANCI_AS.txt")[,c(1,4)]
 colnames(fancias) <- c("Gene","fancias")
-fancihs <- fread("../Projects/StressGranules/SGPAPER/SGvsWC/FANCI_HS.txt")[,c(1,4)]
+fancihs <- fread("~/Projects/StressGranules/SGPAPER/SGvsWC/FANCI_HS.txt")[,c(1,4)]
 colnames(fancihs) <- c("Gene","fancihs")
-fancios <- fread("../Projects/StressGranules/SGPAPER/SGvsWC/FANCI_OS.txt")[,c(1,4)]
+fancios <- fread("~/Projects/StressGranules/SGPAPER/SGvsWC/FANCI_OS.txt")[,c(1,4)]
 colnames(fancios) <- c("Gene","fancios")
-fanciuv <- fread("../Projects/StressGranules/SGPAPER/SGvsWC/FANCI_UV.txt")[,c(1,4)]
+fanciuv <- fread("~/Projects/StressGranules/SGPAPER/SGvsWC/FANCI_UV.txt")[,c(1,4)]
 colnames(fanciuv) <- c("Gene","fanciuv")
-alzheclip <- fread("../Projects/StressGranules/SGPAPER/SGvsWC/AlzheClip.txt")[,c(1,4)]
+alzheclip <- fread("~/Projects/StressGranules/SGPAPER/SGvsWC/AlzheClip.txt")[,c(1,4)]
 colnames(alzheclip) <- c("Gene","alzheclip")
-alzhdc<- fread("../Projects/StressGranules/SGPAPER/SGvsWC/AlzhDC.txt")[,c(1,4)]
+alzhdc<- fread("~/Projects/StressGranules/SGPAPER/SGvsWC/AlzhDC.txt")[,c(1,4)]
 colnames(alzhdc) <- c("Gene","alzhdc")
-akhong<- fread("../Projects/StressGranules/SGPAPER/SGvsWC/Akhong2017.txt")[,c(1,4)]
+akhong<- fread("~/Projects/StressGranules/SGPAPER/SGvsWC/Akhong2017.txt")[,c(1,4)]
 colnames(akhong) <- c("Gene","akhong")
-tmat19<- fread("../Projects/StressGranules/SGPAPER/SGvsWC/TMatheny2019.txt")[,c(1,4)]
+tmat19<- fread("~/Projects/StressGranules/SGPAPER/SGvsWC/TMatheny2019.txt")[,c(1,4)]
 colnames(tmat19) <- c("Gene","tmat19")
-tmat_wtarpa<- fread("../Projects/StressGranules/SGPAPER/SGvsWC/TMatheny2021_WTARPA.txt")[,c(1,4)]
+tmat_wtarpa<- fread("~/Projects/StressGranules/SGPAPER/SGvsWC/TMatheny2021_WTARPA.txt")[,c(1,4)]
 colnames(tmat_wtarpa) <- c("Gene","tmat_wtarpa")
-tmat_wtsopa<- fread("../Projects/StressGranules/SGPAPER/SGvsWC/TMatheny2021_WTSOPA.txt")[,c(1,4)]
+tmat_wtsopa<- fread("~/Projects/StressGranules/SGPAPER/SGvsWC/TMatheny2021_WTSOPA.txt")[,c(1,4)]
 colnames(tmat_wtsopa) <- c("Gene","tmat_wtsopa")
-tmat_kosopa<- fread("../Projects/StressGranules/SGPAPER/SGvsWC/TMatheny2021_KOSOPA.txt")[,c(1,4)]
+tmat_kosopa<- fread("~/Projects/StressGranules/SGPAPER/SGvsWC/TMatheny2021_KOSOPA.txt")[,c(1,4)]
 colnames(tmat_kosopa) <- c("Gene","tmat_kosopa")
-tmat_gfsog3<- fread("../Projects/StressGranules/SGPAPER/SGvsWC/TMatheny2021_GFSOG3.txt")[,c(1,4)]
+tmat_gfsog3<- fread("~/Projects/StressGranules/SGPAPER/SGvsWC/TMatheny2021_GFSOG3.txt")[,c(1,4)]
 colnames(tmat_gfsog3) <- c("Gene","tmat_gfsog3")
-viadevaia<- fread("../Projects/StressGranules/SGPAPER/SGvsWC/VIadevaia.txt")[,c(1,4)]
+viadevaia<- fread("~/Projects/StressGranules/SGPAPER/SGvsWC/VIadevaia.txt")[,c(1,4)]
 colnames(viadevaia) <- c("Gene","viadevaia")
-curdy<- fread("../Projects/StressGranules/SGPAPER/SGvsWC/TcellSG.txt")[,c(1,4)]
+curdy<- fread("~/Projects/StressGranules/SGPAPER/SGvsWC/TcellSG.txt")[,c(1,4)]
 colnames(curdy) <- c("Gene","curdy")
-kudrinwt<- fread("../Projects/StressGranules/SGPAPER/SGvsWC/Kudrin_WT.txt")[,c(1,4)]
+kudrinwt<- fread("~/Projects/StressGranules/SGPAPER/SGvsWC/Kudrin_WT.txt")[,c(1,4)]
 colnames(kudrinwt) <- c("Gene","kudrinwt")
-kudrinko<- fread("../Projects/StressGranules/SGPAPER/SGvsWC/Kudrin_KO.txt")[,c(1,4)]
+kudrinko<- fread("~/Projects/StressGranules/SGPAPER/SGvsWC/Kudrin_KO.txt")[,c(1,4)]
 colnames(kudrinko) <- c("Gene","kudrinko")
-timowtct<- fread("../Projects/StressGranules/SGPAPER/SGvsWC/Timo_WTCT.txt")[,c(1,4)]
+timowtct<- fread("~/Projects/StressGranules/SGPAPER/SGvsWC/Timo_WTCT.txt")[,c(1,4)]
 colnames(timowtct) <- c("Gene","timowtct")
-timowtex<- fread("../Projects/StressGranules/SGPAPER/SGvsWC/Timo_WTEX.txt")[,c(1,4)]
+timowtex<- fread("~/Projects/StressGranules/SGPAPER/SGvsWC/Timo_WTEX.txt")[,c(1,4)]
 colnames(timowtex) <- c("Gene","timowtex")
-timoalsct<- fread("../Projects/StressGranules/SGPAPER/SGvsWC/Timo_ALSCT.txt")[,c(1,4)]
+timoalsct<- fread("~/Projects/StressGranules/SGPAPER/SGvsWC/Timo_ALSCT.txt")[,c(1,4)]
 colnames(timoalsct) <- c("Gene","timoalsct")
-timoalsex<- fread("../Projects/StressGranules/SGPAPER/SGvsWC/Timo_ALSEX.txt")[,c(1,4)]
+timoalsex<- fread("~/Projects/StressGranules/SGPAPER/SGvsWC/Timo_ALSEX.txt")[,c(1,4)]
 colnames(timoalsex) <- c("Gene","timoalsex")
 fig2 <- merge(PIC, artr, by="Gene", all=T)
 fig2 <- merge(fig2, padron_hs, by="Gene")
@@ -250,7 +250,7 @@ fig2_cor_melted <- reshape2::melt(fig2_cor, varnames = c("Var1", "Var2"))
   geom_tile(color = "#5e5e5e", size = 0.5) +
   #geom_text(aes(label = ifelse(is.na(value), "", sprintf("%.2f", value))), size = 7) +
   scale_fill_gradient2(low = "#729EA1", mid = "white", high = "#DB5375", limit = c(-1, 1)) +
-  labs(fill = "Spearman's Rho") +
+  labs(fill = "") +
   theme_classic() +
   theme(
     axis.text.x = element_blank(),
@@ -273,13 +273,13 @@ df$x <- factor(df$x, levels = unique(df$x))
 df$xpos <- factor(df$xpos, levels = (df$xpos))
 
 colour_vector <- c(
-  "pic" = '#FFD1DC',
-  "artr" = '#FFB185',
-  "pl" = '#FFDAC1',
-  "photon" = '#FF9AA2',
-  "fanci" = '#FFC3A0',
-  "eclip" ='#FFB347',
-  "dc" = '#FFE5B4',
+  "pic" = '#1F77B4',
+  "artr" = '#FF7F0E',
+  "pl" = '#2CA02C',
+  "photon" = '#D62728',
+  "fanci" = '#9467BD',
+  "eclip" ='#FFD700',
+  "dc" = '#17BECF',
   "length" = 'white'
 )
 
@@ -326,13 +326,13 @@ df2$x <- factor(df2$x, levels = unique(df2$x))
 df2$xpos <- factor(df2$xpos, levels = (df2$xpos))
 
 colour_vector <- c(
-  "oxi" = '#AEC6CF',
-  "hs" = '#BFD8B8',
-  "hip" = '#A2D2FF',
-  "sor" = '#B5EAD7',
-  "uv" = '#C7CEEA',
-  "viral" ='#C1F0F6',
-  "tcellactivation" = '#B5D3FF',
+  "oxi" = '#1F77B4',
+  "hs" = '#FF7F0E',
+  "hip" = '#2CA02C',
+  "sor" = '#D62728',
+  "uv" = '#9467BD',
+  "viral" ='#FFD700',
+  "tcellactivation" = '#17BECF',
   "length" = 'white'
 )
 
@@ -351,7 +351,7 @@ lebel_vector <- c(
 (pl3 <- ggplot(df2, aes(x = xpos, y = 1, fill = x)) +
   geom_tile() +
   theme_void() +
-  labs(fill = "Stress Stimuli") +
+  labs(fill = "Stress Stimulus") +
   scale_fill_manual(
     values = colour_vector,labels = lebel_vector,
     breaks = names(lebel_vector)
@@ -374,13 +374,13 @@ df3$x <- factor(df3$x, levels = unique(df3$x))
 df3$xpos <- factor(df3$xpos, levels = (df3$xpos))
 
 colour_vector <- c(
-  "g3bp" = '#B388EB',
-  "eif4a" = '#DA70D6',
-  "ddx3x" = '#9C38FA',
-  "ddx3y" = '#D291BC',
-  "eifeta" = '#957DAD',
-  "none" ='#D8C8E5',
-  "pabpc1" = '#B39EB5',
+  "g3bp" = '#1F77B4',
+  "eif4a" = '#FF7F0E',
+  "ddx3x" = '#2CA02C',
+  "ddx3y" = '#D62728',
+  "eifeta" = '#9467BD',
+  "none" ='#FFD700',
+  "pabpc1" = '#17BECF',
   "length" = 'white'
 )
 
@@ -428,13 +428,13 @@ df4$x <- factor(df4$x, levels = unique(df4$x))
 df4$xpos <- factor(df4$xpos, levels = (df4$xpos))
 
 colour_vector <- c(
-  "hela" = '#B0E0E6',
-  "hek" = '#A0D6B4',
-  "pc3" = '#C5E384',
-  "u2os" = '#D0F0C0',
-  "shsy5y" = '#D3F8E2',
-  "tcells" ='#B2F7EF',
-  "sknbe" = '#AFE9FF',
+  "hela" = '#1F77B4',
+  "hek" = '#FF7F0E',
+  "pc3" = '#2CA02C',
+  "u2os" = '#D62728',
+  "shsy5y" = '#9467BD',
+  "tcells" ='#FFD700',
+  "sknbe" = '#17BECF',
   "length" = 'white'
 )
 
@@ -480,20 +480,20 @@ df5$x <- factor(df5$x, levels = unique(df5$x))
 df5$xpos <- factor(df5$xpos, levels = (df5$xpos))
 
 colour_vector <- c(
-  "wt" = '#F3B0C3',
-  "ap-eif4a" = '#F4A261',
-  "ap-g3bp" = '#B8B8FF',
-  "ap-ddx3x" = '#FFF275',
-  "ap-ddx3y" = '#A5B4FC',
-  "g3bp-mini" ='#F6BD60',
-  "mettl3ko" = '#A9DEF9',
-  "dhx9-egfp" = '#B2F7EF',
-  "g3bp-gfp" = '#A3C4BC',
-  "g3bpko" = '#90E0EF',
-  "nat10ko" = '#CBAACB',
-  "FUS-mut" = '#F7A9A8',
-  "FUS-mutko" = '#FBC4AB',
-  "length" = 'white'
+  "wt"        = '#1F77B4', # Blue
+  "ap-eif4a"  = '#FF7F0E', # Orange
+  "ap-g3bp"   = '#2CA02C', # Green
+  "ap-ddx3x"  = '#D62728', # Red
+  "ap-ddx3y"  = '#9467BD', # Purple
+  "g3bp-mini" = '#FFD700', # Yellow
+  "mettl3ko"  = '#17BECF', # Cyan
+  "dhx9-egfp" = '#8B4513', # Dark Brown (replaces muddy #8C564B)
+  "g3bp-gfp"  = '#F4A460', # Sandy/Light Orange (distinct from #FF7F0E)
+  "g3bpko"    = '#1A1A1A', # Near-Black
+  "nat10ko"   = '#7FBF00', # Yellow-Green (brighter than #BCBD22)
+  "FUS-mut"   = '#E83E8C', # Hot Pink (replaces dark indigo — more visible on tiles)
+  "FUS-mutko" = '#00008B', # Dark Navy
+  "length"    = 'white'
 )
 
 
@@ -560,7 +560,7 @@ pl2 <- pl2 +
     plot.margin = grid::unit(c(0, 0, 6, 0), "lines")
   )
 
-(left <-   ggarrange(heatmap, pl3, pl4, pl5, pl6, pl2, heights = c(5,.1,.1,.1,.1,.85), ncol=1, align="v", labels = c("B"),font.label = list(size=25)))
+(left <-   ggarrange(heatmap, pl3, pl4, pl5, pl6, pl2, heights = c(5,.1,.1,.1,.1,.85), ncol=1, align="v", labels = c(""),font.label = list(size=25)))
 
 heatmap_leg <- get_legend(pl1+ theme(text=element_text(size=25,  family="Arial MS", color="#505050"), face="bold"), position = 'bottom')
 heatmap_leg <- as_ggplot(heatmap_leg)
@@ -575,31 +575,31 @@ leg4 <- as_ggplot(leg4)
 leg5 <- get_legend(pl6+ theme(text=element_text(size=25,  family="Arial MS", color="#505050"), face="bold"), position = 'right')
 leg5 <- as_ggplot(leg5)
 
-png("../Projects/StressGranules/SGPAPER/Images/PNG/Figure1/FigureB.png", width = 28, height=28, units = "in", res=300)
+png("~/Projects/StressGranules/SGPAPER/Images/PNG/Figure1/FigureB.png", width = 28, height=28, units = "in", res=300)
 left
 dev.off()
 
-png("../Projects/StressGranules/SGPAPER/Images/PNG/Figure1/FigureB_heatleg.png", width = 28, height=28, units = "in", res=300)
+png("~/Projects/StressGranules/SGPAPER/Images/PNG/Figure1/FigureB_heatleg.png", width = 28, height=28, units = "in", res=300)
 heatmap_leg
 dev.off()
 
-png("../Projects/StressGranules/SGPAPER/Images/PNG/Figure1/FigureB_leg1.png", width = 28, height=28, units = "in", res=300)
+png("~/Projects/StressGranules/SGPAPER/Images/PNG/Figure1/FigureB_leg1.png", width = 28, height=28, units = "in", res=300)
 leg1
 dev.off()
 
-png("../Projects/StressGranules/SGPAPER/Images/PNG/Figure1/FigureB_leg2.png", width = 28, height=28, units = "in", res=300)
+png("~/Projects/StressGranules/SGPAPER/Images/PNG/Figure1/FigureB_leg2.png", width = 28, height=28, units = "in", res=300)
 leg2
 dev.off()
 
-png("../Projects/StressGranules/SGPAPER/Images/PNG/Figure1/FigureB_leg3.png", width = 28, height=28, units = "in", res=300)
+png("~/Projects/StressGranules/SGPAPER/Images/PNG/Figure1/FigureB_leg3.png", width = 28, height=28, units = "in", res=300)
 leg3
 dev.off()
 
-png("../Projects/StressGranules/SGPAPER/Images/PNG/Figure1/FigureB_leg4.png", width = 28, height=28, units = "in", res=300)
+png("~/Projects/StressGranules/SGPAPER/Images/PNG/Figure1/FigureB_leg4.png", width = 28, height=28, units = "in", res=300)
 leg4
 dev.off()
 
-png("../Projects/StressGranules/SGPAPER/Images/PNG/Figure1/FigureB_leg5.png", width = 28, height=28, units = "in", res=300)
+png("~/Projects/StressGranules/SGPAPER/Images/PNG/Figure1/FigureB_leg5.png", width = 28, height=28, units = "in", res=300)
 leg5
 dev.off()
 
@@ -608,9 +608,9 @@ dev.off()
 
 ```{r fig.height=6, fig.width=10}
 
-hallmark.sg.t_df <- fread("../Projects/StressGranules/SGPAPER/SGvsWC/KhongSGHallmark.txt")[,-1]
-hallmark.size.t <- fread("../Projects/StressGranules/SGPAPER/SGvsWC/LengthHallmark.txt")[,-1]
-hallmark.sg.t_pl <- fread("../Projects/StressGranules/SGPAPER/SGvsWC/SomaSGHallmark.txt")[,-1]
+hallmark.sg.t_df <- fread("~/Projects/StressGranules/SGPAPER/SGvsWC/KhongSGHallmark.txt")[,-1]
+hallmark.size.t <- fread("~/Projects/StressGranules/SGPAPER/SGvsWC/LengthHallmark.txt")[,-1]
+hallmark.sg.t_pl <- fread("~/Projects/StressGranules/SGPAPER/SGvsWC/SomaSGHallmark.txt")[,-1]
 
 
 colnames(hallmark.sg.t_df) <- c("pathway", "pval_dc", "nes_dc")
@@ -683,7 +683,7 @@ leggyboy <- as_ggplot(leggyboy)
 
 
 
-(hallploty <- ggarrange(hallplot,ggplot()+theme_void(), leggyboy, ggplot()+theme_void(), nrow = 1, widths = c(0.8,0.05,0.2,0.05),labels = c("C"),font.label = list(size=25)))
+(hallploty <- ggarrange(hallplot,ggplot()+theme_void(), leggyboy, ggplot()+theme_void(), nrow = 1, widths = c(0.8,0.05,0.2,0.05),labels = c(""),font.label = list(size=25)))
 
 png("~/Projects/StressGranules/SGPAPER/Images/PNG/Figure1/Hallplot.png", width = 10, height=6, units = "in", res=300)
 hallploty
@@ -768,7 +768,7 @@ PLwc <- ggplot(sgVbulklogs, aes(y=SG, x=Bulk)) +
 
 (C <- ggarrange(DCwc, PLwc, labels = c("D",""),font.label = list(size=25)))
 
-png("../Projects/StressGranules/SGPAPER/Images/PNG/Figure1/FigureD.png", width = 14, height=6, units = "in", res=300)
+png("~/Projects/StressGranules/SGPAPER/Images/PNG/Figure1/FigureD.png", width = 14, height=6, units = "in", res=300)
 C
 dev.off()
 ```
@@ -802,10 +802,7 @@ stresspoints <- stressresponde[stressresponde$U2OS>25 & stressresponde$PC3>25,]
         panel.border = element_blank(),
         panel.background = element_blank())  + 
   theme(text=element_text(size=20,  family="Arial MS")) + stat_cor(method = "spearman", cor.coef.name = "rho", size=5) +
-  theme(plot.title = element_text(hjust = 0.5)) +
-  geom_abline(slope = smooth.SG$coefficients[2], 
-              intercept = smooth.SG$coefficients[1], 
-              linetype = "dashed") + theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank())+
+  theme(plot.title = element_text(hjust = 0.5)) + theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank())+
   geom_point(data=stresspoints, aes(x=U2OS, y=  PC3), fill="#800020",colour="black", size=5,alpha=0.8,shape=21)+
   geom_label_repel(stresspoints, mapping=aes(label=stresspoints$Gene),size=4,point.padding=-0.5, color="#800020",max.overlaps = 20, fontface='italic')+theme(
   axis.title.y = element_text(
@@ -813,7 +810,7 @@ stresspoints <- stressresponde[stressresponde$U2OS>25 & stressresponde$PC3>25,]
   )
 ))
 
-png("../Projects/StressGranules/SGPAPER/Images/PNG/SupFigure1A.png", width = 7, height=4, units = "in", res=300)
+png("~/Projects/StressGranules/SGPAPER/Images/PNG/SupFigure1A.png", width = 7, height=4, units = "in", res=300)
 sup1
 dev.off()
 ```
@@ -920,7 +917,7 @@ dimnames(PL_matrix) <- list(
   PL_Pos_vs_Neg = c("PL_Pos", "PL_Neg")
 )
 
-png("../Projects/StressGranules/SGPAPER/Images/PNG/SupFigure1B.png", width = 7, height=4, units = "in", res=300)
+png("~/Projects/StressGranules/SGPAPER/Images/PNG/SupFigure1B.png", width = 7, height=4, units = "in", res=300)
 hallplot
 dev.off()
 ```
@@ -938,7 +935,7 @@ sup <- annotate_figure(
 )
 
 
-png("../Projects/StressGranules/SGPAPER/Images/PNG/SupFigure1.png", width = 14, height=6, units = "in", res=300)
+png("~/Projects/StressGranules/SGPAPER/Images/PNG/SupFigure1.png", width = 14, height=6, units = "in", res=300)
 sup
 dev.off()
 ```
@@ -1016,8 +1013,8 @@ WG <- rbind(WG_WC_count, SG_WC_count)
 
 (fig2c <- ggarrange(ogdist, simdist, nrow = 1))
 
-png("../Projects/StressGranules/SGPAPER/SupFigure2.png", width = 7, height=4, units = "in", res=300)
-simdist
+png("~/Projects/StressGranules/SGPAPER/Images/PNG/SupFigure2_top.png", width = 14, height=4, units = "in", res=300)
+fig2c
 dev.off()
 ```
 ### D
@@ -1030,7 +1027,7 @@ DEGenes <- fread("~/Sim_DEGenes.txt")
     breaks = log10(c(10, 100, 1000, 10000)),  # tick positions (in log10 scale)
     labels = c("10", "100", "1000", "10000") # what you want to show
   )+ coord_cartesian(ylim=c(-600,700))+
- ylab("DGE Empirical-Simulated (t-stat)") + xlab(expression(RNA ~ Length ~ (log[10] ~ (nt))))+
+ ylab("DGE Empirical-Simulated (t-stat)") + xlab(expression(RNA ~ Length ~ (nt)))+
       geom_density2d(color="#800020", size=1.2)  +   theme_bw()+
   theme(axis.line = element_line(colour = "black"),
         panel.grid.minor = element_blank(),
@@ -1043,7 +1040,11 @@ DEGenes <- fread("~/Sim_DEGenes.txt")
   )
 ))
 
-(fig2b <- ggarrange(compplot, simsamplersg, ncol = 2, font.label = list(size=25)))
+(fig2b <- ggarrange(simsamplersg, compplot, ncol = 2, font.label = list(size=25)))
+
+png("~/Projects/StressGranules/SGPAPER/Images/PNG/SupFigure2_middle.png", width = 14, height=6, units = "in", res=300)
+fig2b
+dev.off()
 ```
 
 ```{r fig.height=12, fig.width=16}
@@ -1133,7 +1134,7 @@ scale_colour_manual(values=c('#A300A3','#FFB7FF'), breaks = c("Significant", "No
   theme(text=element_text(size=11,  family="Arial MS")) +xlim(c(-3.5,3.5))+ylim(c(-3.5,3.5))
 
 
-(hallploty <- ggarrange(hallplot, leggyboy, nrow = 1, widths = c(0.8,0.2)))
+(hallploty <- ggarrange(hallplot, nrow = 1, widths = c(0.8,0.2)))
 
 
 #Fisher Test Example
@@ -1145,7 +1146,7 @@ DC_Q4 <- nrow(hallmark_df[hallmark_df$nes_size<0 & hallmark_df$nes_sim<0,] )
 DC_FT <- data.frame(C1=c(DC_Q1,DC_Q3), C2=c(DC_Q2, DC_Q4))
 fisher.test(DC_FT)
 
-png("../Projects/StressGranules/SGPAPER/Images/PNG/Figure3C.png", width = 7, height=6, units = "in", res=300)
+png("~/Projects/StressGranules/SGPAPER/Images/PNG/Figure3C.png", width = 7, height=6, units = "in", res=300)
 hallplot
 dev.off()
 
@@ -1176,11 +1177,6 @@ tscorrelplot <- ggplot(tscompy, aes(y = t.y, x = t.x)) +
     breaks = c(10, 100, 1000, 10000, 100000),       # tick positions
     labels = c("10", "100", "1000", "10000", "100000")  # pretty labels
   ) +
-  geom_abline(
-    slope = smooth.SG$coefficients[2],
-    intercept = smooth.SG$coefficients[1],
-    linetype = "dashed"
-  ) +
   stat_cor(method = "spearman", cor.coef.name = "rho", size = 7) +
   theme(
     text = element_text(size = 25, family = "Arial MS"),
@@ -1194,7 +1190,7 @@ tscorrelplot <- ggplot(tscompy, aes(y = t.y, x = t.x)) +
     legend.title = element_text(size = 17)     # smaller font for legend title
   )
 
-png("../Projects/StressGranules/SGPAPER/Images/PNG/Figure3D.png", width = 7, height=6, units = "in", res=300)
+png("~/Projects/StressGranules/SGPAPER/Images/PNG/Figure3D.png", width = 7, height=6, units = "in", res=300)
 tscorrelplot
 dev.off()
 
@@ -1217,13 +1213,12 @@ smooth.SG <- lm(t~log10(Length), RealSig)
 (realsig <- ggplot(RealSig, aes(y=t, x=log10(Length))) + 
   geom_point(fill = "#DDDDDD", alpha = 0.3, size=5, shape=21, colour='black') +   
   geom_density2d(color="#800020", size=1.2)+ theme_bw()+
- ylab("DGE SG-SimSG (t-stat)") + xlab(expression(paste("RNA Length (log"[10]*"(nt))"))) +
+ ylab("DGE SG-SimSG (t-stat)") + xlab(expression(paste("RNA Length (nt)"))) +
   theme(axis.line = element_line(colour = "black"),
         panel.grid.minor = element_blank(),
         panel.border = element_blank(),
         panel.background = element_blank()) + 
-  theme(plot.title = element_text(hjust = 0.5))  +
-  geom_abline(slope=smooth.SG$coefficients[2], intercept = smooth.SG$coefficients[1], linetype = "dashed")+ 
+  theme(plot.title = element_text(hjust = 0.5))  + 
   theme(text=element_text(size=25,  family="Arial MS")) + stat_cor(method = "spearman", cor.coef.name = "rho", size=7)+ theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank())+
   scale_x_continuous(
     breaks = log10(c(10, 100, 1000, 10000)),  # tick positions (in log10 scale)
@@ -1252,21 +1247,20 @@ smooth.SG <- lm(RNP~(BU), Rnptables)
         panel.grid.minor = element_blank(),
         panel.border = element_blank(),
         panel.background = element_blank()) + 
-  theme(plot.title = element_text(hjust = 0.5))  +
-  geom_abline(slope=smooth.SG$coefficients[2], intercept = smooth.SG$coefficients[1], linetype = "dashed")+ 
+  theme(plot.title = element_text(hjust = 0.5))  + 
   theme(text=element_text(size=25,  family="Arial MS")) + stat_cor(method = "spearman", cor.coef.name = "rho", size=7)+ theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank()))
 ```
 
 ```{r fig.height=6, fig.width=14}
 (EF3 <- ggarrange(realsig, rnpy, ncol = 2))
 
-png("../Projects/StressGranules/SGPAPER/Images/PNG/Figure3EF.png", width = 14, height=6, units = "in", res=300)
+png("~/Projects/StressGranules/SGPAPER/Images/PNG/Figure3EF.png", width = 14, height=6, units = "in", res=300)
 EF3
 dev.off()
 ```
 
 
-## Figure 4
+# Figure 4
 
 ### A
 
@@ -1284,8 +1278,7 @@ smooth.ac <- lm(nt_t~(wt_t), actables)
         panel.border = element_blank(),
         panel.background = element_blank()) + 
   theme(plot.title = element_text(hjust = 0.5)) + 
-  theme(text=element_text(size=25,  family="Arial MS")) + stat_cor(method = "spearman", cor.coef.name = "rho", size=7)+ theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank()) +
-  geom_abline(slope=smooth.ac$coefficients[2], intercept = smooth.ac$coefficients[1], linetype = "dashed"))
+  theme(text=element_text(size=25,  family="Arial MS")) + stat_cor(method = "spearman", cor.coef.name = "rho", size=7)+ theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank()))
 
 m6tables <- fread("~/Projects/StressGranules/SGPAPER/M6ADATAORIG.txt")
 smooth.m6 <- lm(nt_t~(wt_t), m6tables)
@@ -1299,8 +1292,7 @@ smooth.m6 <- lm(nt_t~(wt_t), m6tables)
         panel.border = element_blank(),
         panel.background = element_blank()) + 
   theme(plot.title = element_text(hjust = 0.5)) + 
-  theme(text=element_text(size=25,  family="Arial MS")) + stat_cor(method = "spearman", cor.coef.name = "rho", size=7)+ theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank()) +
-  geom_abline(slope=smooth.m6$coefficients[2], intercept = smooth.m6$coefficients[1], linetype = "dashed"))
+  theme(text=element_text(size=25,  family="Arial MS")) + stat_cor(method = "spearman", cor.coef.name = "rho", size=7)+ theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank()))
 
 (A4 <- ggarrange(accorrel, m6correl, ncol = 2))
 
@@ -1317,7 +1309,7 @@ actables$bins <- factor(actables$bins, levels=c(0:8, "[9,12]","[13,[" ))
 
 trial <- subset(actables, NAC >= 5)
 
-spearman_corr <- cor(trial$NAC, (trial$Residuals), method = "spearman")
+spearman_corr <- cor.test(actables$NAC, (actables$Residuals), method = "spearman")
 
 (acbins <- ggplot(actables, aes(x=bins, y=(Residuals)))  + geom_jitter(alpha=0.1) + geom_violin(fill="#43F3D5", alpha=0.4) +theme_bw()+ 
  xlab("Number of ac4C Modifications") + ylab("Residuals") +
@@ -1325,7 +1317,7 @@ spearman_corr <- cor(trial$NAC, (trial$Residuals), method = "spearman")
         panel.grid.minor = element_blank(),
         panel.border = element_blank(),
         panel.background = element_blank()) + 
-  theme(plot.title = element_text(hjust = 0.5)) +annotate("text", x = 4.75, y = 4.5, label = expression("For NAC" >= 5 * "," ~ rho == 0.33 * "," ~ italic(p) < 8.6e-9), size = 7, color = "black") 
+  theme(plot.title = element_text(hjust = 0.5)) +annotate("text", x = 5, y = 4.5, label = expression("Spearman's" ~ rho == 0.029 * "," ~ italic(p) == 0.002), size = 7, color = "black") 
   +
   theme(
     text = element_text(size = 25, family = "Arial MS"),       # base size
@@ -1370,66 +1362,190 @@ spearman_corr <- cor.test(trial$NM6A, (trial$Residuals), method = "spearman")
 
 (B4 <- ggarrange(acbins, m6bins, ncol = 2))
 
+png("~/Projects/StressGranules/SGPAPER/Images/PNG/Figure4B.png", width = 7, height=6, units = "in", res=300)
+acbins
+dev.off()
+
+```
+
+## New B
+
+```{r}
+#AC
+aceffect <- as.data.frame(fread("~/Projects/StressGranules/SGPAPER/SGvsWC/ac4CEffect.txt"))
+row.names(aceffect) <- aceffect$V1
+aceffect$V1 <- NULL  
+ndegs <- 20
+
+upmarkers <- as.data.frame(aceffect[aceffect$logFC>3 & aceffect$B>10,] )
+
+downmarkers <- as.data.frame(aceffect[aceffect$logFC< -2 & aceffect$B>10,] )
+
+(acvolplot <- ggplot(data = aceffect,
+                aes(x = logFC, y = B)) + ylim(-7,20)+xlim(-3.5,9)+
+  geom_point(color = "#CCCCCC") +
+  theme_bw() +
+  theme(
+    axis.line = element_line(colour = "black"),
+    panel.grid = element_blank(),      # 🚀 remove ALL gridlines
+    panel.border = element_blank(),
+    panel.background = element_blank()
+  ) +
+  ggtitle("ac4C effect in SGs") +
+  ylab("B-Statistic\n") +
+  xlab(expression(Log[2]~"FC")) +  
+  theme(plot.title = element_text(hjust = 0.5)) +
+  geom_point(data = upmarkers, aes(x = logFC, y = B), color = "#A10702", size = 4) +geom_point(data = downmarkers, aes(x = logFC, y = B), color = "#03256C", size = 4) +
+  geom_label_repel(
+    data = upmarkers[1:ndegs,], 
+    mapping = aes(label = (row.names(upmarkers))[1:ndegs]), 
+    size = 4,
+    point.padding = 0.5,
+    color = "#A10702",
+    max.overlaps = 20,
+    segment.color = "#A10702",
+    fontface = "italic"
+  ) +geom_label_repel(
+    data = downmarkers[1:ndegs,], 
+    mapping = aes(label = (row.names(downmarkers))[1:ndegs]), 
+    size = 4,
+    point.padding = 0.5,
+    color = "#03256C",
+    max.overlaps = 20,
+    segment.color = "#03256C",
+    fontface = "italic"
+  )+
+  theme(text = element_text(size = 25, family = "Arial MS")))
+
+  
+#m6
+
+ m6effect <- as.data.frame(fread("~/Projects/StressGranules/SGPAPER/SGvsWC/m6AEffect.txt"))
+ row.names(m6effect) <- m6effect$V1
+ m6effect$V1 <- NULL  
+
+ 
+m6avolplot <- ggplot(data = m6effect,
+                aes(x = logFC, y = B)) + ylim(-7,20)+xlim(-3.5,9)+
+  geom_point(color = "#CCCCCC") +
+  theme_bw() +
+  theme(
+    axis.line = element_line(colour = "black"),
+    panel.grid = element_blank(),      # 🚀 remove ALL gridlines
+    panel.border = element_blank(),
+    panel.background = element_blank()
+  ) +
+  ggtitle("m6A effect in SGs") +
+  ylab("B-Statistic\n") +
+  xlab(expression(Log[2]~"FC")) +  
+  theme(plot.title = element_text(hjust = 0.5)) +
+  theme(text = element_text(size = 25, family = "Arial MS"))
+
+ 
+(B4 <- ggarrange(acvolplot, m6avolplot, ncol = 2))
+
 png("~/Projects/StressGranules/SGPAPER/Images/PNG/Figure4B.png", width = 14, height=6, units = "in", res=300)
 B4
 dev.off()
 
 ```
+
+
 ### C
 
 ```{r fig.height=7, fig.width=14}
 #Starting with my boy AC
-ac4cres <- fread("~/Projects/StressGranules/SGPAPER/ACSimRes.txt")
+ac4cres <- fread("~/Projects/StressGranules/SGPAPER/MolecularWeights_ac4C.csv")
+aceffect$Gene <- row.names(aceffect)
+aceffect <- merge(aceffect, ac4cres, by="Gene")
 
-upmarkers <- ac4cres[
-  !(ac4cres$bins %in% c(0, 1, 2, 3, 4,5)), 
-  ]
+smooth.SG <- lm(t~(NAC), aceffect)
+liner.SG <- rstandard(smooth.SG)
+
+# Calculate the Spearman correlation coefficient
+spearman_corr <- cor(aceffect$t, (aceffect$NAC), method = "pearson")
 
 
-spearman_corr <- cor.test(upmarkers$Residuals.y, (upmarkers$Residuals.x), method = "spearman")
 
-(acres <- ggplot(ac4cres, aes(y=Residuals.y, x=(Residuals.x))) + 
-  geom_point(fill = "#DDDDDD", alpha = 0.3, size=5, shape=21, colour='black')  +   theme_bw()+xlab("Original Residuals")+
-  ylab("Simulated Residuals")+ylim(-12,12)+
+acscatter <- ggplot(aceffect, aes(y=t, x=(NAC))) + 
+  geom_point(fill = "#DDDDDD", alpha = 0.3, size=5, shape=21, colour='black')  +   theme_bw()+
+ ylab("ac4C effect in SGs (t-stat)") + xlab("Number of ac4C modifications") +
   theme(axis.line = element_line(colour = "black"),
         panel.grid.minor = element_blank(),
         panel.border = element_blank(),
-        panel.background = element_blank()) +
-  theme(plot.title = element_text(hjust = 0.5)) + 
-  theme(text=element_text(size=25,  family="Arial MS")) + theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank()) +
-  geom_point(data=upmarkers, aes(x=Residuals.x, y=  Residuals.y), color="#43F3D5",fill="#43F3D5",alpha=0.5, size=5, shape=21)+geom_density2d(color="#800020", size=1.2)+annotate("text", x = -1, y = 10, label = expression("For NAC" >= 6 * "," ~ rho == 0.41 * "," ~ italic(p) < 3.5e-9), size = 7, color = "black"))
+        panel.background = element_blank()) + 
+  theme(plot.title = element_text(hjust = 0.5))  + stat_cor(method = "spearman", cor.coef.name = "rho",size=10)+
+  theme_bw() +
+  theme(
+    axis.line = element_line(colour = "black"),
+    panel.grid = element_blank(),      # 🚀 remove ALL gridlines
+    panel.border = element_blank(),
+    panel.background = element_blank()
+  )+
+  theme(text = element_text(size = 25, family = "Arial MS"))
+
+
 
 #moving to m6a
-m6ares <- fread("~/Projects/StressGranules/SGPAPER/m6SimRes.txt")
+
+genelength <- read.csv("~/Projects/StressGranules/SG_Transcriptome/RP_Data_2021/TrimmedSamples/alignment_STAR/TranscriptLenght.txt", header=T)
+genelength <- subset(genelength, Ensembl.Canonical==1)
+genelength <- subset(genelength, Gene.name!="")
+
+genelength <- genelength %>%
+  group_by(Gene.name) %>%
+  slice(which.max(Transcript.length..including.UTRs.and.CDS.)) %>%
+  ungroup()
+
+genelength <- genelength[,-c(2,3)]
+colnames(genelength) <- c("Length", "Gene")
+ aceffect <- merge(aceffect, genelength, by="Gene")
 
 
-upmarkers <- m6ares[
-  !(m6ares$bins %in% c(0, 1, 2, 3, 4)), 
-  ]
+smooth.SG <- lm(t~log10(Length), aceffect)
+liner.SG <- rstandard(smooth.SG)
+
+# Calculate the Spearman correlation coefficient
+spearman_corr <- cor(aceffect$t, log10(aceffect$Length), method = "pearson")
 
 
-spearman_corr <- cor.test(upmarkers$Residuals.y, (upmarkers$Residuals.x), method = "spearman")
 
-(m6res <- ggplot(m6ares, aes(y=Residuals.y, x=(Residuals.x))) + 
-  geom_point(fill = "#DDDDDD", alpha = 0.3, size=5, shape=21, colour='black')  +   theme_bw()+xlab("Original Residuals")+
-  ylab("Simulated Residuals")+ylim(-13,13)+
+ lengtheffect <- ggplot(aceffect, aes(y=t, x=log10(Length))) + 
+  geom_point(fill = "#DDDDDD", alpha = 0.3, size=5, shape=21, colour='black') +   
+  geom_density2d(color="#800020", size=1.2) +
+  theme_bw() +
+  scale_x_continuous(
+    breaks = log10(c(10, 100, 1000, 10000)),  # tick positions (in log10 scale)
+    labels = c("10", "100", "1000", "10000") # what you want to show
+  )+
+ ylab("ac4C effect in SGs (t-stat)") + xlab("RNA Length (nt)") +
   theme(axis.line = element_line(colour = "black"),
         panel.grid.minor = element_blank(),
         panel.border = element_blank(),
-        panel.background = element_blank()) +
-  theme(plot.title = element_text(hjust = 0.5)) + 
-  theme(text=element_text(size=25,  family="Arial MS")) + theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank()) +
-  geom_point(data=upmarkers, aes(x=Residuals.x, y=  Residuals.y), color="#43F3D5",fill="#43F3D5",alpha=0.5, size=5, shape=21)+geom_density2d(color="#800020", size=1.2)+annotate("text", x = -2.5, y = 10.5, label = expression("For NM" >= 5 * "," ~ rho == 0.23 * "," ~ italic(p) < 3.3e-5), size = 7, color = "black"))
+        panel.background = element_blank()) + 
+  theme(plot.title = element_text(hjust = 0.5))  + stat_cor(method = "spearman", cor.coef.name = "rho",size=10)+
+  theme_bw() +
+  theme(
+    axis.line = element_line(colour = "black"),
+    panel.grid = element_blank(),      # 🚀 remove ALL gridlines
+    panel.border = element_blank(),
+    panel.background = element_blank()
+  )+
+  theme(text = element_text(size = 25, family = "Arial MS"))
 
-(C4 <- ggarrange(acres, m6res, ncol = 2))
+(C4 <- ggarrange(acscatter, lengtheffect, ncol = 2))
 
 png("~/Projects/StressGranules/SGPAPER/Images/PNG/Figure4C.png", width = 14, height=7, units = "in", res=300)
 C4
 dev.off()
+
+png("~/Projects/StressGranules/SGPAPER/Images/PNG/Figure4d.png", width = 7, height=7, units = "in", res=300)
+lengtheffect
+dev.off()
 ```
 
 
-## Figure 5
+# Figure 5
 
 ### A
 
@@ -1451,11 +1567,6 @@ spearman_corr <- cor(tstable$sg_t, (tstable$pb_t), method = "spearman")
   ylab("DGE SG-WC (t-stat)") + 
   xlab("DGE PB-WC (t-stat)") +  
   geom_density2d(color = "#800020", size = 1.2) +
-  geom_abline(
-    slope = smooth.SG$coefficients[2], 
-    intercept = smooth.SG$coefficients[1], 
-    linetype = "dashed"
-  ) +
   stat_cor(method = "spearman", cor.coef.name = "rho", size = 7) +
   scale_colour_gradient(
     low = "#729EA1", high = "#A82445",
@@ -1472,7 +1583,7 @@ spearman_corr <- cor(tstable$sg_t, (tstable$pb_t), method = "spearman")
     panel.grid.minor = element_blank(),
     panel.border = element_blank(),
     panel.background = element_blank()
-  ))
+  )+ theme(legend.position = "none"))
 
 png("~/Projects/StressGranules/SGPAPER/Images/PNG/Figure5A.png", width = 7, height=6, units = "in", res=300)
 sgpcorrel
@@ -1498,11 +1609,6 @@ spearman_corr <- cor(tstable$pb_t, (tstable$rnp_t), method = "spearman")
   ylab("DGE PB-WC (t-stat)") + 
   xlab("DGE RNP-WC (t-stat)") +  
   geom_density2d(color = "#800020", size = 1.2) +
-  geom_abline(
-    slope = smooth.SG$coefficients[2], 
-    intercept = smooth.SG$coefficients[1], 
-    linetype = "dashed"
-  ) +
   stat_cor(method = "spearman", cor.coef.name = "rho", size = 7) +
   scale_colour_gradient(
     low = "#729EA1", high = "#A82445",
@@ -1519,7 +1625,7 @@ spearman_corr <- cor(tstable$pb_t, (tstable$rnp_t), method = "spearman")
     panel.grid.minor = element_blank(),
     panel.border = element_blank(),
     panel.background = element_blank()
-  ))
+  )+ theme(legend.position = "none"))
 
 png("~/Projects/StressGranules/SGPAPER/Images/PNG/Figure5B.png", width = 7, height=6, units = "in", res=300)
 rnpcorrel
@@ -1545,11 +1651,6 @@ spearman_corr <- cor(tstable$sg_t, (tstable$rnp_t), method = "spearman")
   ylab("DGE SG-WC (t-stat)") + 
   xlab("DGE RNP-WC (t-stat)") +  
   geom_density2d(color = "#800020", size = 1.2) +
-  geom_abline(
-    slope = smooth.SG$coefficients[2], 
-    intercept = smooth.SG$coefficients[1], 
-    linetype = "dashed"
-  ) +
   stat_cor(method = "spearman", cor.coef.name = "rho", size = 7) +
   scale_colour_gradient(
     low = "#729EA1", high = "#A82445",
@@ -1566,7 +1667,7 @@ spearman_corr <- cor(tstable$sg_t, (tstable$rnp_t), method = "spearman")
     panel.grid.minor = element_blank(),
     panel.border = element_blank(),
     panel.background = element_blank()
-  ))
+  )+ theme(legend.position = "none"))
 
 png("~/Projects/StressGranules/SGPAPER/Images/PNG/Figure5.png", width = 7, height=6, units = "in", res=300)
 rnpsgcorrel
@@ -1593,11 +1694,6 @@ spearman_corr <- cor(tstable$dc_t, (tstable$fc_t), method = "spearman")
   ylab("DGE DC-SG-WC (t-stat)") + 
   xlab("DGE FAPS-SG-WC (t-stat)") +  
   geom_density2d(color = "#800020", size = 1.2) +
-  geom_abline(
-    slope = smooth.SG$coefficients[2], 
-    intercept = smooth.SG$coefficients[1], 
-    linetype = "dashed"
-  ) +
   stat_cor(method = "spearman", cor.coef.name = "rho", size = 7) +
   scale_colour_gradient(
     low = "#729EA1", high = "#A82445",
@@ -1614,7 +1710,7 @@ spearman_corr <- cor(tstable$dc_t, (tstable$fc_t), method = "spearman")
     panel.grid.minor = element_blank(),
     panel.border = element_blank(),
     panel.background = element_blank()
-  ))
+  )+ theme(legend.position = "none"))
 
 png("~/Projects/StressGranules/SGPAPER/Images/PNG/Figure5E.png", width = 7, height=6, units = "in", res=300)
 sgpcorrel
@@ -1637,11 +1733,6 @@ spearman_corr <- cor(tstable$sg_t, (tstable$pb_t), method = "spearman")
   ylab("DGE FAPS-SG-WC (t-stat)") + 
   xlab("DGE FAPS-PB-WC (t-stat)") +  
   geom_density2d(color = "#800020", size = 1.2) +
-  geom_abline(
-    slope = smooth.SG$coefficients[2], 
-    intercept = smooth.SG$coefficients[1], 
-    linetype = "dashed"
-  ) +
   stat_cor(method = "spearman", cor.coef.name = "rho", size = 7) +
   scale_colour_gradient(
     low = "#729EA1", high = "#A82445",
@@ -1658,7 +1749,7 @@ spearman_corr <- cor(tstable$sg_t, (tstable$pb_t), method = "spearman")
     panel.grid.minor = element_blank(),
     panel.border = element_blank(),
     panel.background = element_blank()
-  ))
+  )+ theme(legend.position = "none"))
 
 png("~/Projects/StressGranules/SGPAPER/Images/PNG/Figure5F.png", width = 7, height=6, units = "in", res=300)
 sgpcorrel
@@ -1680,8 +1771,9 @@ colnames(oldmeth) <- c("Gene", "HubsPB")
 pbodystuff <- merge(pbodydc, newmeth, by="Gene")
 pbodystuff <- merge(pbodystuff, oldmeth, by="Gene")
 pbodystuff <- merge(pbodystuff, genelength, by="Gene")
+smooth.SG <- lm(KodalPB~(DCPB), pbodystuff)
 
-SupFig4A <- ggplot(pbodystuff, aes(y = KodalPB, x = DCPB)) + 
+(SupFig4A <- ggplot(pbodystuff, aes(y = KodalPB, x = DCPB)) + 
   geom_point(aes(color = Length), alpha = 0.5, size = 5) +  # raw Length
   geom_density2d(color = "#800020", size = 1.2) +
   ylab("DGE PB-WC FAPS (t-stat)") + 
@@ -1703,7 +1795,7 @@ SupFig4A <- ggplot(pbodystuff, aes(y = KodalPB, x = DCPB)) +
     panel.grid.minor = element_blank(),
     panel.border = element_blank(),
     panel.background = element_blank()
-  )
+  )+ theme(legend.position = "none"))
 
 png("~/Projects/StressGranules/SGPAPER/Images/PNG/Figure5D.png", width = 7, height=6, units = "in", res=300)
 SupFig4A
@@ -1739,7 +1831,7 @@ smooth.upmarkers <- lm(Scof_St ~ Scof_Unst, upmarkers)
 
 (A6 <- ggplot(yeast_s, aes(y=Scof_St, x=(Length))) + 
   geom_point(fill = "#DDDDDD", alpha = 0.3, size=5, shape=21, colour='black') +   
-  geom_density2d(color="#800020", size=1.2)+  theme_bw()+xlab(expression(~sqrt(RNA~Length~log10(nt), 3)))+
+  geom_density2d(color="#800020", size=1.2)+  theme_bw()+xlab(expression(~sqrt(RNA~Length~(nt), 3)))+
   ylab("S")+ scale_colour_gradient(low="black", high="red")+
   theme(axis.line = element_line(colour = "black"),
         panel.grid.minor = element_blank(),
@@ -1760,21 +1852,30 @@ dev.off()
 
 ```{r}
 #From AKhong code
-human_s <- fread("~/Projects/StressGranules/SGPAPER/RealSGs/RealAkhong.txt")
-smooth.SG <- lm(old_t ~ ss_t, human_s)
+human_s <- fread("~/Projects/StressGranules/SGPAPER/Simulations/HumanCentriSim.txt")
+smooth.SG <- lm(og_t ~ sim_t, human_s)
 
-(B6 <- ggplot(human_s, aes(y=old_t, x=(ss_t))) + 
-  geom_point(aes(colour=log10(Length)),alpha=0.5, size=5) +   
-  geom_density2d(color="#800020", size=1.2)+  theme_bw()+xlab("Original SG Enrichment (t-stat)") + ylab("Simulated SG Enrichment (t-stat)")
+(B6 <- ggplot(human_s, aes(y=og_t, x=(sim_t))) + 
+  geom_point(aes(colour=log10(Length)), alpha=0.5, size=5) +   
+  geom_density2d(color="#800020", size=1.2) + theme_bw() + xlab("DGE SG-WC (t-stat)") + ylab("DGE SimSG-WC (t-stat)") +
   theme(axis.line = element_line(colour = "black"),
         panel.grid.minor = element_blank(),
         panel.border = element_blank(),
         panel.background = element_blank()) + 
   theme(plot.title = element_text(hjust = 0.5)) + 
-  theme(text=element_text(size=15,  family="Arial MS")) + theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank()) +
-  geom_abline(slope=smooth.SG$coefficients[2], intercept = smooth.SG$coefficients[1], linetype = "dashed")+ stat_cor(method = "spearman", cor.coef.name = "rho", size=5)+
-  scale_colour_gradient(low="#729EA1", high = "#A82445")+
-  labs(colour = "RNA\nLength"))
+  theme(text = element_text(size=15, family="Arial MS")) + 
+  theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank()) + 
+  stat_cor(method="spearman", cor.coef.name="rho", size=7) +
+  scale_colour_gradient(
+    low = "#729EA1", high = "#A82445",
+    breaks = c(2, 3, 4),
+    labels = c("100", "1000", "10000"),
+    name = "RNA\nLength (nt)"
+  )+
+  theme(text=element_text(size=25,  family="Arial MS"))+ theme(legend.position = "none"))
+png("~/Projects/StressGranules/SGPAPER/Images/PNG/Figure6B.png", width = 7, height=6, units = "in", res=300)
+B6
+dev.off()
 ```
 
 ```{r fig.height=6, fig.width=14}
@@ -1795,13 +1896,12 @@ smooth.SG <- lm(t~log10(Length), RealDeg)
 (C6 <- ggplot(RealDeg, aes(y=t, x=log10(Length))) + 
   geom_point(fill = "#DDDDDD", alpha = 0.3, size=5, shape=21, colour='black') +   
   geom_density2d(color="#800020", size=1.2)+ theme_bw()+
- ylab("DGE SimSG-WC (t-stat)") + xlab(expression(paste("RNA Length (log"[10]*" (nt))"))) +
+ ylab("DGE SG-SimSG (t-stat)") + xlab(expression(paste("RNA Length (nt)"))) +
   theme(axis.line = element_line(colour = "black"),
         panel.grid.minor = element_blank(),
         panel.border = element_blank(),
         panel.background = element_blank()) + 
   theme(plot.title = element_text(hjust = 0.5))  + ylim(-60,50)+
-  geom_abline(slope=smooth.SG$coefficients[2], intercept = smooth.SG$coefficients[1], linetype = "dashed")+
   theme(text=element_text(size=25,  family="Arial MS")) + stat_cor(method = "spearman", cor.coef.name = "rho", size=7)+ theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank())+
   scale_x_continuous(
     breaks = log10(c(10, 100, 1000, 10000)),  # tick positions (in log10 scale)
@@ -1866,13 +1966,12 @@ smooth.SG <- lm(t~log10(Length), somas)
 (A8 <- ggplot(somas, aes(y=t, x=log10(Length))) + 
   geom_point(fill = "#DDDDDD", alpha = 0.3, size=5, shape=21, colour='black') +   
   geom_density2d(color="#800020", size=1.2)+ theme_bw()+
- ylab("DGE Controlled PL-SG (t-stat)") + xlab(expression(paste("RNA Length (Log"[10]*" (nt))"))) +
+ ylab("DGE Controlled PL-SG (t-stat)") + xlab(expression(paste("RNA Length (nt)"))) +
   theme(axis.line = element_line(colour = "black"),
         panel.grid.minor = element_blank(),
         panel.border = element_blank(),
         panel.background = element_blank()) + 
-  theme(plot.title = element_text(hjust = 0.5))  +
-  geom_abline(slope=smooth.SG$coefficients[2], intercept = smooth.SG$coefficients[1], linetype = "dashed")+ 
+  theme(plot.title = element_text(hjust = 0.5))  + 
   theme(text=element_text(size=25,  family="Arial MS")) + stat_cor(method = "spearman", cor.coef.name = "rho", size=7)+ theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank()) +
   scale_x_continuous(
     breaks = log10(c(10, 100, 1000, 10000)),  # tick positions (in log10 scale)
@@ -1974,7 +2073,7 @@ dev.off()
 #### A
 
 ```{r}
-#From Khong Code
+#From SEDSEQ Code
 
 smooth.SG <- lm(old_t ~ ss_t, simmyyeast)
 
@@ -2038,8 +2137,8 @@ upmarkers <- as.data.frame(mat2019[(mat2019$Gene) %in% c("NORAD", "GAPDH", "ACTB
   ) +
   geom_point(data = upmarkers, aes(x = logFC, y = B), color = "#A10702", size = 4) +
   theme(text = element_text(size = 25, family = "Arial MS")) +
-  geom_vline(xintercept = -1, linetype = "dashed", alpha = 0.5) +
-  geom_vline(xintercept = 1, linetype = "dashed", alpha = 0.5) +
+  geom_vline(xintercept = -0.75, linetype = "dashed", alpha = 0.5) +
+  geom_vline(xintercept = 0.75, linetype = "dashed", alpha = 0.5) +
   geom_hline(yintercept = 0, linetype = "dashed", alpha = 0.5))
 
 
@@ -2058,13 +2157,12 @@ smooth.SG <- lm(t~log10(Length), mat2019)
 (A7 <- ggplot(mat2019, aes(y=t, x=log10(Length))) + 
   geom_point(fill = "#DDDDDD", alpha = 0.3, size=5, shape=21, colour='black') +   
   geom_density2d(color="#800020", size=1.2)+ theme_bw()+
- ylab("DGE Controlled RNP") + xlab(expression(paste("RNA Length (Log"[10]*" (nt))"))) +
+ ylab("DGE Controlled RNP") + xlab(expression(paste("RNA Length (nt)"))) +
   theme(axis.line = element_line(colour = "black"),
         panel.grid.minor = element_blank(),
         panel.border = element_blank(),
         panel.background = element_blank()) + 
-  theme(plot.title = element_text(hjust = 0.5))  +
-  geom_abline(slope=smooth.SG$coefficients[2], intercept = smooth.SG$coefficients[1], linetype = "dashed")+ 
+  theme(plot.title = element_text(hjust = 0.5))  + 
   theme(text=element_text(size=25,  family="Arial MS")) + stat_cor(method = "spearman", cor.coef.name = "rho", size=7)+ theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank())+
   scale_x_continuous(
     breaks = log10(c(10, 100, 1000, 10000)),  # tick positions (in log10 scale)
@@ -2173,62 +2271,50 @@ dev.off()
 ```{r fig.width=10, fig.height=10}
 #I get the data I used for the previous figure but add the values from the other studies
 #Opening the Different Studies
-tcellpb <- fread("../Projects/StressGranules/SGPAPER/RealSGs/TcellPB.txt")[,c(1,4)]
+tcellpb <- fread("~/Projects/StressGranules/SGPAPER/RealSGs/TcellPB.txt")[,c(1,4)]
 colnames(tcellpb) <- c("Gene","tcellpb")
 
-rcapseq <- fread("../Projects/StressGranules/SGPAPER/RealSGs/CapSeq.txt")[,c(1,4)]
-colnames(rcapseq) <- c("Gene","rcapseq")
-
-rm6a <- fread("../Projects/StressGranules/SGPAPER/RealSGs/Realm6A.txt")[,c(1,4)]
+rm6a <- fread("~/Projects/StressGranules/SGPAPER/RealSGs/Realm6A.txt")[,c(1,4)]
 colnames(rm6a) <- c("Gene","rm6a")
 
-wcdsrna <- fread("../Projects/StressGranules/SGPAPER/RealSGs/WCdsRNA.txt")[,c(1,4)]
+wcdsrna <- fread("~/Projects/StressGranules/SGPAPER/RealSGs/WCdsRNA.txt")[,c(1,4)]
 colnames(wcdsrna) <- c("Gene","wcds")
 
-rsoma <- fread("../Projects/StressGranules/SGPAPER/RealSGs/RealSoma.txt")[,c(1,4)]
+rsoma <- fread("~/Projects/StressGranules/SGPAPER/RealSGs/RealSoma.txt")[,c(1,4)]
 colnames(rsoma) <- c("Gene","rsoma")
 
-rac <- fread("../Projects/StressGranules/SGPAPER/RealSGs/Realac4c.txt")[,c(1,4)]
+rac <- fread("~/Projects/StressGranules/SGPAPER/RealSGs/Realac4c.txt")[,c(1,4)]
 colnames(rac) <- c("Gene","rac")
 
-mat21 <- fread("../Projects/StressGranules/SGPAPER/RealSGs/RealtMat21.txt")[,c(1,4)]
+mat21 <- fread("~/Projects/StressGranules/SGPAPER/RealSGs/RealtMat21.txt")[,c(1,4)]
 colnames(mat21) <- c("Gene","mat21")
 
-wcog <- fread("../Projects/StressGranules/SGPAPER/RealSGs/RealWC.txt")[,c(1,4)]
+wcog <- fread("~/Projects/StressGranules/SGPAPER/RealSGs/RealWC.txt")[,c(1,4)]
 colnames(wcog) <- c("Gene","wcog")
 
-mat19 <- fread("../Projects/StressGranules/SGPAPER/RealSGs/Tmathenypb.txt")[,c(1,4)]
+mat19 <- fread("~/Projects/StressGranules/SGPAPER/RealSGs/Tmathenypb.txt")[,c(1,4)]
 colnames(mat19) <- c("Gene","mat19")
 
-ak17 <- fread("../Projects/StressGranules/SGPAPER/RealSGs/RealAkhong.txt")[,c(1,4)]
+ak17 <- fread("~/Projects/StressGranules/SGPAPER/RealSGs/RealAkhong.txt")[,c(1,4)]
 colnames(ak17) <- c("Gene","ak17")
 
-iade <- fread("../Projects/StressGranules/SGPAPER/RealSGs/RealvIadevaia.txt")[,c(1,4)]
-colnames(iade) <- c("Gene","iade")
-
-raj <- fread("../Projects/StressGranules/SGPAPER/RealSGs/Photon.txt")[,c(1,4)]
+raj <- fread("~/Projects/StressGranules/SGPAPER/RealSGs/Photon.txt")[,c(1,4)]
 colnames(raj) <- c("Gene","raj")
-
-fanci <- fread("../Projects/StressGranules/SGPAPER/RealSGs/FANCI.txt")[,c(1,4)]
-colnames(fanci) <- c("Gene","fanci")
 
 fig10 <- merge(wcog, wcdsrna, by="Gene", all=T)
 fig10 <- merge(fig10, rsoma, by="Gene", all=T)
-fig10 <- merge(fig10, rcapseq, by="Gene", all=T)
 fig10 <- merge(fig10, mat19, by="Gene", all=T)
 fig10 <- merge(fig10, tcellpb, by="Gene", all=T)
-fig10 <- merge(fig10, iade, by="Gene", all=T)
 fig10 <- merge(fig10, ak17, by="Gene", all=T)
 fig10 <- merge(fig10, mat21, by="Gene", all=T)
 fig10 <- merge(fig10, rm6a, by="Gene", all=T)
 fig10 <- merge(fig10, rac, by="Gene", all=T)
 fig10 <- merge(fig10, raj, by="Gene", all=T)
-fig10 <- merge(fig10, fanci, by="Gene", all=T)
 fig10 <- merge(fig10, genelength, by="Gene")
 
 fig10$Length <- log10(fig10$Length)
 
-colnames(fig10) <- c("Gene", "T. Matheny Both", "M. Paget 2023", "SN. Somasekharan 2020", "Z. Ren 2023" , "T. Matheny 2019", "N. Curdy 2023", "V. Iadevaia 2022","A. Khong 2017", "T. Matheny 2021",  "G. Di Timoteo 2024","P. Kudrin 2024","S. Rajachandran 2024", "Y. Zhou 2024",  "RNA Length")
+colnames(fig10) <- c("Gene", "T. Matheny Both", "M. Paget 2023", "SN. Somasekharan 2020", "T. Matheny 2019", "N. Curdy 2023", "A. Khong 2017", "T. Matheny 2021",  "G. Di Timoteo 2024","P. Kudrin 2024","S. Rajachandran 2024",  "RNA Length")
 
 
 fig10_cor <- cor(fig10[,-1],method="spearman", use = "complete.obs")
@@ -2257,46 +2343,42 @@ fig10_cor <- reshape2::melt(fig10_cor)
 
 #Method
 df <- data.frame(
-  x = (c("wc", "wc", "pl", "pl" , "pb", "pb", "condc","cdc", "cdc",  "cdc","cdc","photon", "fanci",  "length")),
-  colour = c("T. Matheny Both", "M. Paget 2023", "SN. Somasekharan 2020", "Z. Ren 2023" , "T. Matheny 2019", "N. Curdy 2023", "V. Iadevaia 2022","A. Khong 2017", "T. Matheny 2021",  "G. Di Timoteo 2024","P. Kudrin 2024","S. Rajachandran 2024", "Y. Zhou 2024",  "RNA Length"),
-  xpos = (c("T. Matheny Both", "M. Paget 2023", "SN. Somasekharan 2020", "Z. Ren 2023" , "T. Matheny 2019", "N. Curdy 2023", "V. Iadevaia 2022","A. Khong 2017", "T. Matheny 2021",  "G. Di Timoteo 2024","P. Kudrin 2024","S. Rajachandran 2024", "Y. Zhou 2024",  "RNA Length"))
+  x = (c("wc", "wc", "pl", "pb", "pb", "cdc",  "cdc","cdc","cdc","photon",  "length")),
+  colour = c("T. Matheny Both", "M. Paget 2023", "SN. Somasekharan 2020", "T. Matheny 2019", "N. Curdy 2023", "A. Khong 2017", "T. Matheny 2021",  "G. Di Timoteo 2024","P. Kudrin 2024","S. Rajachandran 2024", "RNA Length"),
+  xpos = (c("T. Matheny Both", "M. Paget 2023", "SN. Somasekharan 2020", "T. Matheny 2019", "N. Curdy 2023", "A. Khong 2017", "T. Matheny 2021",  "G. Di Timoteo 2024","P. Kudrin 2024","S. Rajachandran 2024",  "RNA Length"))
 )
 
 df$x <- factor(df$x, levels = unique(df$x))
 df$xpos <- factor(df$xpos, levels = (df$xpos))
 
 colour_vector <- c(
-  "wc" = '#B5EAD7',
-  "pl" = '#FFDAC1',
-  "pb" = '#AFCBFF',
-  "condc" = '#C7CEEA',
-  "cdc" = '#FFE5B4',
-  "photon" ='#FF9AA2',
-  "fanci" = '#FFC3A0',
+  "wc" = '#1F77B4',
+  "pl" = '#2CA02C',
+  "pb" = '#FF7F0E',
+  "cdc" = '#17BECF',
+  "photon" ='#D62728',
   "length" = 'white'
 )
 
 lebel_vector <- c(
   "wc" = 'Whole-Cell',
-  "pl" = 'P. Labelling',
-  "pb" = 'vs P-Body',
-  "condc" = 'Controlled DC',
-  "cdc" = 'Corrected DC',
+  "pl" = 'PL SG',
+  "pb" = 'DC SG vs. P-Body',
+  "cdc" = 'DC-corrected DC',
   "photon" ='PHOTON',
-  "fanci" = 'FANCI',
   "length" = 'RNA Length'
 )
 
 (pl2 <- ggplot(df, aes(x = xpos, y = 1, fill = x)) +
   geom_tile() +
   theme_void() +
-  labs(fill = "SG Purification \nMethod") +
+  labs(fill = "Transcriptome") +
   scale_fill_manual(
     values = colour_vector,labels = lebel_vector,
     breaks = names(lebel_vector)
   ) +
   scale_x_discrete(
-    labels = c("T. Matheny Both", "M. Paget 2023", "SN. Somasekharan 2020", "Z. Ren 2023" , "T. Matheny 2019", "N. Curdy 2023", "V. Iadevaia 2022","A. Khong 2017", "T. Matheny 2021",  "G. Di Timoteo 2024","P. Kudrin 2024","S. Rajachandran 2024", "Y. Zhou 2024",  "RNA Length")
+    labels = c("T. Matheny Both", "M. Paget 2023", "SN. Somasekharan 2020", "T. Matheny 2019", "N. Curdy 2023", "A. Khong 2017", "T. Matheny 2021",  "G. Di Timoteo 2024","P. Kudrin 2024","S. Rajachandran 2024",  "RNA Length")
   ) +
   theme(
     legend.position = "none",
@@ -2335,9 +2417,9 @@ pl2 <- pl2 +
 
 (left <-   ggarrange(heatmap,pl2, heights = c(.575,.425), ncol=1, align="v"))
 
-# png("../Projects/StressGranules/SGPAPER/Images/PNG/7A.png", width = 10, height=10, units = "in", res=300)
-# left
-# dev.off()
+png("~/Projects/StressGranules/SGPAPER/Images/PNG/7A.png", width = 10, height=10, units = "in", res=300)
+left
+dev.off()
 
 heatmap_leg <- get_legend(pl1+ theme(text=element_text(size=25,  family="Arial MS", color="#505050")), position = 'bottom')
 heatmap_leg <- as_ggplot(heatmap_leg)
@@ -2348,10 +2430,9 @@ leg1 <- as_ggplot(leg1)
 
 (A <- ggarrange(left, right, ncol = 2, widths = c(.8,.3)))
 
-# png("../Projects/StressGranules/SGPAPER/Images/PNG/7A_leg.png", width = 10, height=10, units = "in", res=300)
-# right
-# dev.off()
-  
+png("~/Projects/StressGranules/SGPAPER/Images/PNG/7A_leg.png", width = 10, height=10, units = "in", res=300)
+right
+dev.off()
 ```
 
 ### C
@@ -2395,13 +2476,25 @@ mergedwc
 dev.off()
 
 ```
-### D
 
-```{r fig.width=16, fig.height=6}
-#fig10 <- fig10[,-c(15)]
-#-------------------------------
+### Old B
+
+```{r}
+# ============================================================
+# Mitochondrial Gene Set Enrichment Heatmap
+# With empirical FPR via 100 random permutations
+# ============================================================
+
+library(data.table)
+library(fgsea)
+library(dplyr)
+library(ggplot2)
+library(ggpubr)
+
+# ============================================================
 # 1. Gene sets
-#-------------------------------
+# ============================================================
+
 for.chisq <- list()
 
 MitoGenes <- fread("~/MitoGenes.txt")[[1]]
@@ -2414,65 +2507,615 @@ MitoNuclear <- MitoNuclear[!duplicated(MitoNuclear$`RNA Symbol`), ]
 MitoNuclear <- subset(MitoNuclear, Score > 0.35)
 for.chisq[["Mito_NUCLEAR_ENCODED"]] <- MitoNuclear$`RNA Symbol`
 
-# Loop over datasets
+# Sizes of the real gene sets (needed for matched random sets)
+set_sizes <- sapply(for.chisq, length)
+
+# Background genes = all genes in fig10
+background_genes <- fig10$Gene
+
+# ============================================================
+# 2. Real fgsea across all datasets
+# ============================================================
+
+dataset_cols <- colnames(fig10)[-c(1, 14)]  # exclude Gene + Length columns
+
 all_fgsea <- list()
-for(dataset in colnames(fig10)[-1]) {  # skip GeneSymbol column
+for (dataset in dataset_cols) {
   ranks <- setNames(fig10[[dataset]], fig10$Gene)
   ranks <- sort(ranks, decreasing = TRUE)
 
   fgseaRes <- fgsea(
     pathways = for.chisq,
-    stats = ranks,
-    minSize = 10,
-    maxSize = 500
+    stats    = ranks,
+    minSize  = 10,
+    maxSize  = 500
   )
 
   fgseaRes$Dataset <- dataset
   all_fgsea[[dataset]] <- fgseaRes
 }
 
-# Combine results
 fgsea_combined <- bind_rows(all_fgsea)
 
-# Prepare long-format data for ggplot
+# ============================================================
+# 3. Permutation test: 100 random gene sets per pathway size
+# ============================================================
+
+set.seed(42)
+n_perm <- 100
+
+# For each pathway, store a list of 100 random NES vectors (one per dataset)
+perm_nes <- list()
+
+for (pathway_name in names(for.chisq)) {
+  gs_size <- set_sizes[pathway_name]
+  perm_nes[[pathway_name]] <- vector("list", n_perm)
+
+  for (i in seq_len(n_perm)) {
+    # Random gene set of same size drawn from background
+    rand_genes <- sample(background_genes, size = gs_size, replace = FALSE)
+    rand_pathway <- list(rand_set = rand_genes)
+
+    nes_row <- c()
+    for (dataset in dataset_cols) {
+      ranks <- setNames(fig10[[dataset]], fig10$Gene)
+      ranks <- sort(ranks, decreasing = TRUE)
+
+      res <- tryCatch(
+        fgsea(pathways = rand_pathway, stats = ranks,
+              minSize = 5, maxSize = 1000),
+        error = function(e) NULL
+      )
+
+      if (!is.null(res) && nrow(res) > 0) {
+        nes_row[dataset] <- res$NES[1]
+      } else {
+        nes_row[dataset] <- NA
+      }
+    }
+    perm_nes[[pathway_name]][[i]] <- nes_row
+  }
+}
+
+# ============================================================
+# 4. Compute empirical FPR for each (pathway, dataset) pair
+# ============================================================
+# FPR = proportion of random NES values as extreme as (or more than) real NES
+
+compute_fpr <- function(real_nes, perm_nes_vec) {
+  perm_vals <- perm_nes_vec[!is.na(perm_nes_vec)]
+  if (length(perm_vals) == 0) return(NA)
+
+  if (real_nes >= 0) {
+    # Right tail
+    mean(perm_vals >= real_nes)
+  } else {
+    # Left tail
+    mean(perm_vals <= real_nes)
+  }
+}
+
+# Build FPR table
+fpr_list <- list()
+
+for (pathway_name in names(for.chisq)) {
+  # Matrix: n_perm rows x n_datasets cols
+  perm_matrix <- do.call(rbind, lapply(perm_nes[[pathway_name]], function(x) x))
+
+  for (dataset in dataset_cols) {
+    real_row <- fgsea_combined %>%
+      filter(pathway == pathway_name, Dataset == dataset)
+
+    if (nrow(real_row) == 0) next
+
+    real_nes <- real_row$NES[1]
+    perm_col <- perm_matrix[, dataset]
+
+    fpr_val <- compute_fpr(real_nes, perm_col)
+
+    fpr_list[[paste(pathway_name, dataset, sep = "|||")]] <- data.frame(
+      pathway = pathway_name,
+      Dataset = dataset,
+      FPR     = fpr_val
+    )
+  }
+}
+
+fpr_df <- bind_rows(fpr_list)
+
+# ============================================================
+# 5. Merge real results with FPR, prepare plot data
+# ============================================================
+
+# Desired column (x-axis) order
+dataset_order <- c(
+  "T. Matheny Both", "M. Paget 2023", "SN. Somasekharan 2020", 
+  "T. Matheny 2019", "N. Curdy 2023", "A. Khong 2017",
+  "T. Matheny 2021", "G. Di Timoteo 2024", "P. Kudrin 2024", "S. Rajachandran 2024"
+)
+
+# Desired row (y-axis) order — most positive on top
+pathway_order <- c("Mito (nuclear-encoded)", "Mito (mito-encoded)")
+
 fgsea_plot <- fgsea_combined %>%
   select(pathway, Dataset, NES, padj) %>%
   mutate(
     pathway = recode(pathway,
-                     "Mito_MITOCHONDRIAL_ENCODED" = "Mito (mito-encoded)",
-                     "Mito_NUCLEAR_ENCODED" = "Mito (nuclear-encoded)"),
-    sig = ifelse(padj < 0.05, "*", "")  # mark significance
+      "Mito_MITOCHONDRIAL_ENCODED" = "Mito (mito-encoded)",
+      "Mito_NUCLEAR_ENCODED"       = "Mito (nuclear-encoded)"
+    )
+  ) %>%
+  left_join(
+    fpr_df %>% mutate(
+      pathway = recode(pathway,
+        "Mito_MITOCHONDRIAL_ENCODED" = "Mito (mito-encoded)",
+        "Mito_NUCLEAR_ENCODED"       = "Mito (nuclear-encoded)"
+      )
+    ),
+    by = c("pathway", "Dataset")
+  ) %>%
+  mutate(
+    # Asterisk based on empirical FPR < 0.05
+    sig_label = ifelse(!is.na(FPR) & FPR < 0.05, "*", ""),
+    Dataset   = factor(Dataset, levels = dataset_order),
+    pathway   = factor(pathway, levels = pathway_order)
   )
 
-# Define the desired dataset order
-dataset_order <- c(
-  "T. Matheny Both", "M. Paget 2023", "SN. Somasekharan 2020", "Z. Ren 2023",
-  "T. Matheny 2019", "N. Curdy 2023", "V. Iadevaia 2022", "A. Khong 2017",
-  "T. Matheny 2021", "G. Di Timoteo 2024", "P. Kudrin 2024", "S. Rajachandran 2024",
-  "Y. Zhou 2024"
-)
+# ============================================================
+# 6. Plot
+# ============================================================
 
-# Add a label column with NES rounded to 2 decimals
-fgsea_plot <- fgsea_plot %>%
-  mutate(NES_label = sprintf("%.2f", NES))
-
-# Plot heatmap with NES values
 (mito <- ggplot(fgsea_plot, aes(x = Dataset, y = pathway, fill = NES)) +
-  geom_tile(color = "black")  +  # NES on tiles
-  scale_fill_gradient2(low = "#729EA1", mid = "white", high = "#DB5375", midpoint = 0) +
+  geom_tile(color = "black") +
+  geom_text(aes(label = sig_label), size = 10, vjust = 0.8, color = "black") +
+  scale_fill_gradient2(
+    low      = "#729EA1",
+    mid      = "white",
+    high     = "#DB5375",
+    midpoint = 0,
+    limits   = c(-3, 3),
+    oob      = scales::squish
+  ) +
+  scale_x_discrete(limits = dataset_order) +
+  scale_y_discrete(limits = pathway_order) +
   theme_minimal() +
   theme(
-    axis.text.x = element_text(angle = 45, hjust = 1, size = 25),
-    axis.text.y = element_text(size = 25),
-    axis.title = element_blank(),
-    legend.title = element_text(size = 25),
-    legend.text = element_text(size = 25)
+    axis.text.x    = element_text(angle = 45, hjust = 1, size = 25, face = "bold",
+                                   color = "#505050"),
+    axis.text.y    = element_text(size = 25, face = "bold", color = "#505050"),
+    axis.title     = element_blank(),
+    legend.title   = element_text(size = 25, face = "bold"),
+    legend.text    = element_text(size = 25),
+    panel.grid     = element_blank()
   ) +
-  labs(fill = "NES"))
+  labs(fill = "NES",
+       caption = "* empirical FPR < 0.05 (100 random gene sets of matched size)"))
 
-png("../Projects/StressGranules/SGPAPER/Images/PNG/mito.png", width = 16, height=6, units = "in", res=300)
+# ============================================================
+# 7. Annotation bar (Method) — matching dataset_order
+# ============================================================
+
+df <- data.frame(
+  x = c("wc", "wc", "pl", "pb", "pb", "cdc", "cdc", "cdc", "cdc", "photon"),
+  xpos = dataset_order,
+  stringsAsFactors = FALSE
+)
+
+df$x    <- factor(df$x,    levels = unique(df$x))
+df$xpos <- factor(df$xpos, levels = dataset_order)
+
+colour_vector <- c(
+  "wc"    = '#B5EAD7',
+  "pl"    = '#FFDAC1',
+  "pb"    = '#AFCBFF',
+  "cdc"   = '#FFE5B4',
+  "photon" = '#FF9AA2'
+)
+
+lebel_vector <- c(
+  "wc"    = 'Whole-Cell',
+  "pl"    = 'P. Labelling',
+  "pb"    = 'vs P-Body',
+  "cdc"   = 'Corrected DC',
+  "photon" = 'PHOTON'
+)
+
+(pl2 <- ggplot(df, aes(x = xpos, y = 1, fill = x)) +
+  geom_tile() +
+  theme_void() +
+  labs(fill = "SG Purification\nMethod") +
+  scale_fill_manual(values = colour_vector, labels = lebel_vector,
+                    breaks = names(lebel_vector)) +
+  scale_x_discrete(limits = dataset_order, labels = dataset_order) +
+  theme(
+    legend.position  = "none",
+    axis.text.y      = element_blank(),
+    axis.ticks.y     = element_blank(),
+    axis.text.x      = element_text(angle = 60, vjust = 1, hjust = 1, size = 20,
+                                     family = "Arial MS", color = "#505050", face = "bold"),
+    text             = element_text(size = 20, color = "#505050", face = "bold")
+  ) +
+  ylab("") + xlab(""))
+
+# ============================================================
+# 8. Save
+# ============================================================
+
+png("~/Projects/StressGranules/SGPAPER/Images/PNG/mito.png",
+    width = 16, height = 6, units = "in", res = 300)
 mito
 dev.off()
+
+png("~/Projects/StressGranules/SGPAPER/Images/PNG/supheat_leg_mito.png",
+    width = 16, height = 6, units = "in", res = 300)
+pl2
+dev.off()
+
+message("Done. Tiles marked with * have empirical FPR < 0.05 based on 100 permutations.")
+```
+
+
+### New B
+
+```{r fig.width=6, fig.height=12}
+# ============================================================
+# Half-Violin Plot — Null NES distributions per study
+# Colours match the method category colour_vector:
+#   mito-encoded  = darker shade of method colour
+#   nuclear-encoded = lighter shade of method colour
+# ============================================================
+
+library(ggplot2)
+library(dplyr)
+library(tidyr)
+library(colorspace)   # for darken() / lighten()
+
+# ============================================================
+# 0. Method → colour mapping (from your existing code)
+# ============================================================
+dataset_order <- c(
+  "T. Matheny Both", "M. Paget 2023", "SN. Somasekharan 2020",
+  "T. Matheny 2019", "N. Curdy 2023", "A. Khong 2017",
+  "T. Matheny 2021", "G. Di Timoteo 2024", "P. Kudrin 2024", "S. Rajachandran 2024"
+)
+
+method_map <- c(
+  "T. Matheny Both"      = "wc",
+  "M. Paget 2023"        = "wc",
+  "SN. Somasekharan 2020"= "pl",
+  "T. Matheny 2019"      = "pb",
+  "N. Curdy 2023"        = "pb",
+  "A. Khong 2017"        = "cdc",
+  "T. Matheny 2021"      = "cdc",
+  "G. Di Timoteo 2024"   = "cdc",
+  "P. Kudrin 2024"       = "cdc",
+  "S. Rajachandran 2024" = "photon"
+)
+
+colour_vector <- c(
+  "wc"     = '#1F77B4',
+  "pl"     = '#2CA02C',
+  "pb"     = '#FF7F0E',
+  "cdc"    = '#17BECF',
+  "photon" = '#D62728'
+)
+
+# For each study, derive dark (mito-encoded) and light (nuclear-encoded) shades
+# darken/lighten amount: 0 = unchanged, 1 = full black/white
+study_base_col <- colour_vector[method_map[dataset_order]]
+names(study_base_col) <- dataset_order
+
+study_col_dark  <- setNames(
+  darken(study_base_col,  amount = 0.25),
+  dataset_order
+)
+study_col_light <- setNames(
+  lighten(study_base_col, amount = 0.40),
+  dataset_order
+)
+
+# Build named vectors keyed by "Dataset|||pathway" for scale mapping
+poly_colour_dark  <- setNames(
+  study_col_dark,
+  paste0(dataset_order, "|||Mito (mito-encoded)")
+)
+poly_colour_light <- setNames(
+  study_col_light,
+  paste0(dataset_order, "|||Mito (nuclear-encoded)")
+)
+
+poly_colour_key <- c(poly_colour_dark, poly_colour_light)
+
+# ============================================================
+# 1. Build long-format null distribution
+# ============================================================
+
+null_long <- list()
+
+for (pathway_name in names(perm_nes)) {
+  perm_matrix <- do.call(rbind, lapply(perm_nes[[pathway_name]], function(x) x))
+
+  for (dataset in dataset_order) {
+    if (!dataset %in% colnames(perm_matrix)) next
+    null_vals <- perm_matrix[, dataset]
+    null_long[[paste(pathway_name, dataset, sep = "|||")]] <- data.frame(
+      pathway  = pathway_name,
+      Dataset  = dataset,
+      null_NES = as.numeric(null_vals),
+      stringsAsFactors = FALSE
+    )
+  }
+}
+
+null_long_df <- bind_rows(null_long) %>%
+  mutate(
+    pathway = recode(pathway,
+      "Mito_MITOCHONDRIAL_ENCODED" = "Mito (mito-encoded)",
+      "Mito_NUCLEAR_ENCODED"       = "Mito (nuclear-encoded)"
+    ),
+    Dataset   = factor(Dataset, levels = dataset_order),
+    group_key = paste0(Dataset, "|||", pathway)
+  )
+
+# ============================================================
+# 2. Real NES with FPR and percentile
+# ============================================================
+
+compute_percentile <- function(real_nes, null_vec) {
+  null_vec <- null_vec[!is.na(null_vec)]
+  if (length(null_vec) == 0) return(NA)
+  round(mean(null_vec <= real_nes) * 100, 1)
+}
+
+real_df <- fgsea_combined %>%
+  select(pathway, Dataset, NES) %>%
+  mutate(
+    pathway = recode(pathway,
+      "Mito_MITOCHONDRIAL_ENCODED" = "Mito (mito-encoded)",
+      "Mito_NUCLEAR_ENCODED"       = "Mito (nuclear-encoded)"
+    ),
+    Dataset = factor(Dataset, levels = dataset_order)
+  ) %>%
+  left_join(
+    fpr_df %>% mutate(
+      pathway = recode(pathway,
+        "Mito_MITOCHONDRIAL_ENCODED" = "Mito (mito-encoded)",
+        "Mito_NUCLEAR_ENCODED"       = "Mito (nuclear-encoded)"
+      ),
+      Dataset = factor(Dataset, levels = dataset_order)
+    ),
+    by = c("pathway", "Dataset")
+  ) %>%
+  mutate(
+    sig       = !is.na(FPR) & FPR < 0.05,
+    group_key = paste0(Dataset, "|||", pathway)
+  )
+
+real_df <- real_df %>%
+  rowwise() %>%
+  mutate(
+    percentile = {
+      orig_pw <- case_when(
+        pathway == "Mito (mito-encoded)"    ~ "Mito_MITOCHONDRIAL_ENCODED",
+        pathway == "Mito (nuclear-encoded)" ~ "Mito_NUCLEAR_ENCODED"
+      )
+      ds <- as.character(Dataset)
+      perm_matrix <- do.call(rbind, lapply(perm_nes[[orig_pw]], function(x) x))
+      if (ds %in% colnames(perm_matrix)) {
+        compute_percentile(NES, perm_matrix[, ds])
+      } else NA
+    },
+    pct_label = as.character(percentile)
+  ) %>%
+  ungroup()
+
+# ============================================================
+# 3. Layout constants
+# ============================================================
+
+x_gap       <- 2.2
+half_width  <- 0.48
+dot_offset  <- 0.18
+jit_width   <- 0.38
+label_nudge <- 0.30
+
+x_positions <- setNames(
+  rev(seq_along(dataset_order)) * x_gap,
+  dataset_order
+)
+
+# ============================================================
+# 4. Build half-violin polygons
+# ============================================================
+
+build_half_violin <- function(vals, x_spine, side = c("right", "left")) {
+  side <- match.arg(side)
+  vals <- vals[!is.na(vals)]
+  if (length(vals) < 3) return(NULL)
+  d        <- density(vals, n = 512)
+  d_scaled <- d$y / max(d$y) * half_width
+  if (side == "right") {
+    x_poly <- c(rep(x_spine, length(d$x)), x_spine + rev(d_scaled))
+  } else {
+    x_poly <- c(rep(x_spine, length(d$x)), x_spine - rev(d_scaled))
+  }
+  data.frame(x = x_poly, y = c(d$x, rev(d$x)))
+}
+
+poly_list <- list()
+for (dataset in dataset_order) {
+  x_spine <- x_positions[[dataset]]
+  for (pw_label in c("Mito (mito-encoded)", "Mito (nuclear-encoded)")) {
+    subset_vals <- null_long_df %>%
+      filter(Dataset == dataset, pathway == pw_label) %>%
+      pull(null_NES)
+    side <- ifelse(pw_label == "Mito (mito-encoded)", "right", "left")
+    poly <- build_half_violin(subset_vals, x_spine = x_spine, side = side)
+    if (!is.null(poly)) {
+      poly$pathway   <- pw_label
+      poly$Dataset   <- dataset
+      poly$group_key <- paste0(dataset, "|||", pw_label)
+      poly_list[[paste(dataset, pw_label)]] <- poly
+    }
+  }
+}
+
+poly_df <- bind_rows(poly_list) %>%
+  mutate(Dataset = factor(Dataset, levels = dataset_order))
+
+# ============================================================
+# 5. Individual permutation dots
+# ============================================================
+
+set.seed(42)
+
+null_dots_df <- null_long_df %>%
+  mutate(
+    x_spine = x_positions[as.character(Dataset)],
+    x_jit   = ifelse(
+      pathway == "Mito (mito-encoded)",
+      x_spine + runif(n(), 0.01, jit_width),
+      x_spine - runif(n(), 0.01, jit_width)
+    )
+  )
+
+# ============================================================
+# 6. Real NES dots and labels
+# ============================================================
+
+real_df <- real_df %>%
+  mutate(
+    x_spine     = x_positions[as.character(Dataset)],
+    x_dot       = ifelse(pathway == "Mito (mito-encoded)",
+                         x_spine + dot_offset,
+                         x_spine - dot_offset),
+    x_label     = ifelse(pathway == "Mito (mito-encoded)",
+                         x_spine + dot_offset + label_nudge,
+                         x_spine - dot_offset - label_nudge),
+    hjust_label = ifelse(pathway == "Mito (mito-encoded)", 0, 1)
+  )
+
+# ============================================================
+# 7. Legend data — one row per method, shown as colour swatch
+# ============================================================
+
+method_legend <- data.frame(
+  method = c("wc", "pl", "pb", "condc", "cdc", "photon"),
+  label  = c("Whole-Cell", "P. Labelling", "vs P-Body",
+             "Controlled DC", "Corrected DC", "PHOTON"),
+  colour = unname(colour_vector[c("wc","pl","pb","condc","cdc","photon")]),
+  stringsAsFactors = FALSE
+)
+
+# ============================================================
+# 8. Plot
+# ============================================================
+
+(violin_plot <- ggplot() +
+
+  # --- Half-violin polygons ---
+  geom_polygon(
+    data = poly_df,
+    aes(x = x, y = y,
+        fill   = group_key,
+        colour = group_key,
+        group  = group_key),
+    alpha     = 0.55,
+    linewidth = 0.65
+  ) +
+
+  # --- Zero reference line ---
+  geom_hline(yintercept = 0, linetype = "dashed",
+             colour = "#909090", linewidth = 0.6) +
+
+  # --- Individual permutation dots ---
+  geom_point(
+    data  = null_dots_df,
+    aes(x = x_jit, y = null_NES, colour = group_key),
+    size  = 0.7,
+    alpha = 0.30
+  ) +
+
+  # --- Real NES dot: hollow (FPR >= 0.05) ---
+  geom_point(
+    data   = real_df %>% filter(!sig),
+    aes(x  = x_dot, y = NES, colour = group_key),
+    size   = 5,
+    shape  = 21,
+    fill   = "white",
+    stroke = 2.2
+  ) +
+
+  # --- Real NES dot: filled (FPR < 0.05) ---
+  geom_point(
+    data   = real_df %>% filter(sig),
+    aes(x  = x_dot, y = NES,
+        fill   = group_key,
+        colour = group_key),
+    size   = 5,
+    shape  = 21,
+    stroke = 2.2
+  ) +
+
+  # --- Percentile label beside dot ---
+  geom_text(
+    data = real_df,
+    aes(x      = x_label,
+        y      = NES,
+        label  = pct_label,
+        colour = group_key,
+        hjust  = hjust_label),
+    size     = 25 / .pt,
+    fontface = "bold",
+    vjust    = 0.5
+  ) +
+
+  scale_x_continuous(
+    breaks = unname(x_positions),
+    labels = dataset_order,
+    expand = expansion(mult = 0.05)
+  ) +
+
+  scale_fill_manual(  values = poly_colour_key, guide = "none") +
+  scale_colour_manual(values = poly_colour_key, guide = "none") +
+
+  labs(
+    x       = "NES",
+    y       = "",
+    title   = "Null NES Distributions vs Observed NES",
+    caption = paste0(
+      "Large dot = observed NES  |  Small dots = 1000 random gene sets of matched size\n",
+      "Filled dot: FPR < 0.05  |  Label: percentile of observed NES in null distribution\n",
+      "Dark shade = Mito (mito-encoded)  |  Light shade = Mito (nuclear-encoded)\n",
+      "Colour = SG purification method (matches figure annotation bar)"
+    )
+  ) +
+
+  coord_flip() +
+
+  theme_bw() +
+  theme(
+    axis.text.x        = element_text(size = 25, color = "#505050", face = "bold"),
+    axis.text.y        = element_text(size = 25, color = "#505050", face = "bold"),
+    axis.title.x       = element_text(size = 25, face = "bold"),
+    axis.title.y       = element_blank(),
+    plot.title         = element_text(size = 25, face = "bold", hjust = 0.5),
+    plot.caption       = element_text(size = 14, color = "#505050"),
+    panel.grid.major.y = element_blank(),
+    panel.grid.minor   = element_blank()
+  )
+)
+
+# ============================================================
+# 9. Save
+# ============================================================
+
+png("~/Projects/StressGranules/SGPAPER/Images/PNG/mito_halfviolin.png",
+    width = 18, height = 30, units = "in", res = 300)
+violin_plot
+dev.off()
+
+message("Half-violin plot saved.")
 ```
 
 
@@ -2568,94 +3211,953 @@ dev.off()
 ### E
 
 ```{r}
+# ============================================================
+# Hallmark GSEA on SG Transcriptome Consensus
+# With empirical FPR via 100 random permutations
+# ============================================================
+# ============================================================
+# 1. Build SG_Transcriptome and ranked vector
+# ============================================================
+MitoGenes <- fread("~/MitoGenes.txt")[[1]]
+NucGenes <- fread("~/rnalocate_mito_filt.csv")[[1]]
+SG_Transcriptome <- fig10[,-c(2,3,12)]
+goi <- c("NORAD", "ACTB", "GAPDH", "AHNAK", "AHNAK2", "DYNC1H1")
+x <- 8
+middle_cols <- SG_Transcriptome[, -1]
+SG_Transcriptome <- SG_Transcriptome[rowSums(!is.na(middle_cols)) >= x, ]
+data_cols <- 2:ncol(SG_Transcriptome)
+
+# Simple, unweighted row mean across studies (ignoring NAs)
+SG_Transcriptome$Average <- rowMeans(SG_Transcriptome[, ..data_cols], na.rm = TRUE)
+SG_Transcriptome$Variance <- apply(SG_Transcriptome[, ..data_cols], 1, var, na.rm = TRUE)
+
+upmarkers   <- SG_Transcriptome[SG_Transcriptome$Average >  5 & SG_Transcriptome$Variance < 20, ]
+downmarkers <- SG_Transcriptome[SG_Transcriptome$Average < -5   & SG_Transcriptome$Variance < 10, ]
+mitomarkers <- SG_Transcriptome[SG_Transcriptome$Gene %in% MitoGenes, ]
+nucmarkers <- SG_Transcriptome[SG_Transcriptome$Gene %in% NucGenes, ]
+goimarkers <- SG_Transcriptome[SG_Transcriptome$Gene %in% goi, ]
+ndegs <- 100
+(enrichvolc <- ggplot(SG_Transcriptome, aes(x = Average, y = log10(Variance))) +
+  geom_point(color = "#CCCCCC") +
+  geom_point(data = upmarkers,   aes(x = Average, y = log10(Variance)), color = "#BA3B46", size = 4) +
+  geom_point(data = downmarkers, aes(x = Average, y = log10(Variance)), color = "#53A2BE", size = 4) +
+  geom_point(data = mitomarkers, aes(x = Average, y = log10(Variance)), color = "#73937E", size = 4) +geom_point(data = nucmarkers, aes(x = Average, y = log10(Variance)), color = "#CB643F", size = 4) +
+  geom_point(data = goimarkers,  aes(x = Average, y = log10(Variance)), color = "#6A4C93", size = 4) + geom_vline(xintercept = 0, linetype = "dashed")+
+  geom_label_repel(data = upmarkers[1:ndegs,],   aes(label = Gene), size = 3,
+                   color = "#BA3B46", fontface = "italic", max.overlaps = 20) +
+  geom_label_repel(data = downmarkers[1:ndegs,], aes(label = Gene), size = 3,
+                   color = "#53A2BE", fontface = "italic", max.overlaps = 20) +
+  geom_label_repel(data = goimarkers,  aes(label = Gene), size = 3,
+                   color = "#6A4C93", fontface = "italic", max.overlaps = 20) +
+  theme_bw() +
+  labs(x = "Presence in SG\n(average t-stat)", y = "log10(Variance)", title = "SG Transcriptome") +
+  theme(
+    axis.line        = element_line(colour = "black"),
+    panel.grid.major = element_blank(),
+    panel.grid.minor = element_blank(),
+    panel.border     = element_blank(),
+    panel.background = element_blank(),
+    plot.title       = element_text(hjust = 0.5),
+    plot.subtitle    = element_text(hjust = 0.5),
+    text             = element_text(size = 25, family = "Arial MS")
+  ))
+
+write.table(SG_Transcriptome, "~/Projects/StressGranules/SGPAPER/RealSGs/Averate.txt", row.names = F, col.names = T)
 
 
-#for all genes
-SG_Transcriptome <- SG_Transcriptome[order(SG_Transcriptome[,6]),]
-gseatool <- SG_Transcriptome[,6]
+png("~/Projects/StressGranules/SGPAPER/Images/PNG/EnrichVolc.png",
+    width = 7, height = 6, units = "in", res = 300)
+enrichvolc
+dev.off()
+
+library(ggrepel)
+
+# ── Method mapping and colours, taken from your existing chunk ─────────────
+method_map <- c(
+  "T. Matheny Both"       = "wc",
+  "M. Paget 2023"         = "wc",
+  "SN. Somasekharan 2020" = "pl",
+  "T. Matheny 2019"       = "pb",
+  "N. Curdy 2023"         = "pb",
+  "A. Khong 2017"         = "cdc",
+  "T. Matheny 2021"       = "cdc",
+  "G. Di Timoteo 2024"    = "cdc",
+  "P. Kudrin 2024"        = "cdc",
+  "S. Rajachandran 2024"  = "photon"
+)
+
+colour_vector <- c(
+  "wc"     = '#1F77B4',
+  "pl"     = '#2CA02C',
+  "pb"     = '#FF7F0E',
+  "cdc"    = '#17BECF',
+  "photon" = '#D62728'
+)
+
+lebel_vector <- c(
+  "wc"     = 'Whole-Cell',
+  "pl"     = 'P. Labelling',
+  "pb"     = 'vs P-Body',
+  "cdc"    = 'Corrected DC',
+  "photon" = 'PHOTON'
+)
+
+# ── Build NORAD data, now with a Method column ──────────────────────────────
+norad_row <- SG_Transcriptome[SG_Transcriptome$Gene == "NORAD", ..data_cols]
+norad_df <- data.frame(
+  Study = colnames(norad_row),
+  tstat = as.numeric(norad_row[1, ])
+)
+norad_df <- norad_df[!is.na(norad_df$tstat), ]
+norad_df$Method <- method_map[norad_df$Study]
+
+norad_df <- norad_df[order(norad_df$tstat), ]
+norad_df$Study <- factor(norad_df$Study, levels = norad_df$Study)  # preserve sorted order
+
+norad_mean <- mean(norad_df$tstat)
+
+(norad_bar <- ggplot(norad_df, aes(x = Study, y = tstat, fill = Method)) +
+  geom_col(alpha = 0.85, width = 0.7, colour = "black") +
+  geom_hline(yintercept = 0, linetype = "dashed", color = "grey50") +
+  geom_hline(yintercept = norad_mean, linetype = "dashed", color = "black", linewidth = 0.8) +
+  scale_fill_manual(values = colour_vector, labels = lebel_vector,
+                     breaks = names(lebel_vector), name = "SG Purification\nMethod") +
+  coord_flip() +
+  theme_bw() +
+  labs(x = NULL, y = "Average t-stat", title = "NORAD") +
+  theme(
+    axis.line.x      = element_line(colour = "black"),
+    axis.line.y      = element_blank(),
+    panel.grid       = element_blank(),
+    panel.border     = element_blank(),
+    panel.background = element_blank(),
+    plot.title       = element_text(hjust = 0.5, face = "italic"),
+    text             = element_text(size = 14, family = "Arial MS"),
+    legend.position = "none"
+  ))
+
+png("~/Projects/StressGranules/SGPAPER/Images/PNG/NORADFP.png",
+    width = 7, height = 4, units = "in", res = 300)
+norad_bar
+dev.off()
+# ============================================================
+# 2. Build ranked vector (unchanged)
+# ============================================================
+
+SG_Transcriptome <- SG_Transcriptome[order(SG_Transcriptome[, 11]), ]
+gseatool <- SG_Transcriptome[, 11]
 gseatool <- as.data.frame(gseatool)
-colnames(gseatool)[1] <- "t" 
-gseatool[,2] <- (SG_Transcriptome$Gene)
-colnames(gseatool)[2] <- "Symbol" 
-gseatool <- gseatool[,c(2,1)]
-
-#for only the genes without the contamination
-
+colnames(gseatool)[1] <- "t"
+gseatool[, 2] <- SG_Transcriptome$Gene
+colnames(gseatool)[2] <- "Symbol"
+gseatool <- gseatool[, c(2, 1)]
 
 vectorranks <- gseatool$t
 names(vectorranks) <- gseatool$Symbol
+vectorranks <- vectorranks[!is.na(vectorranks)]
+vectorranks <- vectorranks[order(abs(vectorranks), decreasing = TRUE)]
+vectorranks <- vectorranks[!duplicated(names(vectorranks))]
+vectorranks <- sort(vectorranks, decreasing = TRUE)
 
+# ============================================================
+# 3. Load Hallmark gene sets (unchanged)
+# ============================================================
 
-#to load our pathways
-hallmarks.gs <- msigdbr(species = "Homo sapiens", collection = "H")
-
+hallmarks.gs    <- msigdbr(species = "Homo sapiens", collection = "H")
 hallmarks.gsets <- hallmarks.gs %>% split(x = .$gene_symbol, f = .$gs_name)
-
-for (set in names(hallmarks.gsets)){
+for (set in names(hallmarks.gsets)) {
   hallmarks.gsets[[set]] <- toupper(hallmarks.gsets[[set]])
 }
 
+# ============================================================
+# 4. Real fgsea (unchanged)
+# ============================================================
 
-
-hallmarks.res <- fgsea(pathways = hallmarks.gsets, 
-                       stats = vectorranks)
+hallmarks.res <- fgsea(pathways = hallmarks.gsets, stats = vectorranks)
 
 hallmarks.res.tidy <- hallmarks.res %>%
   as_tibble() %>%
   arrange(desc(NES))
 
-hallmarks.res.tidy %>% 
-  dplyr::select(-leadingEdge, -ES) %>% 
-  arrange(padj)
-
 hallmarks.res.tidy$pathway <- sub("^[^_]*_", "", hallmarks.res.tidy$pathway)
 
+# ============================================================
+# 5. Empirical FPR via 100 random rank permutations
+#
+# Strategy: shuffle the SCORES of vectorranks while keeping
+# gene names fixed. This destroys any real biological signal
+# while preserving the rank distribution, giving a null NES
+# for each pathway under random conditions.
+# ============================================================
 
-#this small part is generic
-thresh <- 0.05
+set.seed(42)
+n_perm <- 100
 
-#this one is no longer generic
-data_to_plot <- hallmarks.res.tidy %>% filter(padj < thresh)
+# Store null NES: list keyed by pathway, each a vector of n_perm NES values
+null_nes <- setNames(
+  vector("list", length(hallmarks.gsets)),
+  names(hallmarks.gsets)
+)
+for (pw in names(null_nes)) null_nes[[pw]] <- numeric(n_perm)
 
-statvec <- c()
-for (i in 1:nrow(data_to_plot)){
-  if (data_to_plot[i,6] > 0){
-    status <- "Upregulated"
+message("Running ", n_perm, " permutations for empirical FPR...")
+
+for (i in seq_len(n_perm)) {
+
+  # Permute scores, keep names → destroys gene-pathway association
+  perm_ranks        <- vectorranks
+  perm_ranks[]      <- sample(vectorranks)   # shuffle values, names stay
+  perm_ranks        <- sort(perm_ranks, decreasing = TRUE)
+
+  perm_res <- tryCatch(
+    fgsea(pathways = hallmarks.gsets, stats = perm_ranks,
+          minSize = 10, maxSize = 500),
+    error = function(e) NULL
+  )
+
+  if (!is.null(perm_res)) {
+    for (pw in perm_res$pathway) {
+      nes_val <- perm_res$NES[perm_res$pathway == pw]
+      if (length(nes_val) == 1 && !is.na(nes_val)) {
+        null_nes[[pw]][i] <- nes_val
+      }
+    }
   }
- else {
-   status <- "Downregulated"
- }   
-statvec <- c(statvec, status)
 }
 
-data_to_plot$Status <- statvec
+message("Permutations complete.")
+
+# ============================================================
+# 6. Compute empirical FPR per pathway
+# ============================================================
+
+compute_fpr <- function(real_nes, null_vec) {
+  null_vec <- null_vec[!is.na(null_vec) & null_vec != 0]
+  if (length(null_vec) == 0) return(NA)
+  if (real_nes >= 0) mean(null_vec >= real_nes)
+  else               mean(null_vec <= real_nes)
+}
+
+hallmarks.res.tidy$FPR <- mapply(
+  function(pw, nes) {
+    # pathway name in null_nes still has the full HALLMARK_ prefix
+    # map back via the original hallmarks.res pathway names
+    orig_pw <- hallmarks.res$pathway[sub("^[^_]*_", "", hallmarks.res$pathway) == pw]
+    if (length(orig_pw) == 0) return(NA)
+    compute_fpr(nes, null_nes[[orig_pw[1]]])
+  },
+  hallmarks.res.tidy$pathway,
+  hallmarks.res.tidy$NES
+)
+
+# ============================================================
+# 7. Filter: padj < 0.05 AND empirical FPR < 0.05
+# ============================================================
+
+thresh <- 0.05
+
+data_to_plot <- hallmarks.res.tidy %>%
+  filter(padj < thresh, !is.na(FPR), FPR < thresh)
+
+data_to_plot$Status <- ifelse(data_to_plot$NES > 0, "Upregulated", "Downregulated")
+
+message(nrow(data_to_plot), " pathways pass both padj < 0.05 and empirical FPR < 0.05:")
+print(data_to_plot %>% select(pathway, NES, padj, FPR) %>% arrange(desc(NES)))
+
+# ============================================================
+# 8. Plot
+# ============================================================
 
 (gsea_plot_hall <- ggplot(data_to_plot, aes(reorder(pathway, NES), NES)) +
-  geom_col(aes(fill = Status), alpha = 0.75) + 
-  scale_fill_manual(values = c("#53A2BE", "#BA3B46"), 
-                    name = "Regulation Status", 
-                    labels = c("Downregulated", "Upregulated"), 
-                    breaks = c("Downregulated", "Upregulated")) +
+  geom_col(aes(fill = Status), alpha = 0.75) +
+  scale_fill_manual(
+    values = c("#53A2BE", "#BA3B46"),
+    name   = "Regulation Status",
+    labels = c("Downregulated", "Upregulated"),
+    breaks = c("Downregulated", "Upregulated")
+  ) +
   coord_flip() +
-  labs(x = "Gene Set", 
-       y = "Normalized Enrichment Score",
-       title = "Hallmark Gene Sets",
-       caption = paste0("p-value < ", thresh)) +
+  labs(
+    x       = "Gene Set",
+    y       = "Normalised Enrichment Score",
+    title   = "Hallmark Gene Sets",
+    caption = paste0("padj < ", thresh, " & empirical FPR < ", thresh,
+                     " (", n_perm, " permutations)")
+  ) +
   theme_bw() +
-  theme(legend.position = "none",
-        text = element_text(size = 25, family = "Arial MS", face = "bold"),
+  theme(
+    legend.position = "none",
+    text            = element_text(size = 25, family = "Arial MS", face = "bold"),
+    plot.title      = element_text(hjust = 0.5, face = "bold"),
+    axis.title      = element_text(face = "bold"),
+    axis.text       = element_text(face = "bold"),
+    legend.title    = element_text(face = "bold"),
+    legend.text     = element_text(face = "bold")
+  ))
+
+png("~/Projects/StressGranules/SGPAPER/Images/PNG/sgenriched.png",
+    width = 12, height = 6, units = "in", res = 300)
+gsea_plot_hall
+dev.off()
+
+# ============================================================
+# 9. MitoGenes enrichment plot (NES / padj / FPR), using the
+#    same Average-based ranked vector as the volcano/Hallmark GSEA
+# ============================================================
+
+custom.gsets <- list(MitoGenes = toupper(MitoGenes))
+
+# --- Real fgsea on MitoGenes ---
+mito.res <- fgsea(pathways = custom.gsets, stats = vectorranks)
+
+# --- Empirical FPR via the same permutation strategy as Hallmarks ---
+set.seed(42)   # match the seed used above so permutations are reproducible/comparable
+n_perm <- 100
+
+null_nes_mito <- numeric(n_perm)
+
+message("Running ", n_perm, " permutations for MitoGenes empirical FPR...")
+
+for (i in seq_len(n_perm)) {
+  perm_ranks   <- vectorranks
+  perm_ranks[] <- sample(vectorranks)
+  perm_ranks   <- sort(perm_ranks, decreasing = TRUE)
+
+  perm_res <- tryCatch(
+    fgsea(pathways = custom.gsets, stats = perm_ranks,
+          minSize = 10, maxSize = 500),
+    error = function(e) NULL
+  )
+
+  if (!is.null(perm_res) && nrow(perm_res) == 1 && !is.na(perm_res$NES)) {
+    null_nes_mito[i] <- perm_res$NES
+  }
+}
+
+message("MitoGenes permutations complete.")
+
+mito.fpr <- compute_fpr(mito.res$NES, null_nes_mito)
+
+# --- Build the enrichment curve (same approach as your earlier mito plot) ---
+mito.plot.base <- plotEnrichment(custom.gsets[["MitoGenes"]], vectorranks)
+curve.data <- mito.plot.base$data
+
+ord <- order(vectorranks, decreasing = TRUE)
+ranked.names <- names(vectorranks)[ord]
+gene.positions <- which(ranked.names %in% custom.gsets[["MitoGenes"]])
+
+rug.top    <- min(curve.data$y) - 0.03
+rug.bottom <- rug.top - 0.04
+y.min <- rug.bottom - 0.03
+y.max <- max(curve.data$y) + 0.05
+
+(mito.plot.avg <- ggplot(curve.data, aes(x = x, y = y)) +
+  geom_area(fill = "#73937E", alpha = 0.4) +
+  geom_line(color = "#73937E", linewidth = 1.2) +
+  geom_hline(yintercept = 0, linetype = "dashed", color = "grey40") +
+  geom_segment(data = data.frame(x = gene.positions),
+               aes(x = x, xend = x, y = rug.top, yend = rug.bottom),
+               color = "#73937E", alpha = 0.6, linewidth = 0.9,
+               inherit.aes = FALSE) +
+  annotate("text", x = max(curve.data$x) * 0.75, y = y.max * 0.85,
+           label = paste0("NES = ", round(mito.res$NES, 2),
+                          "\nadj.p = ", round(mito.res$padj, 4),
+                          "\nFPR = ", round(mito.fpr, 4)),
+           size = 5, family = "Arial MS", fontface = "bold") +
+  labs(title = "Average Enrichment",
+       x = "Rank", y = "Enrichment Score") +
+  coord_cartesian(ylim = c(y.min, y.max), clip = "off") +
+  theme_bw() +
+  theme(text = element_text(size = 25, family = "Arial MS"),
         plot.title = element_text(hjust = 0.5, face = "bold"),
         axis.title = element_text(face = "bold"),
         axis.text = element_text(face = "bold"),
-        legend.title = element_text(face = "bold"),
-        legend.text = element_text(face = "bold")))
+        panel.grid.minor = element_blank(),
+        panel.grid.major = element_blank()))
 
-png("~/Projects/StressGranules/SGPAPER/Images/PNG/sgenriched.png", width = 14, height=10, units = "in", res=300)
-gsea_plot_hall
+png("~/Projects/StressGranules/SGPAPER/Images/PNG/MitoGSEA_SGTranscriptome.png",
+    width = 7, height = 6, units = "in", res = 300)
+mito.plot.avg
 dev.off()
 ```
 
-## Supplemenatary Figure 5
+
+
+
+# Alternative
+
+
+```{r}
+# =============================================================================
+#  Stress Granule Transcriptome — Two-Stage Random-Effects Meta-Analysis
+#  ─────────────────────────────────────────────────────────────────────────────
+#  Input:  Per-study DEGenes tables (standard limma topTable output).
+#          SE is back-calculated as logFC / t.
+#
+#  Changes vs previous version:
+#    - Reliability classification now requires k >= 5 in addition to
+#      padj < 0.05 and I2 < 50%, giving a third "Consistent but limited
+#      coverage" category for genes that pass padj/I2 but appear in fewer
+#      than 5 studies.
+#    - Forest plots are produced for all MT- transcripts (mitochondrially
+#      encoded genes whose names start with "MT-"), in addition to the
+#      top 20 consistent hits.
+# =============================================================================
+
+## ---- 0. Setup ---------------------------------------------------------------
+
+required_packages <- c(
+  "data.table", "dplyr", "ggplot2", "ggrepel", "metafor", "fgsea", "msigdbr", "tibble"
+)
+invisible(lapply(required_packages, function(pkg) {
+  if (!requireNamespace(pkg, quietly = TRUE))
+    install.packages(pkg, repos = "https://cloud.r-project.org")
+  library(pkg, character.only = TRUE)
+}))
+
+set.seed(1906)
+
+OUTPUT_DIR <- "~/Projects/StressGranules/SGPAPER/TwoStage_MetaAnalysis"
+CKPT_DIR   <- file.path(OUTPUT_DIR, "checkpoints")
+PLOT_DIR   <- file.path(OUTPUT_DIR, "plots")
+TABLE_DIR  <- file.path(OUTPUT_DIR, "tables")
+for (d in c(OUTPUT_DIR, CKPT_DIR, PLOT_DIR, TABLE_DIR))
+  dir.create(d, recursive = TRUE, showWarnings = FALSE)
+
+FORCE_RERUN <- T
+# NOTE: if you are re-running after fixing unit_specs or gene name normalisation,
+# delete checkpoints/01_effect_table.rds and checkpoints/02_meta_results.rds
+# (or set FORCE_RERUN <- TRUE) so Stage 1 and 2 are rebuilt from scratch.
+
+# ── Reliability thresholds — adjust here if needed ───────────────────────────
+PADJ_THRESH  <- 0.05   # BH-adjusted p-value cutoff
+I2_THRESH    <- 50     # heterogeneity cutoff (%)
+K_THRESH     <- 5      # minimum studies for "Consistent" label (Option 3)
+
+log_msg <- function(...) {
+  cat(sprintf("[%s] %s\n", format(Sys.time(), "%Y-%m-%d %H:%M:%S"), paste0(...)))
+}
+ckpt_path <- function(name) file.path(CKPT_DIR, paste0(name, ".rds"))
+save_ckpt <- function(obj, name) {
+  saveRDS(obj, ckpt_path(name))
+  log_msg("Saved checkpoint: ", name)
+}
+load_ckpt_if_exists <- function(name) {
+  p <- ckpt_path(name)
+  if (!FORCE_RERUN && file.exists(p)) {
+    log_msg("Loading checkpoint: ", name)
+    return(readRDS(p))
+  }
+  NULL
+}
+
+## ---- 1. Define units --------------------------------------------------------
+
+unit_specs <- list(
+  list(unit = "Somasekharan_2020",  file = "~/Projects/StressGranules/SGPAPER/RealSGs/RealSoma.txt"),
+  list(unit = "Matheny_2019",       file = "~/Projects/StressGranules/SGPAPER/RealSGs/Tmathenypb.txt"),
+  list(unit = "Curdy_2023",         file = "~/Projects/StressGranules/SGPAPER/RealSGs/TcellPB.txt"),
+  list(unit = "Khong_2017",         file = "~/Projects/StressGranules/SGPAPER/RealSGs/RealAkhong.txt"),
+  list(unit = "Matheny_2021",       file = "~/Projects/StressGranules/SGPAPER/RealSGs/RealtMat21.txt"),
+  list(unit = "DiTimoteo_2024",     file = "~/Projects/StressGranules/SGPAPER/RealSGs/Realm6A.txt"),
+  list(unit = "Kudrin_2024",        file = "~/Projects/StressGranules/SGPAPER/RealSGs/Realac4c.txt"),
+  list(unit = "Rajachandran_2024",  file = "~/Projects/StressGranules/SGPAPER/RealSGs/Photon.txt")
+)
+
+method_map <- c(
+  Somasekharan_2020 = "pl",
+  Matheny_2019      = "pb",
+  Curdy_2023        = "pb",
+  Khong_2017        = "cdc",
+  Matheny_2021      = "cdc",
+  DiTimoteo_2024    = "cdc",
+  Kudrin_2024       = "cdc",
+  Rajachandran_2024 = "photon"
+)
+
+method_colours <- c(
+  pl     = "#2CA02C",
+  pb     = "#FF7F0E",
+  cdc    = "#17BECF",
+  photon = "#D62728"
+)
+
+## ---- 2. Stage 1: load DEGenes and back-calculate SE -------------------------
+
+effect_table <- load_ckpt_if_exists("01_effect_table")
+
+if (is.null(effect_table)) {
+
+  log_msg("Stage 1: loading per-study DEGenes tables...")
+
+  load_unit <- function(spec) {
+    df <- as.data.frame(fread(spec$file))
+
+    gene_col <- intersect(c("Gene", "gene", "GENE", "hgnc_symbol"), colnames(df))
+    if (length(gene_col) == 0) {
+      gene_col <- colnames(df)[1]
+      warning(paste("No standard gene column found in", spec$unit,
+                    "— using column 1:", gene_col))
+    } else {
+      gene_col <- gene_col[1]
+    }
+
+    missing <- setdiff(c("logFC", "t"), colnames(df))
+    if (length(missing) > 0) {
+      warning(paste("Skipping", spec$unit, "— missing columns:",
+                    paste(missing, collapse = ", ")))
+      return(NULL)
+    }
+
+    df$SE <- df$logFC / df$t
+    df    <- df[is.finite(df$SE) & df$SE != 0 & is.finite(df$logFC), ]
+
+    if (nrow(df) == 0) {
+      warning(paste("Skipping", spec$unit, "— no valid rows after SE calculation"))
+      return(NULL)
+    }
+
+    data.frame(
+      Gene  = toupper(trimws(df[[gene_col]])),
+      logFC = df$logFC,
+      SE    = df$SE,
+      unit  = spec$unit,
+      stringsAsFactors = FALSE
+    )
+  }
+
+  unit_results <- lapply(unit_specs, load_unit)
+  names(unit_results) <- sapply(unit_specs, function(s) s$unit)
+
+  status <- sapply(unit_results,
+                   function(x) if (is.null(x)) "SKIPPED" else paste(nrow(x), "genes"))
+  log_msg("Unit status:")
+  print(status)
+
+  unit_results <- unit_results[!sapply(unit_results, is.null)]
+  effect_table <- do.call(rbind, unit_results)
+  rownames(effect_table) <- NULL
+  effect_table$Method <- method_map[effect_table$unit]
+
+  log_msg("Units included: ", length(unit_results))
+  log_msg("Total gene x unit rows: ", nrow(effect_table))
+
+  write.csv(effect_table, file.path(TABLE_DIR, "stage1_effect_table.csv"), row.names = FALSE)
+  save_ckpt(effect_table, "01_effect_table")
+
+  k_dist <- table(table(effect_table$Gene))
+  log_msg("Gene coverage across studies (k = number of studies a gene appears in):")
+  print(k_dist)
+  log_msg("  Genes in all ", length(unit_results), " studies: ",
+          sum(table(effect_table$Gene) == length(unit_results)))
+}
+
+## ---- 3. Stage 2: per-gene random-effects pooling ----------------------------
+
+meta_results <- load_ckpt_if_exists("02_meta_results")
+
+if (is.null(meta_results)) {
+
+  gene_counts   <- table(effect_table$Gene)
+  genes_to_test <- names(gene_counts)[gene_counts >= 8]
+  log_msg(length(genes_to_test), " genes present in >= 3 units")
+
+  run_meta_gene <- function(g) {
+    sub <- effect_table[
+      effect_table$Gene == g & is.finite(effect_table$SE) & effect_table$SE > 0, ]
+    if (nrow(sub) < 3) return(NULL)
+    res <- tryCatch(
+      rma.uni(yi = logFC, sei = SE, data = sub, method = "REML"),
+      error = function(e) NULL
+    )
+    if (is.null(res)) return(NULL)
+    data.frame(
+      Gene  = g,
+      k     = res$k,
+      beta  = as.numeric(res$beta),
+      se    = res$se,
+      ci.lb = res$ci.lb,
+      ci.ub = res$ci.ub,
+      pval  = res$pval,
+      tau2  = res$tau2,
+      I2    = res$I2,
+      QE    = res$QE,
+      QEp   = res$QEp
+    )
+  }
+
+  log_msg("Stage 2: running random-effects pooling per gene (slow step)...")
+  t0        <- Sys.time()
+  meta_list <- lapply(genes_to_test, run_meta_gene)
+  meta_results <- do.call(rbind, meta_list[!sapply(meta_list, is.null)])
+  log_msg("Finished in ",
+          round(as.numeric(difftime(Sys.time(), t0, units = "mins")), 1), " min")
+
+  meta_results$padj <- p.adjust(meta_results$pval, method = "BH")
+  meta_results <- meta_results[order(meta_results$pval), ]
+
+  # ── Option 3 reliability classification ─────────────────────────────────────
+  # Three tiers, not two:
+  #   "Consistent"               — padj < threshold, I2 < threshold, k >= K_THRESH
+  #   "Consistent (limited coverage)" — padj < threshold, I2 < threshold, k < K_THRESH
+  #   "Significant but heterogeneous" — padj < threshold, I2 >= threshold
+  #   "Not significant"
+  meta_results$Reliability <- dplyr::case_when(
+    meta_results$padj < PADJ_THRESH &
+      meta_results$I2 < I2_THRESH   &
+      meta_results$k  >= K_THRESH              ~ "Consistent",
+    meta_results$padj < PADJ_THRESH &
+      meta_results$I2 < I2_THRESH   &
+      meta_results$k  <  K_THRESH              ~ "Consistent (limited coverage)",
+    meta_results$padj < PADJ_THRESH &
+      meta_results$I2 >= I2_THRESH             ~ "Significant but heterogeneous",
+    TRUE                                        ~ "Not significant"
+  )
+
+  write.csv(meta_results, file.path(TABLE_DIR, "stage2_meta_results.csv"), row.names = FALSE)
+  save_ckpt(meta_results, "02_meta_results")
+}
+
+log_msg("Reliability breakdown:")
+print(table(meta_results$Reliability))
+
+# Sort fully consistent hits by breadth first, then significance
+top_consistent <- meta_results[meta_results$Reliability == "Consistent", ]
+top_consistent <- top_consistent[order(-top_consistent$k, top_consistent$padj), ]
+write.csv(top_consistent, file.path(TABLE_DIR, "stage2_top_consistent.csv"), row.names = FALSE)
+
+# Also export the limited-coverage tier separately for reference
+top_limited <- meta_results[meta_results$Reliability == "Consistent (limited coverage)", ]
+top_limited <- top_limited[order(-top_limited$k, top_limited$padj), ]
+write.csv(top_limited, file.path(TABLE_DIR, "stage2_consistent_limited_coverage.csv"),
+          row.names = FALSE)
+
+## ---- 4. Volcano plot --------------------------------------------------------
+#
+#  Four colours now:
+#    Red   (#BA3B46) — consistently enriched, k >= K_THRESH
+#    Blue  (#53A2BE) — consistently depleted, k >= K_THRESH
+#    Orange (#FF7F0E) — consistent but k < K_THRESH (limited coverage)
+#    Green (#73937E) — significant but heterogeneous
+#    Grey             — not significant
+
+ndegs <- 100
+
+meta_results$Status <- dplyr::case_when(
+  meta_results$Reliability == "Consistent" & meta_results$beta >  0 ~ "Up",
+  meta_results$Reliability == "Consistent" & meta_results$beta <  0 ~ "Down",
+  meta_results$Reliability == "Consistent (limited coverage)"        ~ "Limited",
+  meta_results$Reliability == "Significant but heterogeneous"        ~ "Heterogeneous",
+  TRUE                                                                ~ "NS"
+)
+
+up_vol  <- meta_results[meta_results$Status == "Up",  ]
+dn_vol  <- meta_results[meta_results$Status == "Down",]
+lim_vol <- meta_results[meta_results$Status == "Limited", ]
+het_vol <- meta_results[meta_results$Status == "Heterogeneous", ]
+
+up_vol <- up_vol[order(abs(up_vol$beta), decreasing = TRUE), ]
+dn_vol <- dn_vol[order(abs(dn_vol$beta), decreasing = TRUE), ]
+
+n_up <- min(ndegs, nrow(up_vol))
+n_dn <- min(ndegs, nrow(dn_vol))
+
+p_volcano <- ggplot(meta_results, aes(x = beta, y = -log10(pval))) +
+  geom_point(data = meta_results[meta_results$Status == "NS", ],
+             color = "#CCCCCC", size = 2, alpha = 0.6) +
+  geom_point(data = het_vol,
+             color = "#73937E", size = 3, alpha = 0.7) +
+  geom_point(data = lim_vol,
+             color = "#FF7F0E", size = 3, alpha = 0.8) +
+  geom_point(data = up_vol,  color = "#BA3B46", size = 4) +
+  geom_point(data = dn_vol,  color = "#53A2BE", size = 4) +
+  { if (n_up > 0)
+      geom_label_repel(
+        data = up_vol[seq_len(n_up), ], mapping = aes(label = Gene),
+        size = 4, color = "#BA3B46", fontface = "italic",
+        max.overlaps = 20, segment.color = "#BA3B46", point.padding = 0.4
+      )
+  } +
+  { if (n_dn > 0)
+      geom_label_repel(
+        data = dn_vol[seq_len(n_dn), ], mapping = aes(label = Gene),
+        size = 4, color = "#53A2BE", fontface = "italic",
+        max.overlaps = 20, segment.color = "#53A2BE", point.padding = 0.4
+      )
+  } +
+  geom_vline(xintercept = 0,         linetype = "dashed", color = "grey50", linewidth = 0.5) +
+  geom_hline(yintercept = -log10(PADJ_THRESH),
+             linetype = "dotted", color = "grey50", linewidth = 0.5) +
+  labs(
+    x        = expression(Log[2] ~ "Fold-Change (pooled, SG vs Whole-Cell)"),
+    y        = expression(-log[10] ~ "(p-value)"),
+    title    = "SG Transcriptome \u2014 Two-Stage Random-Effects Meta-Analysis",
+    subtitle = paste0(
+      nrow(up_vol),  " consistently enriched  |  ",
+      nrow(dn_vol),  " consistently depleted  |  ",
+      nrow(lim_vol), " consistent (limited coverage, k < ", K_THRESH, ")  |  ",
+      nrow(het_vol), " heterogeneous"
+    ),
+    caption = paste0(
+      "Red/Blue: padj < ", PADJ_THRESH, ", I\u00B2 < ", I2_THRESH,
+      "%, k \u2265 ", K_THRESH, " (consistent)\n",
+      "Orange: same thresholds but k < ", K_THRESH,
+      " (consistent but limited coverage)\n",
+      "Green: padj < ", PADJ_THRESH, " but I\u00B2 \u2265 ", I2_THRESH,
+      "% (heterogeneous)"
+    )
+  ) +
+  theme_bw() +
+  theme(
+    axis.line        = element_line(colour = "black"),
+    panel.grid.major = element_blank(),
+    panel.grid.minor = element_blank(),
+    panel.border     = element_blank(),
+    panel.background = element_blank(),
+    plot.title       = element_text(hjust = 0.5, face = "bold"),
+    plot.subtitle    = element_text(hjust = 0.5, color = "#505050", size = 14),
+    plot.caption     = element_text(color = "#505050", size = 11),
+    text             = element_text(size = 25, family = "Arial MS")
+  )
+
+ggsave(file.path(PLOT_DIR, "twostage_volcano.png"),
+       p_volcano, width = 11, height = 9, dpi = 300)
+log_msg("Volcano plot saved.")
+
+## ---- 5. Forest plot helper --------------------------------------------------
+
+plot_gene_forest <- function(gene, out_path) {
+  sub <- effect_table[
+    effect_table$Gene == gene & is.finite(effect_table$SE) & effect_table$SE > 0, ]
+  if (nrow(sub) < 2) {
+    log_msg("  Skipping forest plot for ", gene, " — fewer than 2 valid units")
+    return(invisible(NULL))
+  }
+  res <- rma.uni(yi = logFC, sei = SE, data = sub, method = "REML", slab = sub$unit)
+  png(out_path, width = 900, height = 600)
+  forest(res,
+         main = paste("SG Enrichment:", gene),
+         xlab = expression(Log[2] ~ "Fold-Change (SG vs Whole-Cell)"),
+         mlab = "Pooled (REML)")
+  dev.off()
+}
+
+## ---- 5a. Forest plots for top 20 consistent hits ----------------------------
+
+n_forest <- min(20, nrow(top_consistent))
+if (n_forest > 0) {
+  log_msg("Saving forest plots for top ", n_forest, " consistent hits...")
+  forest_dir_top <- file.path(PLOT_DIR, "forest_top_consistent")
+  dir.create(forest_dir_top, showWarnings = FALSE)
+  for (i in seq_len(n_forest)) {
+    g <- top_consistent$Gene[i]
+    k <- top_consistent$k[i]
+    tryCatch(
+      plot_gene_forest(
+        g, file.path(forest_dir_top, paste0("forest_", g, "_k", k, ".png"))
+      ),
+      error = function(e) log_msg("  Could not plot forest for ", g, ": ",
+                                   conditionMessage(e))
+    )
+  }
+  log_msg("  Done.")
+}
+
+## ---- 5b. Forest plots for all MT- transcripts --------------------------------
+#
+#  Mitochondrially encoded transcripts follow the naming convention MT-XXX
+#  (e.g. MT-CO1, MT-ND1, MT-RNR1). We pull all genes in effect_table whose
+#  uppercased name starts with "MT-", run rma.uni on each (even if they didn't
+#  pass the k >= 3 genome-wide filter — we lower the bar to k >= 2 here since
+#  we're looking at a specific biological question, not doing a genome-wide
+#  screen), and save one forest plot per gene.
+#
+#  Results are also written to a dedicated table so you can see the pooled
+#  estimates for every MT gene alongside their heterogeneity stats.
+
+log_msg("Producing forest plots and pooled estimates for all MT- transcripts...")
+
+mt_genes <- unique(effect_table$Gene[grepl("^MT-", effect_table$Gene)])
+log_msg("  MT- transcripts found in effect_table: ", length(mt_genes))
+
+if (length(mt_genes) > 0) {
+
+  forest_dir_mt <- file.path(PLOT_DIR, "forest_MT_transcripts")
+  dir.create(forest_dir_mt, showWarnings = FALSE)
+
+  run_meta_gene_min2 <- function(g) {
+    sub <- effect_table[
+      effect_table$Gene == g & is.finite(effect_table$SE) & effect_table$SE > 0, ]
+    if (nrow(sub) < 2) return(NULL)
+    res <- tryCatch(
+      rma.uni(yi = logFC, sei = SE, data = sub, method = "REML"),
+      error = function(e) NULL
+    )
+    if (is.null(res)) return(NULL)
+    data.frame(
+      Gene  = g,
+      k     = res$k,
+      beta  = as.numeric(res$beta),
+      se    = res$se,
+      ci.lb = res$ci.lb,
+      ci.ub = res$ci.ub,
+      pval  = res$pval,
+      tau2  = res$tau2,
+      I2    = res$I2,
+      QE    = res$QE,
+      QEp   = res$QEp
+    )
+  }
+
+  mt_meta_list    <- lapply(mt_genes, run_meta_gene_min2)
+  mt_meta_results <- do.call(rbind, mt_meta_list[!sapply(mt_meta_list, is.null)])
+
+  if (!is.null(mt_meta_results) && nrow(mt_meta_results) > 0) {
+    mt_meta_results$padj <- p.adjust(mt_meta_results$pval, method = "BH")
+
+    # Apply same three-tier reliability to MT results
+    mt_meta_results$Reliability <- dplyr::case_when(
+      mt_meta_results$padj < PADJ_THRESH &
+        mt_meta_results$I2 < I2_THRESH   &
+        mt_meta_results$k  >= K_THRESH            ~ "Consistent",
+      mt_meta_results$padj < PADJ_THRESH &
+        mt_meta_results$I2 < I2_THRESH   &
+        mt_meta_results$k  <  K_THRESH            ~ "Consistent (limited coverage)",
+      mt_meta_results$padj < PADJ_THRESH &
+        mt_meta_results$I2 >= I2_THRESH           ~ "Significant but heterogeneous",
+      TRUE                                          ~ "Not significant"
+    )
+
+    mt_meta_results <- mt_meta_results[order(mt_meta_results$pval), ]
+    write.csv(mt_meta_results,
+              file.path(TABLE_DIR, "MT_transcripts_meta_results.csv"),
+              row.names = FALSE)
+
+    log_msg("  MT- reliability breakdown:")
+    print(table(mt_meta_results$Reliability))
+
+    # Forest plot for each MT gene
+    for (g in mt_meta_results$Gene) {
+      k <- mt_meta_results$k[mt_meta_results$Gene == g]
+      tryCatch(
+        plot_gene_forest(
+          g, file.path(forest_dir_mt, paste0("forest_", g, "_k", k, ".png"))
+        ),
+        error = function(e) log_msg("  Could not plot forest for ", g, ": ",
+                                     conditionMessage(e))
+      )
+    }
+    log_msg("  MT- forest plots saved to: ", forest_dir_mt)
+
+    # Quick summary barplot: pooled beta per MT gene, coloured by reliability
+    mt_meta_results$Gene <- factor(
+      mt_meta_results$Gene,
+      levels = mt_meta_results$Gene[order(mt_meta_results$beta)]
+    )
+
+    colour_rely <- c(
+      "Consistent"                    = "#BA3B46",
+      "Consistent (limited coverage)" = "#FF7F0E",
+      "Significant but heterogeneous" = "#73937E",
+      "Not significant"               = "#CCCCCC"
+    )
+
+    p_mt <- ggplot(mt_meta_results, aes(x = Gene, y = beta, fill = Reliability)) +
+      geom_col(alpha = 0.85) +
+      geom_errorbar(aes(ymin = ci.lb, ymax = ci.ub), width = 0.3, linewidth = 0.7) +
+      geom_hline(yintercept = 0, linetype = "dashed", color = "grey40") +
+      scale_fill_manual(values = colour_rely) +
+      coord_flip() +
+      labs(
+        x     = "",
+        y     = expression(Log[2] ~ "Fold-Change (pooled, SG vs Whole-Cell)"),
+        title = "MT- Transcripts — Pooled SG Enrichment",
+        fill  = "Reliability"
+      ) +
+      theme_bw() +
+      theme(
+        panel.grid.major.y = element_blank(),
+        panel.grid.minor   = element_blank(),
+        text               = element_text(size = 20, family = "Arial MS", face = "bold"),
+        plot.title         = element_text(hjust = 0.5),
+        legend.position    = "bottom"
+      )
+
+    ggsave(file.path(PLOT_DIR, "MT_transcripts_pooled_barplot.png"),
+           p_mt, width = 10,
+           height = max(4, 0.35 * nrow(mt_meta_results)),
+           dpi = 300)
+    log_msg("  MT- summary barplot saved.")
+  } else {
+    log_msg("  No MT- genes had >= 2 studies — no forest plots produced.")
+  }
+} else {
+  log_msg("  No MT- genes found in effect_table.")
+}
+
+## ---- 6. GSEA on pooled z-scores ---------------------------------------------
+
+log_msg("GSEA on pooled z-scores...")
+
+meta_results$z  <- meta_results$beta / meta_results$se
+vectorranks     <- sort(setNames(meta_results$z, toupper(meta_results$Gene)),
+                        decreasing = TRUE)
+
+hallmarks.gs    <- msigdbr(species = "Homo sapiens", collection = "H")
+hallmarks.gsets <- lapply(split(hallmarks.gs$gene_symbol, hallmarks.gs$gs_name), toupper)
+
+hallmarks.res      <- fgsea(pathways = hallmarks.gsets, stats = vectorranks)
+hallmarks.res.tidy <- hallmarks.res %>%
+  as_tibble() %>%
+  mutate(pathway = sub("^[^_]*_", "", pathway)) %>%
+  arrange(desc(NES))
+
+write.csv(hallmarks.res.tidy %>% dplyr::select(-leadingEdge),
+          file.path(TABLE_DIR, "twostage_GSEA_hallmark.csv"), row.names = FALSE)
+
+thresh       <- 0.05
+data_to_plot <- hallmarks.res.tidy %>% filter(padj < thresh)
+
+if (nrow(data_to_plot) > 0) {
+  data_to_plot$Status <- ifelse(data_to_plot$NES > 0, "Upregulated", "Downregulated")
+
+  p_gsea <- ggplot(data_to_plot, aes(reorder(pathway, NES), NES)) +
+    geom_col(aes(fill = Status), alpha = 0.75) +
+    scale_fill_manual(
+      values = c("#53A2BE", "#BA3B46"),
+      labels = c("Downregulated", "Upregulated"),
+      breaks = c("Downregulated", "Upregulated")
+    ) +
+    coord_flip() +
+    labs(
+      x       = "Gene Set",
+      y       = "Normalised Enrichment Score (NES)",
+      title   = "Hallmark Gene Sets \u2014 Two-Stage Meta-Analysis",
+      caption = paste0("padj < ", thresh, "  |  Ranked by pooled z-score (beta / SE)")
+    ) +
+    theme_bw() +
+    theme(
+      legend.position = "none",
+      text            = element_text(size = 25, family = "Arial MS", face = "bold"),
+      plot.title      = element_text(hjust = 0.5, face = "bold"),
+      axis.title      = element_text(face = "bold"),
+      axis.text       = element_text(face = "bold")
+    )
+
+  ggsave(file.path(PLOT_DIR, "twostage_GSEA_hallmark.png"),
+         p_gsea, width = 14, height = 10, dpi = 300)
+  log_msg("GSEA plot saved.")
+} else {
+  log_msg("No hallmark pathways passed padj < ", thresh, " — GSEA plot skipped.")
+}
+
+## ---- 7. Done ----------------------------------------------------------------
+
+log_msg("ALL DONE.")
+log_msg("Tables      : ", TABLE_DIR)
+log_msg("Plots       : ", PLOT_DIR)
+log_msg("Checkpoints : ", CKPT_DIR)
+```
 
 #### Function
 ```{r}
@@ -2693,13 +4195,20 @@ hallmarker <- function(table, dataset){
 ```
 
 ```{r fig.width=25, fig.height=25}
+
+dataset_order <- c(
+  "T. Matheny Both", "M. Paget 2023", "SN. Somasekharan 2020", 
+  "T. Matheny 2019", "N. Curdy 2023", "A. Khong 2017",
+  "T. Matheny 2021", "G. Di Timoteo 2024", "P. Kudrin 2024", "S. Rajachandran 2024", "RNA Length"
+)
+
 pathwayer <- fig10
 
 # Initialize an empty list to store the resulting data frames
 results_list <- list()
 
 # Loop through and store each dataframe in the list
-for (n in 2:15) {
+for (n in 2:12) {
   pathn <- hallmarker(table=pathwayer, dataset=n)
   results_list[[n-1]] <- pathn  # Store each data frame in the list
 }
@@ -2717,8 +4226,8 @@ mat <- as.matrix(merged_data[, -1])  # Convert to matrix without 'pathway' colum
 
 #what pathways are more important?
 # Using sum of absolute NES
-pathway_scores_sums <- rowSums(abs(merged_data[,-c(1,15)]), na.rm = TRUE)
-pathway_scores_mean <- rowMeans(abs(merged_data[,-c(1,15)]), na.rm = TRUE)
+pathway_scores_sums <- rowSums(abs(merged_data[,-c(1,13)]), na.rm = TRUE)
+pathway_scores_mean <- rowMeans(abs(merged_data[,-c(1,13)]), na.rm = TRUE)
 
 # Sort descending
 pathway_scores_sums <- sort(pathway_scores_sums, decreasing = TRUE)
@@ -2735,18 +4244,26 @@ common_top_pathways
 # Plot heatmap with clustering and dendrograms
 library(grid)
 
-supheat <- pheatmap::pheatmap(mat, color = colorRampPalette(c("#729EA1", "white", "#DB5375"))(50),
-         clustering_distance_rows = "euclidean",
-         clustering_distance_cols = "euclidean",
-         clustering_method = "ward.D2",
+# Reorder columns of mat to match desired_order
+mat <- mat[, dataset_order]
+
+# Reorder rows alphabetically
+mat <- mat[order(rownames(mat)), ]
+
+# Plot heatmap — no clustering, fixed order, 45 degree x labels
+supheat <- pheatmap::pheatmap(mat, 
+         color = colorRampPalette(c("#729EA1", "white", "#DB5375"))(50),
          display_numbers = FALSE,
-         cluster_rows = T,
-         legend = T,
+         cluster_rows = FALSE,
+         cluster_cols = FALSE,
+         legend = TRUE,
          fontsize = 25,
          cellwidth = 50,
-         cellheight=25, border_color = "black") 
+         cellheight = 25, 
+         border_color = "black",
+         angle_col = 90)
 
-png("../Projects/StressGranules/SGPAPER/supheat.png", width = 25, height=25, units = "in", res=300)
+png("~/Projects/StressGranules/SGPAPER/supheat.png", width = 25, height=25, units = "in", res=300)
 supheat
 dev.off()
 
@@ -2755,28 +4272,22 @@ dev.off()
 
 #Method
 df <- data.frame(
-  x = (c("wc", "wc", "pl", "pl" , "pb", "pb", "condc","cdc", "cdc",  "cdc","cdc","photon", "fanci",  "length")),
-  colour = c("T. Matheny Both", "M. Paget 2023", "SN. Somasekharan 2020", "Z. Ren 2023" , "T. Matheny 2019", "N. Curdy 2023", "V. Iadevaia 2022","A. Khong 2017", "T. Matheny 2021",  "G. Di Timoteo 2024","P. Kudrin 2024","S. Rajachandran 2024", "Y. Zhou 2024",  "RNA Length"),
-  xpos = (c("T. Matheny Both", "M. Paget 2023", "SN. Somasekharan 2020", "Z. Ren 2023" , "T. Matheny 2019", "N. Curdy 2023", "V. Iadevaia 2022","A. Khong 2017", "T. Matheny 2021",  "G. Di Timoteo 2024","P. Kudrin 2024","S. Rajachandran 2024", "Y. Zhou 2024",  "RNA Length"))
+  x = (c("wc", "wc", "pl" , "pb", "pb","cdc", "cdc",  "cdc","cdc","photon",  "length")),
+  colour = c("T. Matheny Both", "M. Paget 2023", "SN. Somasekharan 2020", "T. Matheny 2019", "N. Curdy 2023", "A. Khong 2017", "T. Matheny 2021",  "G. Di Timoteo 2024","P. Kudrin 2024","S. Rajachandran 2024",  "RNA Length"),
+  xpos = (c("T. Matheny Both", "M. Paget 2023", "SN. Somasekharan 2020", "T. Matheny 2019", "N. Curdy 2023", "A. Khong 2017", "T. Matheny 2021",  "G. Di Timoteo 2024","P. Kudrin 2024","S. Rajachandran 2024",  "RNA Length"))
 )
 
 df$x <- factor(df$x, levels = unique(df$x))
-desired_order <- c("V. Iadevaia 2022", "Y. Zhou 2024", "T. Matheny 2021", "A. Khong 2017",
-                   "G. Di Timoteo 2024", "S. Rajachandran 2024", "RNA Length", "Z. Ren 2023",
-                   "T. Matheny Both", "N. Curdy 2023","SN. Somasekharan 2020","M. Paget 2023",
-                   "T. Matheny 2019", "P. Kudrin 2024")
 
-df$xpos <- factor(df$xpos, levels = desired_order)
+df$xpos <- factor(df$xpos, levels = dataset_order)
 
 
 colour_vector <- c(
-  "wc" = '#B5EAD7',
-  "pl" = '#FFDAC1',
-  "pb" = '#AFCBFF',
-  "condc" = '#C7CEEA',
-  "cdc" = '#FFE5B4',
-  "photon" ='#FF9AA2',
-  "fanci" = '#FFC3A0',
+  "wc" = '#1F77B4',
+  "pl" = '#2CA02C',
+  "pb" = '#FF7F0E',
+  "cdc" = '#17BECF',
+  "photon" ='#D62728',
   "length" = 'white'
 )
 
@@ -2784,10 +4295,8 @@ lebel_vector <- c(
   "wc" = 'Whole-Cell',
   "pl" = 'P. Labelling',
   "pb" = 'vs P-Body',
-  "condc" = 'Controlled DC',
   "cdc" = 'Corrected DC',
   "photon" ='PHOTON',
-  "fanci" = 'FANCI',
   "length" = 'RNA Length'
 )
 
@@ -2800,7 +4309,7 @@ lebel_vector <- c(
     breaks = names(lebel_vector)
   ) +
   scale_x_discrete(
-    labels = c("V. Iadevaia 2022", "Y. Zhou 2024", "T. Matheny 2021", "A. Khong 2017" , "G. Di Timoteo 2024", "S. Rajachandran 2024", "RNA Length","Z. Ren 2023", "T. Matheny Both",  "N. Curdy 2023","SN. Somasekharan 2020","M. Paget 2023", "T. Matheny 2019",  "P. Kudrin 2024")
+    labels = c("T. Matheny 2021", "A. Khong 2017" , "G. Di Timoteo 2024", "S. Rajachandran 2024", "RNA Length","T. Matheny Both",  "N. Curdy 2023","SN. Somasekharan 2020","M. Paget 2023", "T. Matheny 2019",  "P. Kudrin 2024")
   ) +
   theme(
     legend.position = "none",
@@ -2815,14 +4324,14 @@ lebel_vector <- c(
   )
 )
 
-png("../Projects/StressGranules/SGPAPER/supheat_leg.png", width = 25, height=25, units = "in", res=300)
+png("~/Projects/StressGranules/SGPAPER/supheat_leg.png", width = 25, height=25, units = "in", res=300)
 pl2
 dev.off()
 
 leg1 <- get_legend(pl2+ theme(text=element_text(size=25,  family="Arial MS", color="#505050")), position = 'right')
 leg1 <- as_ggplot(leg1)
 
-png("../Projects/StressGranules/SGPAPER/supheat_leg_label.png", width = 25, height=25, units = "in", res=300)
+png("~/Projects/StressGranules/SGPAPER/supheat_leg_label.png", width = 25, height=25, units = "in", res=300)
 leg1
 dev.off()
 
@@ -2837,49 +4346,59 @@ dev.off()
 #MitoGenes <- c(MitoGenes, "MT-TF")
 
 
-SG_Transcriptome <- fread("~/Projects/StressGranules/SGPAPER/SGEnrichedTranscriptsv2.txt")[,-c(1)]
-SG_Transcriptome <- na.omit(SG_Transcriptome)
-SG_Transcriptome$Tot <- rowMeans(SG_Transcriptome[,-1], na.rm = T)
+SG_Transcriptome <- fread("~/Projects/StressGranules/SGPAPER/RealSGs/Averate.txt")
+
 SG_nonMito <- SG_Transcriptome[!(SG_Transcriptome$Gene %in% MitoGenes), ]
 WC_Transcriptome <- fread("~/Projects/StressGranules/SGPAPER/RealSGs/MergedWCSig.txt")[,c(1,4)]
 colnames(WC_Transcriptome) <- c("Gene", "WC")
 
 Both_Transcriptomes <- merge(WC_Transcriptome, SG_Transcriptome, by="Gene")
 
-smooth.SG <- lm(Tot~WC, Both_Transcriptomes)
-Both_Transcriptomes$Inverser <- Both_Transcriptomes$WC * Both_Transcriptomes$Tot
+smooth.SG <- lm(Average~WC, Both_Transcriptomes)
+Both_Transcriptomes$Inverser <- Both_Transcriptomes$WC * Both_Transcriptomes$Average
 row.names(Both_Transcriptomes) <- Both_Transcriptomes$Gene
-linemarkers <- Both_Transcriptomes[abs(Both_Transcriptomes$Inverser) > 30, ]
+linemarkers <- Both_Transcriptomes[abs(Both_Transcriptomes$Inverser) > 45, ]
 
 # Calculate the Spearman correlation coefficient
-spearman_corr <- cor(Both_Transcriptomes$Tot, (Both_Transcriptomes$WC), method = "spearman")
+spearman_corr <- cor(Both_Transcriptomes$Average, (Both_Transcriptomes$WC), method = "spearman")
 
 
 
-(Fig8 <- ggplot(Both_Transcriptomes, aes(y = Tot, x = (WC))) + 
+(Fig8 <- ggplot(Both_Transcriptomes, aes(y = Average, x = (WC))) + 
   geom_point(fill = "#DDDDDD", alpha = 0.3, size=5, shape=21, colour='black') +   
   geom_density2d(color="#800020", size=1.2) +
   theme_bw() +
-  ylab("DGE SG-Enriched (Mean of t-stats)") + 
-  xlab("DGE WC with vs Without SG (t-stat)") + # Subscript "10"
+  ylab("Presence in SG\n(weighted average t-stat)") + 
+  xlab("DGE WC with vs without SG (t-stat)") +
   theme(axis.line = element_line(colour = "black"),
         panel.grid.minor = element_blank(),
         panel.border = element_blank(),
         panel.background = element_blank())  + 
-  theme(text=element_text(size=25,  family="Arial MS"))  +
-  theme(plot.title = element_text(hjust = 0.5))  + theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank())+
-  geom_abline(slope=smooth.SG$coefficients[2], intercept = smooth.SG$coefficients[1], linetype = "dashed") +
-  geom_point(data=linemarkers, aes(x = WC, y = Tot ),alpha = 0.5, size=5, shape=21, fill="#de425b")+ geom_label_repel(
-    data = linemarkers, 
-    mapping = aes(label = linemarkers$Gene), 
-    size = 4,
-    point.padding = 0.5,  # Positive point padding
-    color = "#A10702",
-    max.overlaps = 30,
-    segment.color = "#A10702"  # Ensures the segments are visible
-  )+ stat_cor(method = "spearman", cor.coef.name = "rho", size=7, label.y = -9))
+  theme(text=element_text(size=25, family="Arial MS"))  +
+  theme(plot.title = element_text(hjust = 0.5)) +
+  theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank()) +
 
-png("~/Projects/StressGranules/SGPAPER/Images/PNG/Figure8.png", width = 8, height=7, units = "in", res=300)
+  # y = x  (slope = 1, intercept = 0)
+  geom_abline(slope =  1, intercept = 0, linetype = "dashed", colour = "grey40") +
+  # y = -x (slope = -1, intercept = 0)
+  geom_abline(slope = -1, intercept = 0, linetype = "dashed", colour = "grey40") +
+
+  geom_point(data = linemarkers, aes(x = WC, y = Average),
+             alpha = 0.5, size=5, shape=21, fill="#de425b") +
+  geom_label_repel(
+    data          = linemarkers, 
+    mapping       = aes(label = linemarkers$Gene), 
+    size          = 4,
+    point.padding = 0.5,
+    color         = "#A10702",
+    fontface      = "italic",      # italic gene names
+    max.overlaps  = 30,
+    segment.color = "#A10702"
+  ) +
+  stat_cor(method = "spearman", cor.coef.name = "rho", size=7, label.y = -11))
+
+png("~/Projects/StressGranules/SGPAPER/Images/PNG/Figure8.png",
+    width = 8, height = 7, units = "in", res = 300)
 Fig8
 dev.off()
 ```
@@ -2893,6 +4412,7 @@ dev.off()
 #### B
 
 ```{r fig.height=6, fig.width=14}
+MitoGenes <- fread("~/MitoGenes.txt")[[1]]
 wcdsrnamer <- fread("~/Projects/StressGranules/SGPAPER/RealSGs/MergedWCSig.txt")[,c(1,4)]
 colnames(wcdsrnamer) <- c("Gene", "merg")
 simfns <- fread("~/Projects/StressGranules/SGPAPER/siMFNboth.txt")[,c(1,4)]
@@ -2904,33 +4424,60 @@ smooth.SG <- lm(simfns~(merg), dfforheat)
 
 dfforheat$dist <- (dfforheat$simfns) * (dfforheat$merg)
 
-linemarkers <- as.data.frame(dfforheat[(dfforheat$dist)>20,])
- 
+linemarkers <- as.data.frame(dfforheat[(dfforheat$dist)>20 & !(dfforheat$Gene %in% MitoGenes), ])
+mitomarkers <- dfforheat[dfforheat$Gene %in% MitoGenes, ]
+
+dfforheat$is_mito <- dfforheat$Gene %in% MitoGenes
+dfforheat$bottom_left <- dfforheat$merg < 0 & dfforheat$simfns < 0
+
+fisher_tab <- table(dfforheat$is_mito, dfforheat$bottom_left)
+# rows: FALSE/TRUE is_mito, cols: FALSE/TRUE bottom_left
+print(fisher_tab)
+
+fisher_res <- fisher.test(fisher_tab)
+print(fisher_res)
+
+n_mito_bl <- fisher_tab["TRUE", "TRUE"]
+n_mito_total <- sum(dfforheat$is_mito)
+
+fisher_label <- sprintf("Depleted Mito Genes: %d/%d\nOR = %.2f, p = %.2g",
+                         n_mito_bl, n_mito_total,
+                         fisher_res$estimate, fisher_res$p.value)
 
 (D <- ggplot(dfforheat, aes(y = simfns, x = (merg))) + 
   geom_point(fill = "#DDDDDD", alpha = 0.3, size=5, shape=21, colour='black') +   
   geom_density2d(color="#800020", size=1.2) +
   theme_bw() +
   ylab("DGE MAVS KO vs WT (t-stat)") + 
-  xlab("DGE WC with vs Without SG (t-stat)") + # Subscript "10"
+  xlab("DGE WC with vs Without SG (t-stat)") +
+  geom_vline(xintercept = 0, linetype = "dashed", colour = "grey40") +
+  geom_hline(yintercept = 0, linetype = "dashed", colour = "grey40") +
   theme(axis.line = element_line(colour = "black"),
         panel.grid.minor = element_blank(),
         panel.border = element_blank(),
-        panel.background = element_blank())  + 
-  theme(text=element_text(size=25,  family="Arial MS")) + stat_cor(method = "spearman", cor.coef.name = "rho", size=7) +
-  theme(plot.title = element_text(hjust = 0.5))  + theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank())+
-  geom_abline(slope=smooth.SG$coefficients[2], intercept = smooth.SG$coefficients[1], linetype = "dashed") +
-  geom_point(data=linemarkers, aes(x = merg, y = simfns ),alpha = 0.5, size=5, shape=21, fill="#de425b")+ geom_label_repel(
-    data = linemarkers, 
-    mapping = aes(label = linemarkers$Gene), 
-    size = 4,
-    point.padding = 0.5,  # Positive point padding
-    color = "#A10702",
-    max.overlaps = 30,
-    segment.color = "#A10702"  # Ensures the segments are visible
-  ) )
+        panel.background = element_blank())  +
+  theme(text=element_text(size=25, family="Arial MS")) +
+  stat_cor(method = "spearman", cor.coef.name = "rho", size=7)  +
+  annotate("text", x = -Inf, y = -Inf, label = fisher_label,
+           hjust = -0.05, vjust = -0.3, size = 5, colour = "#73937E") +
+  theme(plot.title = element_text(hjust = 0.5)) +
+  theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank()) +
+  geom_point(data=linemarkers, aes(x = merg, y = simfns),
+             alpha = 0.5, size=5, shape=21, fill="#de425b") +  
+  geom_point(data = mitomarkers, aes(x = merg, y = simfns), fill = "#73937E", shape = 21, size = 5, colour = "black")+
+  geom_label_repel(
+    data          = linemarkers, 
+    mapping       = aes(label = linemarkers$Gene), 
+    size          = 4,
+    point.padding = 0.5,
+    color         = "#A10702",
+    fontface      = "italic",
+    max.overlaps  = 30,
+    segment.color = "#A10702"
+  ))
 
-png("~/Projects/StressGranules/SGPAPER/Images/PNG/senesscatter.png", width = 8, height=7, units = "in", res=300)
+png("~/Projects/StressGranules/SGPAPER/Images/PNG/SeneFig.png",
+    width = 8, height = 7, units = "in", res = 300)
 D
 dev.off()
 ```
@@ -2988,25 +4535,56 @@ SenesPath <- hallmarks.res.tidy[,c(1,6)]
 Paths <- merge(MergeSGPath, SenesPath, by="pathway")
 colnames(Paths) <- c("Pathway", "MergedWC", "Senescence")
 
-vip <- as.data.frame(Paths[Paths$MergedWC < -1.7 & Paths$Senescence < -1.7,] )
+# --- Define inflammation-related Hallmark sets ---
+inflammation_pathways <- c(
+  "HALLMARK_INFLAMMATORY_RESPONSE",
+  "HALLMARK_TNFA_SIGNALING_VIA_NFKB",
+  "HALLMARK_IL6_JAK_STAT3_SIGNALING",
+  "HALLMARK_INTERFERON_ALPHA_RESPONSE",
+  "HALLMARK_INTERFERON_GAMMA_RESPONSE",
+  "HALLMARK_IL2_STAT5_SIGNALING",
+  "HALLMARK_COMPLEMENT"
+)
 
-(E <- ggplot(Paths)+geom_point(aes(x=MergedWC, y=Senescence), colour="#506863", shape=17,size=7,alpha=.5)+  theme_classic()+
-  ylab("MFN1/2 KO vs WT NES") + 
-  xlab("WC with vs Without SG NES")  + geom_abline(slope = 1, intercept = 0, linetype="dashed", colour="black")+geom_abline(slope = -1, intercept = 0, linetype="dashed", colour="black", alpha=.5)+geom_vline(xintercept = 0, linetype="dotted")+geom_hline(yintercept = 0, linetype="dotted")+
+# Flag matches in Paths (Paths$Pathway should already carry the HALLMARK_ prefix
+# unless you stripped it upstream — check before running)
+Paths$Inflammation <- Paths$Pathway %in% inflammation_pathways
+
+infl_df <- Paths[Paths$Inflammation, ]
+
+message(nrow(infl_df), " inflammation-related pathways found in Paths:")
+print(infl_df$Pathway)
+
+(E <- ggplot(Paths) +
+  geom_point(aes(x = MergedWC, y = Senescence), colour = "#A0B8B3",
+             shape = 17, size = 7, alpha = .5)  +
+  theme_classic() +
+  ylab("MFN1/2 KO vs WT NES") +
+  xlab("WC with vs Without SG NES") +
+  geom_abline(slope = 1, intercept = 0, linetype = "dashed", colour = "black") +
+  geom_abline(slope = -1, intercept = 0, linetype = "dashed", colour = "black", alpha = .5) +
+  geom_vline(xintercept = 0, linetype = "dotted") +
+  geom_hline(yintercept = 0, linetype = "dotted") +
   theme(axis.line = element_line(colour = "black"),
         panel.grid.minor = element_blank(),
         panel.border = element_blank(),
-        panel.background = element_blank()) + 
+        panel.background = element_blank()) +
   theme(plot.title = element_text(hjust = 0.5)) +
-  theme(text=element_text(size=25,  family="Arial MS")) +xlim(c(-3.5,3.5))+ylim(c(-3.5,3.5))+
+  theme(text = element_text(size = 25, family = "Arial MS")) +
+  xlim(c(-3.5, 3.5)) + ylim(c(-3.5, 3.5))+
+  # --- highlight layer: inflammation-related sets ---
+  geom_point(data = infl_df, aes(x = MergedWC, y = Senescence),
+             colour = "#506863", shape = 17, size = 7, alpha = .9) +
   geom_label_repel(
-    data = vip[1:ndegs,], 
-    mapping = aes(x=MergedWC, y=  Senescence, label = (vip$Pathway)[1:ndegs]), 
+    data = infl_df,
+    aes(x = MergedWC, y = Senescence,
+        label = sub("^HALLMARK_", "", Pathway)),
     size = 4,
-    point.padding = 0.5,  # Positive point padding
+    point.padding = 0.5,
     color = "#506863",
     max.overlaps = 50,
-    segment.color = "#506863", fontface="bold"  # Ensures the segments are visible
+    segment.color = "#506863",
+    fontface = "bold"
   ))
 
 
@@ -3190,8 +4768,7 @@ spearman_corr <- cor(TIA1Effect$t, (TIA1Effect$TIAKO), method = "spearman")
         panel.border = element_blank(),
         panel.background = element_blank())  + 
   theme(text=element_text(size=24,  family="Arial MS"))  +
-  theme(plot.title = element_text(hjust = 0.5))  + theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank())+
-  geom_abline(slope=smooth.SG$coefficients[2], intercept = smooth.SG$coefficients[1], linetype = "dashed")+ stat_cor(method = "spearman", cor.coef.name = "rho", size=7, label.y.npc = "top"))
+  theme(plot.title = element_text(hjust = 0.5))  + theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank())+ stat_cor(method = "spearman", cor.coef.name = "rho", size=7, label.y.npc = "top"))
 
 png("~/Projects/StressGranules/SGPAPER/Images/PNG/SupFigure10.png", width = 8, height=8, units = "in", res=300)
 SupFig10
@@ -3202,10 +4779,11 @@ dev.off()
 ### D
 
 ```{r fig.height=8, fig.width=8}
-SG <- fread("../Projects/StressGranules/SGPAPER/Protein Stuff/AllwSG.txt", header = T)[,c(1,3)]
+SG <- fread("~/Projects/StressGranules/SGPAPER/Protein Stuff/AllwSG.txt", header = T)[,c(1,3)]
 colnames(SG) <- c("EVENT", "dPSI_SG")
-TIA1KO <- fread("../Projects/StressGranules/AS.WC_Transcriptome/shRNAExp/TIA1/Vulcan_all.txt", header = T)[,c(1,3)]
+TIA1KO <- fread("~/Projects/StressGranules/AS.WC_Transcriptome/shRNAExp/TIA1/Vulcan_all.txt", header = T)[,c(1,3)]
 colnames(TIA1KO) <- c("EVENT", "dPSI_KO")
+TIA1KO$dPSI_KO <- TIA1KO$dPSI_KO * -1
 
 
 TIA1Effect <- merge(SG, TIA1KO, by="EVENT")
@@ -3216,23 +4794,22 @@ smooth.SG <- lm(dPSI_SG~dPSI_KO, TIA1Effect)
 #linemarkers <- as.data.frame(Both_Transcriptomes[(Both_Transcriptomes$Inverser)< -100,])
 
 # Calculate the Spearman correlation coefficient
-spearman_corr <- cor(TIA1Effect$dPSI_SG, (TIA1Effect$dPSI_KO), method = "spearman")
+spearman_corr <- cor((TIA1Effect$dPSI_KO),TIA1Effect$dPSI_SG,  method = "spearman")
 
 
 
-(SupFig11 <- ggplot(TIA1Effect, aes(y = dPSI_SG, x = (dPSI_KO))) + 
+(SupFig11 <- ggplot(TIA1Effect, aes(x = dPSI_SG*100, y = (dPSI_KO*100))) + 
   geom_point(fill = "#DDDDDD", alpha = 0.3, size=5, shape=21, colour='black') +   
   geom_density2d(color="#800020", size=1.2) +
   theme_bw() +
-  ylab("DSA TIA1 WT- TIA1 KD (dPSI)") + 
-  xlab("DSA WC with vs Without SG (dPSI)") + # Subscript "10"
+  xlab("DS TIA1 KD - TIA1 WT (dPSI)") + 
+  ylab("DS WC with SGs - WC without SGs (dPSI)") + # Subscript "10"
   theme(axis.line = element_line(colour = "black"),
         panel.grid.minor = element_blank(),
         panel.border = element_blank(),
         panel.background = element_blank())  + 
   theme(text=element_text(size=24,  family="Arial MS"))  +
-  theme(plot.title = element_text(hjust = 0.5))  + theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank())+
-  geom_abline(slope=smooth.SG$coefficients[2], intercept = smooth.SG$coefficients[1], linetype = "dashed")+ stat_cor(method = "spearman", cor.coef.name = "rho", size=7, label.y.npc = "top"))
+  theme(plot.title = element_text(hjust = 0.5))  + theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank())+ stat_cor(method = "spearman", cor.coef.name = "rho", size=7, label.y.npc = "top"))
 
 png("~/Projects/StressGranules/SGPAPER/Images/PNG/SupFigure11.png", width = 8, height=8, units = "in", res=300)
 SupFig11
@@ -3392,7 +4969,7 @@ disc <- ggplot(Discovery, aes(x = SGPres, y = score)) +
   geom_jitter(aes(color = StressType),
               width = 0.2, size = 5, alpha = 0.6) +
   theme_bw() +
-  ylab("Signature Genes' Ranking\n") +
+  ylab("SG Score\n") +
   xlab("Stress Granule Presence") +
   theme(
     axis.line = element_line(colour = "black"),
@@ -3433,7 +5010,7 @@ val <- ggplot(Validation, aes(x = SGPres, y = score)) +
   geom_jitter(aes(color = StressType),
               width = 0.2, size = 5, alpha = 0.6) +
   theme_bw() +
-  ylab("Signature Genes' Ranking\n") +
+  ylab("SG Score\n") +
   xlab("Stress Granule Presence") +
   theme(
     axis.line = element_line(colour = "black"),
@@ -3467,36 +5044,44 @@ library(ggplot2)
 library(ggpubr)
 library(effsize)
 
-plots_list <- list()  # to store all plots
+# --- First pass: collect all p-values ---
+p_vals_raw <- c()
+for (tissue in names(plot_list)) {
+  df <- plot_list[[tissue]][["SG1"]]
+  with_sg    <- df$score[df$tumour == "Tumor"]
+  without_sg <- df$score[df$tumour == "Normal"]
+  p_vals_raw[tissue] <- t.test(with_sg, without_sg)$p.value
+}
 
+# --- BH correction across all cancer types ---
+p_vals_adj <- p.adjust(p_vals_raw, method = "BH")
+
+# --- Second pass: build plots with adjusted p-values ---
+plots_list <- list()
 for (tissue in names(plot_list)) {
   df <- plot_list[[tissue]][["SG1"]]
   
-  # Ensure factor levels
-  df$tumour <- factor(df$tumour,
+df$tumour <- factor(df$tumour,
                       levels = c("Tumor", "Normal"),
-                      labels = c("Tumor", "Normal"))
+                      labels = c("Tumour", "Normal"))
   
-  # Subset scores by SG presence
-  with_sg  <- df$score[df$tumour == "Tumor"]
+  with_sg    <- df$score[df$tumour == "Tumour"]
   without_sg <- df$score[df$tumour == "Normal"]
   
-  # Cohen's d
+  
   d_val <- cohen.d(with_sg, without_sg)$estimate
   
-  # P-value (Welch t-test)
-  p_val <- t.test(with_sg, without_sg)$p.value
+  subtitle_text <- paste0("Cohen's d = ", round(d_val, 2),
+                          "\n adj.p = ", signif(p_vals_adj[tissue], 3))
   
-  # Format subtitle
-  subtitle_text <- paste0("Cohen's d = ", round(d_val, 2), "\n p = ", signif(p_val, 3))
-  
-  # Create plot
-  p <- ggplot(df, aes(x = tumour, y = score)) +
+  title_color <- ifelse(p_vals_adj[tissue] < 0.05, "#BA3B46", "black")
+
+p <- ggplot(df, aes(x = tumour, y = score)) +
     geom_jitter(aes(color = tumour), width = 0.2, size = 5, alpha = 0.6) +
-    theme_bw()+
-    geom_violin(trim = FALSE, alpha = 0.2, color = "black")  +
-    ylab("Signature Genes' Ranking\n") +
-    xlab("Sample Type") +
+    theme_bw() +
+    geom_violin(trim = FALSE, alpha = 0.2, color = "black") +
+    ylab("") +
+    xlab("") +
     theme(
       axis.line = element_line(colour = "black"),
       panel.grid.minor = element_blank(),
@@ -3504,30 +5089,28 @@ for (tissue in names(plot_list)) {
       panel.background = element_blank(),
       panel.grid.major = element_blank(),
       text = element_text(size = 25, family = "Arial MS"),
-      plot.title = element_text(hjust = 0.5),
-      plot.subtitle = element_text(hjust = 0.5, face = "italic"),
+      plot.title = element_text(hjust = 0.5, color = title_color),
+      plot.subtitle = element_text(hjust = 0.5, face = "italic", color = title_color),
+      axis.text = element_text(color = "black"),
       legend.position = "none"
     ) +
-    scale_color_manual(values = c("Tumor" = "#779ECB", 
-                                  "Normal" = "#FFA071")) +
+scale_color_manual(values = c("Tumour" = "#779ECB",
+                                  "Normal" = "#FFA071"))  +
     labs(title = tissue, subtitle = subtitle_text)
   
-  # Store in list
   plots_list[[tissue]] <- p
 }
 
 TCGASCORES <- ggarrange(plotlist = plots_list, ncol = 3,
-          nrow = ceiling(length(plots_list)/3))
-
-png("~/Projects/StressGranules/SGPAPER/Images/PNG/sup10.png", width = 20, height=30, units = "in", res=300)
+                        nrow = ceiling(length(plots_list) / 3))
+png("~/Projects/StressGranules/SGPAPER/Images/PNG/sup10.png", width = 20, height = 30, units = "in", res = 300)
 TCGASCORES
 dev.off()
-
 ```
 # Supplementary Figure 11
 
-```{r fig.height=60, fig.width=20}
-all_survival_plots <- readRDS("~/Projects/StressGranules/SGPAPER/Simulations/SurvivalResults_TNFEMT.RDS")
+```{r fig.height=35, fig.width=20}
+all_survival_plots <- readRDS("~/Projects/StressGranules/SGPAPER/Simulations/SurvivalResults_SG1.RDS")
 
 # ✅ Combine all survival plots into a panel
 if (length(all_survival_plots) > 0) {
@@ -3540,9 +5123,9 @@ if (length(all_survival_plots) > 0) {
   print("No valid survival plots generated.")
 }
 
-# png("~/Projects/StressGranules/SGPAPER/Images/PNG/sup11.png", width = 20, height=30, units = "in", res=300)
-# final_survival_plot
-# dev.off()
+png("~/Projects/StressGranules/SGPAPER/Images/PNG/sup11.png", width = 25, height=40, units = "in", res=300)
+final_survival_plot
+dev.off()
 ```
 
 # Potential Prognosis Analsysis
@@ -3603,7 +5186,7 @@ for (tissue in names(TCGAobj_tissue)) {
 
 
 #First Test, checking what the 4 cancers have in common
-keep_tissues <- c("ACC", "MESO", "CHOL", "STAD")
+keep_tissues <- c("ACC", "MESO")
 TCGAobj_tissue <- TCGAobj_tissue[names(TCGAobj_tissue) %in% keep_tissues]
 
 for (tissue in names(TCGAobj_tissue)) {
@@ -3709,8 +5292,8 @@ ndegs=20
 
 ```{r, results='hide', warning=FALSE, message=FALSE}
 
-upmarkers <- as.data.frame(DEGenes[DEGenes$logFC>1 & DEGenes$B>25,] )
-downmarkers <- as.data.frame(DEGenes[DEGenes$logFC< -1.5 & DEGenes$B>30,] )
+upmarkers <- as.data.frame(DEGenes[DEGenes$logFC>1 & DEGenes$B>0,] )
+downmarkers <- as.data.frame(DEGenes[DEGenes$logFC< -1.5 & DEGenes$B>0,] )
 
 
 (VC <- ggplot(data=DEGenes,
@@ -3718,7 +5301,7 @@ downmarkers <- as.data.frame(DEGenes[DEGenes$logFC< -1.5 & DEGenes$B>30,] )
   geom_point(color="#CCCCCC") +
   ylab("B-Statistic") +
   xlab(expression(Log[2]~"Fold-Change")) +
-  ggtitle("Tumor vs Normal") +
+  ggtitle("Tumour vs Normal") +
   theme(
     axis.line = element_line(colour = "black"),
     panel.grid.major = element_blank(),   # remove major gridlines
@@ -3822,7 +5405,7 @@ data_to_plot$Status <- statvec
                     breaks = c("Downregulated", "Upregulated")) +
   coord_flip() +
   labs(x = "Gene Set", 
-       y = "Normalized Enrichment Score",
+       y = "Normalised Enrichment Score",
        title = "Hallmark Gene Sets",
        caption = paste0("p-value < ", thresh)) +
   theme_bw() +
@@ -3944,7 +5527,7 @@ fitted <- lmFit(y$E, mm)
 
 colnames(coef(fitted))
 # Define groups
-tissues_of_interest <- c("TissueACC", "TissueMESO", "TissueCHOL", "TissueSTAD")
+tissues_of_interest <- c("TissueACC", "TissueMESO")
 all_tissues <- colnames(coef(fitted))
 other_tissues <- setdiff(all_tissues, tissues_of_interest)
 
@@ -3975,8 +5558,8 @@ ndegs=20
 
 ```{r, results='hide', warning=FALSE, message=FALSE}
 
-upmarkers <- as.data.frame(DEGenes[DEGenes$logFC>1 & DEGenes$B>200,] )
-downmarkers <- as.data.frame(DEGenes[DEGenes$logFC< -1 & DEGenes$B>150,] )
+upmarkers <- as.data.frame(DEGenes[DEGenes$logFC>1.5 & DEGenes$B>300,] )
+downmarkers <- as.data.frame(DEGenes[DEGenes$logFC< -1.75 & DEGenes$B>300,] )
 
 
 (TT <- ggplot(data=DEGenes,
@@ -3984,7 +5567,7 @@ downmarkers <- as.data.frame(DEGenes[DEGenes$logFC< -1 & DEGenes$B>150,] )
   geom_point(color="#CCCCCC") +
   ylab("B-Statistic") +
   xlab(expression(Log[2]~"Fold-Change")) +
-  ggtitle("Tumor vs Tumor") +
+  ggtitle("ACC+MESO vs TCGA") +
   theme(
     axis.line = element_line(colour = "black"),
     panel.grid.major = element_blank(),   # remove major gridlines
@@ -3995,6 +5578,10 @@ downmarkers <- as.data.frame(DEGenes[DEGenes$logFC< -1 & DEGenes$B>150,] )
     plot.subtitle = element_text(hjust = 0.5),
     text = element_text(size=25, family="Arial MS")
   ) +
+  geom_point(data=upmarkers, aes(x=logFC, y=B),
+             color="#A10702", size=4) +
+  geom_point(data=downmarkers, aes(x=logFC, y=B),
+             color="#03256C", size=4)+
   geom_label_repel(upmarkers[1:ndegs,],
                    mapping=aes(label=row.names(upmarkers)[1:ndegs]),
                    size=4, point.padding=-0.5, color="#A10702",
@@ -4002,11 +5589,7 @@ downmarkers <- as.data.frame(DEGenes[DEGenes$logFC< -1 & DEGenes$B>150,] )
   geom_label_repel(downmarkers[1:ndegs,],
                    mapping=aes(label=row.names(downmarkers)[1:ndegs]),
                    size=4, point.padding=-0.5, color="#03256C",
-                   max.overlaps = 20, fontface="italic") +
-  geom_point(data=upmarkers, aes(x=logFC, y=B),
-             color="#A10702", size=4) +
-  geom_point(data=downmarkers, aes(x=logFC, y=B),
-             color="#03256C", size=4))
+                   max.overlaps = 20, fontface="italic") )
 
 
 
@@ -4087,7 +5670,7 @@ data_to_plot$Status <- statvec
                     breaks = c("Downregulated", "Upregulated")) +
   coord_flip() +
   labs(x = "Gene Set", 
-       y = "Normalized Enrichment Score",
+       y = "Normalised Enrichment Score",
        title = "Hallmark Gene Sets",
        caption = paste0("p-value < ", thresh)) +
   theme_bw() +
@@ -4108,7 +5691,7 @@ dev.off()
 
 ## A
 
-```{r fig.height=4, fig.width=6}
+```{r fig.height=6, fig.width=8}
 # Your data
 FC_pre  <- c(40.46, 32.93, 63.01)
 FC_post <- c(23.89, 19.08, 37.49)
@@ -4144,25 +5727,35 @@ df_compare <- data.frame(
 )
 
 
-Imaging1 <- ggplot(df_compare, aes(x = Line, y = Value, color = Line)) +
-  geom_jitter(width = 0.1, size = 3, alpha = 0.5) +
+
+(Imaging1 <- ggplot(df_compare, aes(x = Line, y = Value, color = Line)) +
+  geom_violin(aes(fill = Line), width = 0.8, alpha = 0.2, trim = FALSE) +  # violin behind
+  geom_jitter(width = 0.1, size = 3, alpha = 0.6) +                       # points in front
   facet_wrap(~Time) +
   stat_compare_means(
     aes(group = Line),
     method = "t.test",
     label = "p.format",
-    size = 8,       # big text (≈ 25pt)
-    vjust = 1    # move p-value text closer to points
+    size = 8,
+    label.x.npc = "right",   # move to right edge
+    label.y.npc = "bottom",  # move to bottom edge
+    hjust = 0.5,             # slight nudge inside the plot
+    vjust = -0.5             # raise just a little above the border
   ) +
   theme_bw() +
   labs(y = "Colocalization (%)", x = "Stress Status") +
   scale_color_manual(values = c("Control" = "#1F6F52", "Sorbitol" = "#E00F00")) +
+  scale_fill_manual(values = c("Control" = "#1F6F52", "Sorbitol" = "#E00F00")) +
   theme(
-    strip.text = element_text(face = "bold", size = 20),  # facet titles bold
+    strip.text = element_text(face = "bold", size = 20),
     axis.text = element_text(size = 18),
     axis.title = element_text(size = 20),
-    legend.position = "none"
-  )
+    legend.position = "none",
+    panel.grid = element_blank(),
+    panel.border = element_rect(color = "black", size = 1.2)
+  ))
+
+
 
 png("~/Projects/StressGranules/SGPAPER/Images/PNG/Imaging1.png", width = 6, height=4, units = "in", res=300)
 Imaging1
@@ -4272,7 +5865,7 @@ ggplot(df_sim, aes(x = Group, y = Proportion, fill = Group)) +
 ```
 
 
-## C
+## C (SG)
 
 ```{r fig.height=6, fig.width=8}
 library(ggplot2)
@@ -4338,6 +5931,119 @@ Imaging3 <- ggplot(df_sim, aes(x = Group, y = Proportion, fill = Group)) +
 
 png("~/Projects/StressGranules/SGPAPER/Images/PNG/Imaging3.png", width = 8, height=6, units = "in", res=300)
 Imaging3
+dev.off()
+```
+
+## D (Mito)
+
+```{r fig.height=6, fig.width=8}
+library(ggplot2)
+library(effsize)
+
+set.seed(1906)
+
+# Data as proportions
+PC_pre <- PC_pre / 100
+FC_pre <- FC_pre / 100
+
+# Function to estimate Beta params from data
+beta_params <- function(x) {
+  m <- mean(x)
+  v <- var(x)
+  alpha <- m * ((m * (1 - m) / v) - 1)
+  beta <- (1 - m) * ((m * (1 - m) / v) - 1)
+  return(list(alpha = alpha, beta = beta, mean = m, var = v))
+}
+
+params_PC <- beta_params(PC_pre)
+params_FC <- beta_params(FC_pre)
+
+params_PC
+params_FC
+
+# ---- Plotting the fitted distributions ----
+library(ggplot2)
+
+x <- seq(0, 1, length.out = 1000)
+df <- data.frame(
+  x = rep(x, 2),
+  density = c(dbeta(x, params_PC$alpha, params_PC$beta),
+              dbeta(x, params_FC$alpha, params_FC$beta)),
+  StressStatus = rep(c("Sorbitol", "Control"), each = length(x))
+)
+
+Imaging2 <- ggplot(df, aes(x, density, color = StressStatus, fill = StressStatus)) +
+  geom_line(size = 1.2, alpha = 0.5) +
+  geom_area(alpha = 0.2, position = "identity") +
+  scale_color_manual(values = c("Control" = "#1F6F52", "Sorbitol" = "#E00F00")) +
+  scale_fill_manual(values = c("Control" = "#1F6F52", "Sorbitol" = "#E00F00")) +
+  theme_bw() +
+  theme(
+    panel.grid = element_blank(),
+    text = element_text(size = 20, family = "Arial MS"),
+    axis.line = element_line(color = "black"),
+    panel.border = element_blank()
+  ) +
+  labs(x = "Colocalization", y = "Density", color = "Stress Status", fill = "Stress Status")
+
+# png("~/Projects/StressGranules/SGPAPER/Images/PNG/Imaging2.png", width = 8, height=4, units = "in", res=300)
+# Imaging2
+# dev.off()
+
+
+# --- Simulated draws
+sim_PC <- rbeta(1000, params_PC$alpha, params_PC$beta)
+sim_FC <- rbeta(1000, params_FC$alpha, params_FC$beta)
+
+# --- Statistics
+p_diff <- abs(mean(sim_PC) - mean(sim_FC))
+
+BC <- sum(sqrt(density(sim_PC, from=0, to=1, n=512)$y *
+               density(sim_FC, from=0, to=1, n=512)$y)) / 512
+
+AUC <- mean(outer(sim_PC, sim_FC, ">"))
+
+d_val <- cohen.d(sim_PC, sim_FC)$estimate
+
+# Caption text
+caption_text <- paste0(
+  "p-diff = ", round(p_diff, 3),
+  " | BC = ", round(BC, 3),
+  " | AUC = ", round(AUC, 3),
+  " | Cohen's d = ", round(d_val, 3)
+)
+
+# --- Dataframes
+df_sim <- data.frame(
+  Proportion = c(sim_PC, sim_FC),
+  Group = rep(c("Sorbitol", "Control"), each = 1000)
+)
+
+df_obs <- data.frame(
+  Proportion = c(PC_pre, FC_pre),
+  Group = rep(c("Sorbitol", "Control"), each = 3)
+)
+
+# --- Plot
+Imaging4 <- ggplot(df_sim, aes(x = Group, y = Proportion, fill = Group)) +
+  geom_violin(trim = FALSE, alpha = 0.4, color = "black") +
+  geom_point(
+    data = df_obs, aes(x = Group, y = Proportion),
+    width = 0.15, shape = 21, fill = "white", size = 4, stroke = 1.2
+  ) +
+  scale_fill_manual(values = c("Control" = "#1F6F52", "Sorbitol" = "#E00F00")) +
+  theme_bw() +
+  theme(
+    text = element_text(size = 20, family = "Arial MS"),
+    axis.line = element_line(colour = "black"),
+    panel.grid = element_blank(),
+    panel.border = element_blank()
+  ) +
+  ylab("dsRNA colocalised within Mitochondria") +
+  xlab("Stress State")
+
+png("~/Projects/StressGranules/SGPAPER/Images/PNG/Imaging4.png", width = 8, height=6, units = "in", res=300)
+Imaging4
 dev.off()
 ```
 

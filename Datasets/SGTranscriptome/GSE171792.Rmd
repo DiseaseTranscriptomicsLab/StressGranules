@@ -90,7 +90,7 @@ read.counts <- as.data.frame(read.counts)
 
 row.names(read.counts) <- read.counts$hgnc_symbol #changes rownames into hgnc symbols
 read.counts$hgnc_symbol <- NULL #We no longer need this column, as we have the rownames.
-
+colnames(read.counts) <- sub("Aligned.*", "", colnames(read.counts))
 ```
 
 
@@ -272,13 +272,14 @@ impgenes.YS <- c(row.names(filterednew.YS))
 impgenes.YU <- c(row.names(filterednew.YU))
 
 #Now we need to select only the rows which have those genes.
+finaltable <- read.counts
 finaltable <- read.counts[row.names(read.counts)%in%impgenes,]
-finaltable <- finaltable[row.names(finaltable)%in%impgenes.GS,]
-finaltable <- finaltable[row.names(finaltable)%in%impgenes.GU,]
-inaltable <- finaltable[row.names(finaltable)%in%impgenes.XS,]
-finaltable <- finaltable[row.names(finaltable)%in%impgenes.XU,]
-finaltable <- finaltable[row.names(finaltable)%in%impgenes.YS,]
-finaltable <- finaltable[row.names(finaltable)%in%impgenes.YU,]
+# finaltable <- finaltable[row.names(finaltable)%in%impgenes.GS,]
+# finaltable <- finaltable[row.names(finaltable)%in%impgenes.GU,]
+# finaltable <- finaltable[row.names(finaltable)%in%impgenes.XS,]
+# finaltable <- finaltable[row.names(finaltable)%in%impgenes.XU,]
+# finaltable <- finaltable[row.names(finaltable)%in%impgenes.YS,]
+# finaltable <- finaltable[row.names(finaltable)%in%impgenes.YU,]
 ```
 
 
@@ -288,7 +289,7 @@ Good! Now we can proceed by designing our matrices.
 
 ```{r}
 #Let us prepare metadata to add to our samples
-fordescriptive <- c("GFP_Stressed_1","GFP_Stressed_2", "DDX3X_Stressed", "DDX3X_Stressed", "DDX3Y_Stressed", "DDX3Y_Stressed", "DDX3Y_Unstressed", "DDX3Y_Unstressed", "DDX3X_Unstressed", "DDX3X_Unstressed", "GFP_Unstressed", "GFP_Unstressed")
+fordescriptive <- c("GFP Stressed","GFP Stressed", "DDX3X Stressed", "DDX3X Stressed", "DDX3Y Stressed", "DDX3Y Stressed", "DDX3Y Unstressed", "DDX3Y Unstressed", "DDX3X Unstressed", "DDX3X Unstressed", "GFP Unstressed", "GFP Unstressed")
 
 forstress <- c("Stress", "Stress", "Stress", "Stress", "Stress", "Stress", "CT", "CT", "CT", "CT", "CT", "CT")
 
@@ -361,6 +362,17 @@ Nevertheless, the normalisation process appears mostly alright.
 ## PCA
 
 ```{r}
+fordescriptive <- c("GFP Stressed","GFP Stressed", "DDX3X Stressed", "DDX3X Stressed", "DDX3Y Stressed", "DDX3Y Stressed", "DDX3Y Unstressed", "DDX3Y Unstressed", "DDX3X Unstressed", "DDX3X Unstressed", "GFP Unstressed", "GFP Unstressed")
+
+sample_order <- c(
+  "GFP Stressed",
+  "GFP Unstressed",
+  "DDX3X Stressed",
+  "DDX3X Unstressed",
+  "DDX3Y Stressed",
+  "DDX3Y Unstressed"
+)
+
 #this is done to be able to do traditional PCA
 dfforpca <- y$E
 dfforpca <- rbind(dfforpca, fordescriptive)
@@ -374,20 +386,37 @@ dfforpca[ ,numcol] <- apply(dfforpca[ , numcol], 2,            # to turn our col
 #sapply(dfforpca, class) #to check class
 
 # Or specify the factor levels in the order you want
-dfforpca$fordescriptive <- factor(dfforpca$fordescriptive, levels = unique(fordescriptive))
+dfforpca$fordescriptive <- factor(dfforpca$fordescriptive, levels = sample_order)
 
 pca_res <- prcomp(dfforpca[,numcol], scale=FALSE) #prepare the pca
 
 #to make everything pretty
 p <- autoplot(pca_res, data = dfforpca, x=1, y=2, colour = "fordescriptive", size=8, alpha=0.7)
-p <- p + theme_bw() + scale_colour_manual(name = "Sample Type", values = c("#FF0000", "#FFA500", "#FFFF00", "#00FF00", "#0000FF", "#800080", "grey"), labels=c(unique(fordescriptive)))
-p <- p + ggtitle("PCA Plot") + theme(plot.title = element_text(hjust = 0.5)) +
+p <- p + theme_bw() + scale_colour_manual(
+  name = "",
+  values = c(
+    "GFP Stressed" = "#124038",
+    "GFP Unstressed" = "#2CA08D",
+    "DDX3X Stressed" = "#AD1F36",
+    "DDX3X Unstressed" = "#F0A8B4",
+    "DDX3Y Stressed" = "#5D8DC0",
+    "DDX3Y Unstressed" = "#B6CBE2"
+  ),
+  breaks = sample_order
+)
+p <- p + theme(plot.title = element_text(hjust = 0.5)) +
   theme(axis.line = element_line(colour = "black"),
         panel.grid.minor = element_blank(),
         panel.border = element_blank(),
-        panel.background = element_blank())
+        panel.background = element_blank())+ theme_classic() +
+  theme(axis.line = element_line(colour = "black")) +
+  theme(text=element_text(size=20,  family="Arial MS"),
+        legend.position = "none")
 p
 
+png("~/Images/PCA_Example3.png", width = 6, height=6, units = "in", res=300)
+p
+dev.off()
 
 #in case you want to see them yourself
 contribs1 <- pca_res$rotation[,1]
@@ -408,6 +437,155 @@ From the PCA we can see that the biggest issue in on the GFP_Stressed samples. T
 While on the original study they show that these two samples are good replicates, I believe that the issue is linked to improper filtration. If 50% of a sample genes are a "0", you can have similar samples, even if the remainder of the genes are vastly different. 
 
 I opted to still use them together on the "Simple Linear Model" Section. On the "Complex Linear Model", I use them both together and singularly. 
+
+```{r}
+## ---- Grouping is the original SampleColouring (true pairs), sample
+## identity comes from colnames(y$E) ------------------------------------
+groups <- SampleColouring   # 6 conditions x 2, true replicate structure
+sample_names <- colnames(y$E)
+
+cormat <- cor(y$E, method = "spearman")
+
+result <- do.call(rbind, lapply(seq_along(sample_names), function(i) {
+  own_group <- groups[i]
+  partner_idx <- which(groups == own_group & seq_along(groups) != i)
+
+  own_cor <- cormat[i, partner_idx]
+
+  others <- cormat[i, -c(i, partner_idx)]
+  best_other_cor <- max(others)
+  best_other_i <- which(cormat[i, ] == best_other_cor & seq_along(groups) != i & groups != own_group)[1]
+
+  data.frame(
+    Sample = sample_names[i],
+    Group = own_group,
+    OwnReplicateCor = own_cor,
+    BestOtherCor = best_other_cor,
+    BestOtherGroup = groups[best_other_i],
+    Mismatched = best_other_cor > own_cor
+  )
+}))
+
+result[order(-result$Mismatched, result$OwnReplicateCor), ]
+
+## ---- Same dot-plot visual as before ------------------------------------
+result_long <- rbind(
+  data.frame(Sample = result$Sample, Correlation = result$OwnReplicateCor, Comparison = "Own replicate"),
+  data.frame(Sample = result$Sample, Correlation = result$BestOtherCor, Comparison = "Best non-replicate")
+)
+
+ggplot(result_long, aes(x = reorder(Sample, -Correlation), y = Correlation, color = Comparison)) +
+  geom_point(size = 4) +
+  geom_line(aes(group = Sample), color = "grey60") +
+  coord_flip() +
+  scale_color_manual(values = c("Own replicate" = "#de425b", "Best non-replicate" = "#a2d1e6")) +
+  theme_bw() +
+  ylab("Spearman correlation") + xlab("") +
+  ggtitle("Own replicate vs. best alternative match, per sample") +
+  theme(axis.line = element_line(colour = "black"),
+        panel.grid.minor = element_blank(),
+        panel.border = element_blank(),
+        panel.background = element_blank(),
+        text = element_text(size = 14, family = "Arial MS"))
+```
+
+```{r fig.height=20, fig.width=20}
+## ---- 1. Replicate pair scatterplots for every condition -------------------
+groups <- unique(SampleColouring)
+sample_names <- colnames(y$E)
+
+plot_list <- lapply(groups, function(g) {
+  idx <- which(SampleColouring == g)
+  df <- data.frame(Rep1 = y$E[, idx[1]], Rep2 = y$E[, idx[2]])
+  
+  ggplot(df, aes(x = Rep1, y = Rep2)) +
+    geom_point(fill = "#DDDDDD", alpha = 0.3, size = 4, shape = 21, colour = 'black') +
+    geom_density2d(color = "#800020", size = 1) +
+    geom_abline(slope = 1, intercept = 0, linetype = "dashed", color = "grey40") +
+    theme_bw() +
+    xlab(sample_names[idx[1]]) + ylab(sample_names[idx[2]]) +
+    ggtitle(g) +
+    theme(axis.line = element_line(colour = "black"),
+          panel.grid.minor = element_blank(),
+          panel.border = element_blank(),
+          panel.background = element_blank(),
+          plot.title = element_text(hjust = 0.5),
+          text = element_text(size = 14, family = "Arial MS")) +
+    stat_cor(method = "spearman", cor.coef.name = "rho", size = 5)
+})
+
+p_corr <- ggpubr::ggarrange(plotlist = plot_list, ncol = 3, nrow = 2)
+
+png("~/Projects/StressGranules/SGPAPER/Images/PNG/Sup_Shen_Replicates.png", width = 16, height = 10, units = "in", res = 300)
+p_corr
+dev.off()
+
+p_corr
+
+## ---- 2. GFP_Stressed: own replicate vs. single best alternative match ----
+gfp_stressed_idx <- which(SampleColouring == "GFP_Stressed")
+own_df <- data.frame(Rep1 = y$E[, gfp_stressed_idx[1]], Rep2 = y$E[, gfp_stressed_idx[2]])
+own_rho <- cor(own_df$Rep1, own_df$Rep2, method = "spearman")
+p_own <- ggplot(own_df, aes(x = Rep1, y = Rep2)) +
+  geom_point(fill = "#DDDDDD", alpha = 0.3, size = 5, shape = 21, colour = 'black') +
+  geom_density2d(color = "#800020", size = 1.2) +
+  geom_abline(slope = 1, intercept = 0, linetype = "dashed", color = "grey40") +
+  theme_bw() +
+  xlab(bquote(.(sample_names[gfp_stressed_idx[1]]) ~ "gene expression" ~ (log[2] ~ CPM))) +
+  ylab(bquote(.(sample_names[gfp_stressed_idx[2]]) ~ "gene expression" ~ (log[2] ~ CPM))) +
+  ggtitle("GFP Stressed: Rep1 vs Rep2 (own replicates)") +    theme(axis.line = element_line(colour = "black"),
+          panel.grid.minor = element_blank(),
+          panel.border = element_blank(),
+          panel.background = element_blank()) +
+    theme(plot.title = element_text(hjust = 0.5)) +
+    theme(text = element_text(size = 16, family = "Arial MS")) +
+    stat_cor(method = "spearman", cor.coef.name = "rho", size = 6) +
+    theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank())
+
+# For each GFP_Stressed sample, find its best non-replicate match and its rho,
+# then keep only the single strongest match across both samples
+candidate_matches <- lapply(gfp_stressed_idx, function(i) {
+  best_group <- result$BestOtherGroup[result$Sample == sample_names[i]]
+  best_idx <- which(SampleColouring == best_group)
+  
+  if (length(best_idx) > 1) {
+    cors <- sapply(best_idx, function(j) cor(y$E[, i], y$E[, j], method = "spearman"))
+    best_idx <- best_idx[which.max(cors)]
+  }
+  
+  rho <- cor(y$E[, i], y$E[, best_idx], method = "spearman")
+  
+  list(i = i, best_idx = best_idx, best_group = best_group, rho = rho)
+})
+
+# Pick the pairing with the highest correlation
+best_match <- candidate_matches[[which.max(sapply(candidate_matches, function(x) x$rho))]]
+
+match_df <- data.frame(Rep1 = y$E[, best_match$i], Rep2 = y$E[, best_match$best_idx])
+p_best <- ggplot(match_df, aes(x = Rep1, y = Rep2)) +
+  geom_point(fill = "#DDDDDD", alpha = 0.3, size = 5, shape = 21, colour = 'black') +
+  geom_density2d(color = "#800020", size = 1.2) +
+  geom_abline(slope = 1, intercept = 0, linetype = "dashed", color = "grey40") +
+  theme_bw() +
+  xlab(bquote(.(sample_names[best_match$i]) ~ "gene expression" ~ (log[2] ~ CPM))) +
+  ylab(bquote(.(sample_names[best_match$best_idx]) ~ "gene expression" ~ (log[2] ~ CPM))) +
+  ggtitle("GFP Stressed vs. DDX3Y Stressed") +    theme(axis.line = element_line(colour = "black"),
+          panel.grid.minor = element_blank(),
+          panel.border = element_blank(),
+          panel.background = element_blank()) +
+    theme(plot.title = element_text(hjust = 0.5)) +
+    theme(text = element_text(size = 16, family = "Arial MS")) +
+    stat_cor(method = "spearman", cor.coef.name = "rho", size = 6) +
+    theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank())
+
+p_gfp <- ggpubr::ggarrange(p_own, p_best, ncol = 2, nrow = 1)
+
+png("~/Projects/StressGranules/SGPAPER/Images/PNG/Sup_Shen_GFPStressed_Mismatch.png", width = 12, height = 6, units = "in", res = 300)
+p_gfp
+dev.off()
+p_gfp
+```
+
 
 # Simple Linear Models
 
@@ -1024,7 +1202,7 @@ hallmark.sg.t <- hallmarks.res.tidy[,c(1,6)]
 hallmark.sg.t <- as.data.frame(hallmark.sg.t)
 
 #this small part is generic
-thresh <- 0.05
+thresh <- 0.10
 
 #this one is no longer generic
 data_to_plot <- hallmarks.res.tidy %>% filter(padj < thresh)
@@ -1219,7 +1397,7 @@ hallmark.sg.t <- hallmarks.res.tidy[,c(1,6)]
 hallmark.sg.t <- as.data.frame(hallmark.sg.t)
 
 #this small part is generic
-thresh <- 0.05
+thresh <- 0.10
 
 #this one is no longer generic
 data_to_plot <- hallmarks.res.tidy %>% filter(padj < thresh)

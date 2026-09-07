@@ -308,102 +308,6 @@ As one can observe from the PCAs, our PC1 is mostly explained by cell type, whil
 
 Now, in my opinion, cell type is not really relevant in this case. Therefore, I will treat it as "batch-effect", and will remove it. This way, we can compare samples from different cells, as they were the same.
 
-## Batch Effect Correction
-
-```{r, warning=FALSE}
-#This is the code I used to correct batch effect. It is based on the one we used in Schneider et al. (2024), aka voyAGEr.
-batch_cols <- c("Cell") #We define which variable we want to treat as batch effects
-metadata_cols <- c("Doxo", "Target") #And those we dont want to treat as such
-#This creates a new matrix with all our variables of interest
-mmbatch <- model.matrix(reformulate(paste0("~0 + ",paste0( batch_cols,collapse = " + "))), data=metadata)
-mmkeep <- model.matrix(reformulate(paste0("~0 + ",paste0( metadata_cols,collapse =  "+" ))), data=metadata)
-mm <- cbind(mmkeep,mmbatch)
-#Now, we apply the new model
-D0 <- DGEList(2^y$E) #I use the normalised counts, but these must be "unloged". Hence the 2^
-D0 <- calcNormFactors(D0) 
-y <- voom(D0, mm, plot = F)
-fit <- lmFit(y, mm)
-
-#Basicly, we determine what coefficients are originated from our batch variable, and we remove those across the data
-beta <- fit$coefficients[,-(1:ncol(mmkeep)),drop=FALSE]
-beta[is.na(beta)] <- 0 #In the case of binary variables, one of them wont have "any effect" and will thus be NA. This corrects for that step.
-corrcounts_v1 <- as.matrix(y$E) - beta %*% t(mmbatch)
-offset <- apply(corrcounts_v1,1,min) - apply(y$E,1,min) #This gives the offset itself that needs to be applied
-corrcounts_v1 <- as.data.frame(corrcounts_v1-offset)
-corrcounts_v1 <- 2^corrcounts_v1 #I prefer to unlog them, to have a dataframe of non-log CPMs, in case I need.
-```
-
-## Batch Corrected PCA
-
-```{r}
-# Now we simply generate new log CPM expression values, starting from the correct expression values.
-y <- voom(corrcounts_v1, mm, plot = T)
-
-#This prepares my data for the PCA
-dfforpca <- y$E
-dfforpca <- t(dfforpca)
-dfforpca <- as.data.frame(dfforpca) # needs to be a data.frame
-dfforpca <- apply(dfforpca, 2, as.numeric) # Ensure numeric
-dfforpca <- as.data.frame(dfforpca) # still needs to be a data.frame
-
-# Add metadata, which we will then use to plot
-dfforpca$Target <- metadata$Target
-dfforpca$Doxo <- metadata$Doxo
-dfforpca$Cell <- metadata$Cell
-
-# PCA computation itself. I do one PCA for each variable I want to see.
-pca_res <- prcomp(dfforpca[, 1:(ncol(dfforpca)-3)], scale = FALSE)
-p_target <- autoplot(pca_res, data = dfforpca, x = 1, y = 2, colour = "Target", size = 8) +
-  theme_bw() +
-  scale_colour_manual(name = "Target", values = custom_palette) +
-  ggtitle("PCA - Coloured by Target") +
-  theme(plot.title = element_text(hjust = 0.5),
-        axis.line = element_line(colour = "black"),
-        panel.grid.minor = element_blank(),
-        panel.border = element_blank(),
-        panel.background = element_blank())
-
-p_doxo <- autoplot(pca_res, data = dfforpca, x = 1, y = 2, colour = "Doxo", size = 8) +
-  theme_bw() +
-  scale_colour_manual(name = "Doxo", values = custom_palette) +
-  ggtitle("PCA - Coloured by Doxo") +
-  theme(plot.title = element_text(hjust = 0.5),
-        axis.line = element_line(colour = "black"),
-        panel.grid.minor = element_blank(),
-        panel.border = element_blank(),
-        panel.background = element_blank())
-
-p_cell <- autoplot(pca_res, data = dfforpca, x = 1, y = 2, colour = "Cell", size = 8) +
-  theme_bw() +
-  scale_colour_manual(name = "Cell", values = custom_palette) +
-  ggtitle("PCA - Coloured by Cell") +
-  theme(plot.title = element_text(hjust = 0.5),
-        axis.line = element_line(colour = "black"),
-        panel.grid.minor = element_blank(),
-        panel.border = element_blank(),
-        panel.background = element_blank())
-
-p_target
-p_doxo
-p_cell
-
-
-#in case you want to see most important genes for PCA yourself
-contribs1 <- pca_res$rotation[,1]
-contribs2 <- pca_res$rotation[,2]
-
-#These are the biggest contributors to the PCA1 (right side)
-(pos1genes <- sort(contribs1, decreasing=T)[1:10])
-#These are the biggest contributors to the PCA1 (left side)
-(neg1genes <- sort(contribs1, decreasing=F)[1:10])
-
-#These are the biggest contributors to the PCA2 (up side)
-(pos2genes <- sort(contribs2, decreasing=T)[1:10])
-#These are the biggest contributors to the PCA2 (down side)
-(neg2genes <- sort(contribs2, decreasing=F)[1:10])
-
-```
-After batch correction, as one can observe from the PCAs, our PC1 NO LONGER  mostly explained by cell type, instead being explained by samples being proliferative or not. In fact, from the contributors, we can see that one of main ones from PC1, proliferation side, is MKI67, one of the most commonly used proliferation markers.
 
 ## Normalisation
 
@@ -454,10 +358,10 @@ Finally, we move on to differential gene expression! In this chunk, I define the
 ```{r Linear Models}
 
 #Here, I define the variables I am interested in. In this case, I am interested in the target variable, as I want to see the effect of inhibiting both mitofusins. However, I must also supply the effect of being treated with Doxo, or both would be confounded with each other.
-mm <- model.matrix(~0+Doxo+Target,metadata) #The 0~ means I am not considering any sample as the baseline. If I had a ~1, it would consider that my Doxo samples are the baseline. In the end, this ends up being a bit of personal preference. I find that its easier to interpret if no samples are baselines.
+mm <- model.matrix(~0+Cell+Doxo+Target,metadata) #The 0~ means I am not considering any sample as the baseline. If I had a ~1, it would consider that my Doxo samples are the baseline. In the end, this ends up being a bit of personal preference. I find that its easier to interpret if no samples are baselines.
 
 # Don't forget, use corrected counts here
-y <- voom(corrcounts_v1, mm, plot = T)
+y <- voom(finaltable, mm, plot = T)
 
 #We now fit the linear model to our expression
 fitted <- lmFit(y,mm)
@@ -475,7 +379,7 @@ Lets move on to the main analyses.
 
 ```{r midstep}
 #This is where we extract the "differential expression" related to our different coefficients. This is by coefficient/column number. Since I am interested in the effect of MFN1/MFN2 inhibition, this corresponds to column 8.
-top <- topTable(tmp,8, sort.by = "logFC", n=Inf)
+top <- topTable(tmp,9, sort.by = "logFC", n=Inf)
 
 DEGenes <- top
 ```
@@ -590,7 +494,7 @@ data_to_plot$Status <- statvec
   labs(x="Pathway", y="Normalised Enrichment Score (NES)",
        title= "Hallmark Gene Sets",
        caption = paste0("p-value < ", thresh)) + theme(plot.title = element_text(hjust = 1)) +
-  theme_bw() + theme(text=element_text(family = "Arial", 20)) + theme(legend.position = "none"))
+  theme_bw() + theme(text=element_text(size=20)) + theme(legend.position = "none"))
 
 ```
 

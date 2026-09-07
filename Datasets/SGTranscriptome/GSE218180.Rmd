@@ -394,8 +394,8 @@ Before we move on, lets do a **Principal Component analysis**. It is a good expl
 
 ```{r }
 # Define color palette
-custom_palette <- qualitative_hcl(5, palette = "Pastel")
-custom_palette <- sample(custom_palette, 5)
+custom_palette <- qualitative_hcl(9, palette = "Pastel")
+custom_palette <- sample(custom_palette, 9)
 
 #This prepares my data for the PCA
 dfforpca <- y$E
@@ -407,9 +407,10 @@ dfforpca <- as.data.frame(dfforpca) # still needs to be a data.frame
 # Add metadata, which we will then use to plot
 dfforpca$Sample <- forsamp
 dfforpca$Stress <- forstress
+dfforpca$All <- SampleColouring
 
 # PCA computation itself. I do one PCA for each variable I want to see.
-pca_res <- prcomp(dfforpca[, 1:(ncol(dfforpca)-2)], scale = FALSE)
+pca_res <- prcomp(dfforpca[, 1:(ncol(dfforpca)-3)], scale = FALSE)
 
 p_Sample <- autoplot(pca_res, data = dfforpca, x = 1, y = 2, colour = "Sample", size = 8) +
   theme_bw() +
@@ -431,9 +432,20 @@ p_Stress <- autoplot(pca_res, data = dfforpca, x = 1, y = 2, colour = "Stress", 
         panel.border = element_blank(),
         panel.background = element_blank())
 
+p_All<- autoplot(pca_res, data = dfforpca, x = 1, y = 2, colour = "All", size = 8) +
+  theme_bw() +
+  scale_colour_manual(name = "All", values = custom_palette) +
+  ggtitle("PCA - Coloured by All") +
+  theme(plot.title = element_text(hjust = 0.5),
+        axis.line = element_line(colour = "black"),
+        panel.grid.minor = element_blank(),
+        panel.border = element_blank(),
+        panel.background = element_blank())
+
 
 p_Sample
 p_Stress
+p_All
 
 #in case you want to see most important genes for PCA yourself
 contribs1 <- pca_res$rotation[,1]

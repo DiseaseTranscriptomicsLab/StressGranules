@@ -90,6 +90,7 @@ read.counts <- as.data.frame(read.counts)
 
 row.names(read.counts) <- read.counts$hgnc_symbol #changes rownames into hgnc symbols
 read.counts$hgnc_symbol <- NULL #We no longer need this column, as we have the rownames.
+colnames(read.counts) <- sub("Aligned.*", "", colnames(read.counts))
 ```
 
 
@@ -386,6 +387,8 @@ Although the sample based filtration attenuated the problem, there are still som
 Before we move on, lets do a **Principal Component analysis**. It is a good exploratory tool to find out how our samples relate to each other and if there are any obvious outliers. We would expect our replicates to be nearer to one another than to other samples, and more different samples should be further away. 
 
 ```{r, fig.height=7, fig.width=9}
+
+
 # Define color palette
 custom_palette <- qualitative_hcl(4, palette = "Pastel")
 custom_palette <- sample(custom_palette, 4)
@@ -445,6 +448,103 @@ contribs2 <- pca_res$rotation[,2]
 
 ```
 There are some samples which have some big problems, but it seems they are mostly input samples.
+
+```{r fig.height=12, fig.width=14}
+## ---- 1. Quantify replicate concordance for every condition ---------------
+sample_cols <- colnames(y$E)
+groups <- unique(SampleColouring)
+
+rep_cor <- sapply(groups, function(g) {
+  idx <- which(SampleColouring == g)
+  if (length(idx) != 2) return(NA)   # only defined for exact pairs
+  cor(y$E[, idx[1]], y$E[, idx[2]], method = "spearman")
+})
+
+rep_cor_df <- data.frame(
+  Group = names(rep_cor),
+  Correlation = as.numeric(rep_cor),
+  Type   = ifelse(grepl("^Inp", names(rep_cor)), "Input", "Pulldown"),
+  Stress = gsub("Inp|Pul", "", names(rep_cor))
+)
+
+ggplot(rep_cor_df, aes(x = reorder(Group, Correlation), y = Correlation, fill = Type)) +
+  geom_col(alpha = 0.85) +
+  geom_hline(yintercept = median(rep_cor_df$Correlation), linetype = "dashed", color = "grey40") +
+  coord_flip() +
+  theme_bw() +
+  scale_fill_manual(values = c("Input" = "#a2d1e6", "Pulldown" = "#de425b")) +
+  ylab("Spearman correlation between replicate pair") + xlab("") +
+  ggtitle("Within-condition replicate concordance") +
+  theme(axis.line = element_line(colour = "black"),
+        panel.grid.minor = element_blank(),
+        panel.border = element_blank(),
+        panel.background = element_blank())
+
+## ---- 2. Rep1 vs Rep2 scatter for each Input condition --------------------
+input_groups <- c("Inp0", "Inp10", "Inp20", "Inp60")
+
+plot_list <- lapply(input_groups, function(g) {
+  idx <- which(SampleColouring == g)
+  df <- data.frame(Rep1 = y$E[, idx[1]], Rep2 = y$E[, idx[2]])
+
+  ggplot(df, aes(x = Rep1, y = Rep2)) +
+    geom_point(fill = "#DDDDDD", alpha = 0.3, size = 5, shape = 21, colour = 'black') +
+    geom_density2d(color = "#800020", size = 1.2) +
+    geom_abline(slope = 1, intercept = 0, linetype = "dashed", color = "grey40") +
+    theme_bw() +
+    ylab(bquote(.(colnames(y$E)[idx[2]]) ~ "gene expression" ~ (log[2] ~ CPM))) +
+    xlab(bquote(.(colnames(y$E)[idx[1]]) ~ "gene expression" ~ (log[2] ~ CPM))) +
+    ggtitle(g) +
+    theme(axis.line = element_line(colour = "black"),
+          panel.grid.minor = element_blank(),
+          panel.border = element_blank(),
+          panel.background = element_blank()) +
+    theme(plot.title = element_text(hjust = 0.5)) +
+    theme(text = element_text(size = 16, family = "Arial MS")) +
+    stat_cor(method = "spearman", cor.coef.name = "rho", size = 7) +
+    theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank())
+})
+
+scatters <- ggpubr::ggarrange(plotlist = plot_list, ncol = 2, nrow = 2)
+
+png("~/Projects/StressGranules/SGPAPER/Images/PNG/Sup_Xiao.png", width = 12, height=12, units = "in", res=300)
+scatters
+dev.off()
+```
+
+```{r fig.height=10, fig.width=10}
+input_groups <- c("Inp0", "Inp10", "Inp20", "Inp60")
+
+plot_list <- lapply(input_groups, function(g) {
+  idx <- which(SampleColouring == g)
+  df <- data.frame(Rep1 = y$E[, idx[1]], Rep2 = y$E[, idx[2]])
+  
+  ggplot(df, aes(x = Rep1, y = Rep2)) +
+    geom_point(fill = "#DDDDDD", alpha = 0.3, size = 5, shape = 21, colour = 'black') +
+    geom_density2d(color = "#800020", size = 1.2) +
+    geom_abline(slope = 1, intercept = 0, linetype = "dashed", color = "grey40") +
+    theme_bw() +
+    ylab(paste0(colnames(y$E)[idx[2]], "\n")) + xlab(colnames(y$E)[idx[1]]) +
+    ggtitle(g) +
+    theme(axis.line = element_line(colour = "black"),
+          panel.grid.minor = element_blank(),
+          panel.border = element_blank(),
+          panel.background = element_blank()) +
+    theme(plot.title = element_text(hjust = 0.5)) +
+    theme(text = element_text(size = 16, family = "Arial MS")) +
+    stat_cor(method = "spearman", cor.coef.name = "rho", size = 6) +
+    theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank())
+})
+
+p_corr <- ggpubr::ggarrange(plotlist = plot_list, ncol = 2, nrow = 2)
+
+png("~/Projects/StressGranules/SGPAPER/Images/PNG/Sup_XiaoInputs.png", width = 14, height = 6, units = "in", res = 300)
+p_corr
+dev.off()
+
+p_corr
+```
+
 
 # Simple Linear Models
 

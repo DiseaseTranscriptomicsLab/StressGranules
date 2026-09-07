@@ -41,6 +41,46 @@ library(msigdbr)
 library(data.table)
 library(colorspace)
 library(scater)
+set.seed(1906)
+```
+
+
+# Preparation of TCGA data
+
+First, I load the TCGA data. Please refer to the original resource in case of need, at the **GDC Portal** ([TCGA Link](https://portal.gdc.cancer.gov/)).
+
+```{r}
+#This object contains both counts and metadata. For preprocessing, please refer to markdown file "SIGNATURE_TCGA_pre.Rmd". 
+TCGAobj_tissue <- readRDS("~/Projects/TCGA/TCGAobj_tissue.RDS")
+
+#Not all TCGA tissues have enough number of tumour and normal samples to warrant a direct comparsion. Herein, I select only those that do (at least 5 samples of each)
+tissuestocheck <- c("BLCA", "BRCA", "CHOL", "COAD", "ESCA", "HNSC", "READ", "STAD", "UCEC", "KICH", "KIRC", "KIRP", "LIHC", "LUAD", "LUSC", "PRAD", "THCA")
+
+TCGAobj_tissue_TvsN <- TCGAobj_tissue[names(TCGAobj_tissue) %in% tissuestocheck]
+
+
+#Preprocessing of the TCGA data. For simplicity, I keep only either tumour or normal samples, discarding only sample types. 
+for (tissue in names(TCGAobj_tissue_TvsN)) {
+
+  # Retrieve metadata and logCPM for the tissue
+  metadata <- as.character(TCGAobj_tissue_TvsN[[tissue]]$metadata)
+  logCPM <- TCGAobj_tissue_TvsN[[tissue]]$logCPM
+  
+  # Replace "01" with "Tumor" and "11" with "Normal"
+  metadata[metadata == "01"] <- "Tumor"
+  #metadata[metadata == "11"] <- "Normal"
+
+  # Find the two most common tumour types (now updated to "Tumor" and "Normal")
+  top_events <- names(sort(table(metadata), decreasing = TRUE))[1:2]
+
+  # Filter metadata and logCPM to include only the two most common events
+  keep_indices <- which(metadata %in% top_events)
+  TCGAobj_tissue_TvsN[[tissue]]$metadata <- metadata[keep_indices]
+  TCGAobj_tissue_TvsN[[tissue]]$logCPM <- logCPM[, keep_indices, drop = FALSE]
+}
+
+
+
 ```
 
 # Opening Signatures
@@ -48,7 +88,7 @@ library(scater)
 In here, I load up the object with simulated signature scores. For information on how these score were obtained, please refer to the markdown file "Signature_markeR_bi.Rmd".
 
 ```{r}
-Signatureobj <- readRDS("~/Projects/StressGranules/SGPAPER/Simulations/simulationlist_ControlPathways.RDS")
+Signatureobj <- readRDS("~/Projects/StressGranules/SGPAPER/Simulations/simulationlist.RDS")
 
 # Signatureobj <- lapply(Signatureobj, function(tissue_list) {
 #   tissue_list[!grepl("^SG2", names(tissue_list))]
@@ -310,162 +350,237 @@ for (tissue in names(Metadata)) {
 For the survival analysis I opted to always compare top 25% of signature score samples (SGScore and simulated) vs the bottom 25% of signature score samples.
 
 ```{r fig.height=70, fig.width=12, warning=FALSE}
-# Load required packages
+# ✅ Initialize empty lists for results & plots
 library(survival)
 library(survminer)
-library(dplyr)
-library(ggpubr)
-
-# ✅ Initialize empty lists for results & plots
 Survival_Results <- list()
 all_survival_plots <- list()
 
-# ✅ Loop through each tissue
 i <- 1
 for (tissue in names(Metadata)) {
   print(paste0("Processing Tissue: ", tissue, " (", i, "/", length(names(Metadata)), ")"))
 
-  # Extract metadata
-  data <- Metadata[[tissue]]
-
-  # ✅ Get all available signatures dynamically
+  data       <- Metadata[[tissue]]
   signatures <- names(Signatureobj[[tissue]])
 
   for (sig in signatures) {
-    # Extract signature scores
     score_df <- Signatureobj[[tissue]][[sig]]
     colnames(score_df)[1] <- "barcode"
 
-    # Ensure 'barcode' exists before merging
     if (!"barcode" %in% colnames(score_df) || !"barcode" %in% colnames(data)) {
-      warning("Skipping ", sig, " in ", tissue, ": 'barcode' missing in metadata or scores.")
+      warning("Skipping ", sig, " in ", tissue, ": 'barcode' missing.")
       next
     }
 
-    # Merge scores with metadata
-    data_merged <- left_join(data, score_df, by = "barcode")
-
-    # ✅ Ensure numeric FollowTime & convert vital_status to 0/1
-    data_merged <- data_merged %>%
+    data_merged <- left_join(data, score_df, by = "barcode") %>%
       mutate(
-        SGScore_quantile = ntile(score, 4),  # Divide score into quartiles
+        SGScore_quantile = ntile(score, 4),
         Group = case_when(
           SGScore_quantile == 1 ~ "Low",
           SGScore_quantile == 4 ~ "High",
-          TRUE ~ NA_character_
+          TRUE                  ~ NA_character_
         )
       ) %>%
-      filter(!is.na(Group)) %>%  # Keep only Low & High groups
+      filter(!is.na(Group)) %>%
       mutate(
-        FollowTime = as.numeric(FollowTime),
-        vital_status = ifelse(vital_status == "Dead", 1, 0)
+        FollowTime   = as.numeric(FollowTime),
+        vital_status = ifelse(vital_status == "Dead", 1, 0),
+        Group        = factor(Group, levels = c("Low", "High"))
       )
 
-    # ✅ Check if survival data exists after filtering
-    if (nrow(data_merged) < 10) {  
-      warning("Skipping ", sig, " in ", tissue, ": Not enough survival data after filtering.")
+    if (nrow(data_merged) < 10) {
+      warning("Skipping ", sig, " in ", tissue, ": Not enough survival data.")
       next
     }
 
-    # ✅ Create survival object
-    surv_object <- Surv(time = data_merged$FollowTime, event = data_merged$vital_status)
-
-    # ✅ Fit Kaplan-Meier model
-    fit <- survfit(surv_object ~ Group, data = data_merged)
-
-    # ✅ Perform log-rank test
-    surv_diff <- survdiff(surv_object ~ Group, data = data_merged)
+    surv_object   <- Surv(time = data_merged$FollowTime, event = data_merged$vital_status)
+    fit           <- survfit(surv_object ~ Group, data = data_merged)
+    surv_diff     <- survdiff(surv_object ~ Group, data = data_merged)
     log_rank_pval <- 1 - pchisq(surv_diff$chisq, df = length(surv_diff$n) - 1)
 
-    # ✅ Generate Kaplan-Meier plot
-KM_plot <- ggsurvplot(
-  fit, data = data_merged,
-  conf.int = TRUE,
-  pval = TRUE,
-  pval.size = 7,   # << increase p-value label size
-  risk.table = TRUE,
-  legend.title = paste(sig, "Group"),
-  legend.labs = c("Low", "High"),
-  xlab = "Days",
-  ylab = "Survival Probability\n",
-  ggtheme = theme_minimal()
-)
+    # ── HR from Cox model (Low as reference) ─────────────────────────────────
+    cox_fit  <- coxph(surv_object ~ Group, data = data_merged)
+    cox_sum  <- summary(cox_fit)
+    HR       <- cox_sum$conf.int[1, "exp(coef)"]
+    HR_low   <- cox_sum$conf.int[1, "lower .95"]
+    HR_high  <- cox_sum$conf.int[1, "upper .95"]
 
-    # ✅ Extract ggplot object **before** applying custom styling
+    KM_plot <- ggsurvplot(
+      fit, data = data_merged,
+      conf.int     = TRUE,
+      pval         = FALSE,
+      risk.table   = TRUE,
+      legend.title = paste(sig, "Group"),
+      legend.labs  = c("Low", "High"),
+      xlab         = "",
+      ylab         = "",
+      ggtheme      = theme_minimal()
+    )
+
     KM_plot_final <- KM_plot$plot +
       ggtitle(paste0(tissue)) +
       scale_color_manual(values = c("High" = "#BA3B46", "Low" = "#53A2BE")) +
-      scale_fill_manual(values = c("High" = "#BA3B46", "Low" = "#53A2BE")) +
-    theme(
-      axis.line = element_line(colour = "black"),
-      panel.grid.minor = element_blank(),
-      panel.border = element_blank(),
-      panel.background = element_blank(),
-      panel.grid.major = element_blank(),
-      text = element_text(size = 25, family = "Arial MS"),
-      plot.title = element_text(hjust = 0.5),
-      plot.subtitle = element_text(hjust = 0.5, face = "italic"),
-      legend.position = "none"
-    )
+      scale_fill_manual( values = c("High" = "#BA3B46", "Low" = "#53A2BE")) +
+      theme(
+        axis.line        = element_line(colour = "black"),
+        panel.grid.minor = element_blank(),
+        panel.border     = element_blank(),
+        panel.background = element_blank(),
+        panel.grid.major = element_blank(),
+        text             = element_text(size = 25, family = "Arial MS"),
+        plot.title       = element_text(hjust = 0.5),
+        plot.subtitle    = element_text(hjust = 0.5, face = "italic"),
+        legend.position  = "none"
+      )
 
-    # ✅ Store results
-    if (!tissue %in% names(Survival_Results)) {
-      Survival_Results[[tissue]] <- list()
-    }
+    if (!tissue %in% names(Survival_Results)) Survival_Results[[tissue]] <- list()
+
     Survival_Results[[tissue]][[sig]] <- list(
-      fit = fit,
+      fit           = fit,
       log_rank_pval = log_rank_pval,
-      KM_plot = KM_plot_final  # Store the correctly formatted ggplot
+      HR            = HR,
+      HR_low        = HR_low,
+      HR_high       = HR_high,
+      KM_plot       = KM_plot_final
     )
 
-    # ✅ Store plots for panel
     all_survival_plots[[paste0(tissue, "_", sig)]] <- KM_plot_final
   }
   i <- i + 1
 }
 
-# ✅ Combine all survival plots into a panel
+# ============================================================
+# Empirical FPR for SG1 against SG1_Sim signatures
+# ============================================================
+
+fpr_results <- list()
+
+for (tissue in names(Survival_Results)) {
+  if (!"SG1" %in% names(Survival_Results[[tissue]])) next
+
+  real_p <- Survival_Results[[tissue]][["SG1"]]$log_rank_pval
+
+  random_sigs <- names(Survival_Results[[tissue]])[
+    grepl("^SG1_[Ss]im", names(Survival_Results[[tissue]]))
+  ]
+
+  if (length(random_sigs) == 0) {
+    message("No SG1_Sim signatures found for ", tissue)
+    next
+  }
+
+  random_pvals <- sapply(random_sigs, function(sig) {
+    Survival_Results[[tissue]][[sig]]$log_rank_pval
+  })
+
+  fpr <- mean(random_pvals <= real_p, na.rm = TRUE)
+
+  fpr_results[[tissue]] <- data.frame(
+    tissue         = tissue,
+    real_p         = real_p,
+    n_random       = length(random_pvals),
+    n_more_extreme = sum(random_pvals <= real_p, na.rm = TRUE),
+    FPR            = fpr
+  )
+}
+
+fpr_df <- bind_rows(fpr_results)
+print("Empirical FPR for SG1 vs simulated signatures:")
+print(fpr_df)
+saveRDS(fpr_df, "~/Projects/StressGranules/SGPAPER/Simulations/SG1_FPR.RDS")
+
+# ============================================================
+# BH correction + HR + FPR annotation for SG1
+# ============================================================
+
+sg1_pvals <- list()
+for (tissue in names(Survival_Results)) {
+  if ("SG1" %in% names(Survival_Results[[tissue]])) {
+    sg1_pvals[[tissue]] <- Survival_Results[[tissue]][["SG1"]]$log_rank_pval
+  }
+}
+
+if (length(sg1_pvals) > 0) {
+
+  # ── Base R assignment to avoid dplyr scoping issues ──────────────────────
+  sg1_pval_df <- data.frame(
+    tissue = names(sg1_pvals),
+    p_raw  = unname(unlist(sg1_pvals)),
+    stringsAsFactors = FALSE
+  )
+  sg1_pval_df$p_adj_BH <- p.adjust(sg1_pval_df$p_raw, method = "BH")
+  sg1_pval_df$sig      <- sg1_pval_df$p_adj_BH < 0.05
+
+  # Merge FPR
+  sg1_pval_df <- merge(sg1_pval_df,
+                       fpr_df[, c("tissue", "FPR")],
+                       by = "tissue", all.x = TRUE)
+
+  print(sg1_pval_df)
+
+  # ── Add annotation to each SG1 plot ──────────────────────────────────────
+  for (tissue in sg1_pval_df$tissue) {
+
+    adj_p   <- sg1_pval_df$p_adj_BH[sg1_pval_df$tissue == tissue]
+    fpr_val <- sg1_pval_df$FPR[sg1_pval_df$tissue == tissue]
+    HR      <- Survival_Results[[tissue]][["SG1"]]$HR
+    HR_low  <- Survival_Results[[tissue]][["SG1"]]$HR_low
+    HR_high <- Survival_Results[[tissue]][["SG1"]]$HR_high
+
+    p_label <- paste0(
+      "adj.p = ", formatC(adj_p,  format = "e", digits = 2), "\n",
+      "FPR = ",   ifelse(is.na(fpr_val), "NA",
+                         formatC(fpr_val, format = "f", digits = 2)), "\n",
+      "HR = ",    round(HR, 2),
+      " [", round(HR_low, 2), "-", round(HR_high, 2), "]"
+    )
+
+    Survival_Results[[tissue]][["SG1"]]$KM_plot <-
+      Survival_Results[[tissue]][["SG1"]]$KM_plot +
+      annotate(
+        "text",
+        x      = Inf, y = 0,
+        label  = p_label,
+        hjust  = 1.1,
+        size   = 8,
+        colour = "black"
+      )
+
+    key <- paste0(tissue, "_SG1")
+    if (key %in% names(all_survival_plots)) {
+      all_survival_plots[[key]] <- Survival_Results[[tissue]][["SG1"]]$KM_plot
+    }
+  }
+
+  saveRDS(sg1_pval_df,
+          "~/Projects/StressGranules/SGPAPER/Simulations/SG1_pval_corrected.RDS")
+
+} else {
+  message("SG1 not found in any tissue — no correction performed.")
+}
+
+# ── Combine and save ──────────────────────────────────────────────────────────
 if (length(all_survival_plots) > 0) {
   final_survival_plot <- ggarrange(
     plotlist = all_survival_plots,
     ncol = 2, nrow = ceiling(length(all_survival_plots) / 2)
   )
   print(final_survival_plot)
-} else {
-  print("No valid survival plots generated.")
 }
 
-
-
-# ✅ Print p-values for each tissue & signature
 for (tissue in names(Survival_Results)) {
   for (sig in names(Survival_Results[[tissue]])) {
     print(paste0(
-      "Tissue: ", tissue, " | Signature: ", sig, 
+      "Tissue: ", tissue, " | Signature: ", sig,
       " - Log-rank p-value: ", round(Survival_Results[[tissue]][[sig]]$log_rank_pval, 4)
     ))
   }
 }
 
-# # ✅ Filter plots whose names contain exactly one underscore
-plots_to_keep <- all_survival_plots[grepl("^[^_]+_[^_]+$", names(all_survival_plots))]
-# 
- saveRDS(plots_to_keep, "~/Projects/StressGranules/SGPAPER/Simulations/SurvivalResults_TNFEMT.RDS")
-
-# # ✅ Combine into panel
-# if (length(plots_to_keep) > 0) {
-#   final_survival_plot <- ggarrange(
-#     plotlist = plots_to_keep,
-#     ncol = 2, nrow = ceiling(length(plots_to_keep) / 2)
-#   )
-#   print(final_survival_plot)
-# } else {
-#   print("No valid survival plots generated.")
-# }
-
-#saveRDS(Survival_Results, "~/Projects/StressGranules/SGPAPER/Simulations/SurvivalResults.RDS")
-
-#Survival_Results <- readRDS("~/Projects/StressGranules/SGPAPER/Simulations/SurvivalResults.RDS")
+# ── Save only the SG1 plots (one per tissue, no Sim plots) ───────────────────
+plots_to_keep <- all_survival_plots[grepl("_SG1$", names(all_survival_plots))]
+saveRDS(plots_to_keep,
+        "~/Projects/StressGranules/SGPAPER/Simulations/SurvivalResults_SG1.RDS")
 ```
 
 ## Separating Results
@@ -602,6 +717,193 @@ print(SG_Plots)
 # SG_Plots
 # dev.off()
 ```
+
+#NEW THESIS FIGURE
+
+```{r}
+ExpreTable <- TCGAobj_tissue_TvsN$SARC$logCPM
+genes <- c("AGO2", "BRF1", "CAPRIN1", "CPEB1", "DDX6", "DISC1", "EIF2A", "FASTK", "FMR1", "FXR1", "G3BP1", "G3BP2", "L1TD1", "SAMD4A", "SMN1","TIA1", "TIAL1", "ZFP36")
+library(survival)
+library(survminer)
+library(dplyr)
+library(ggpubr)
+
+# ============================================================
+# 1. Setup — only 25/75 split
+# ============================================================
+
+splits <- list(
+  "25/75" = list(low_q = 0.25, high_q = 0.75)
+)
+
+all_plots  <- list()
+pval_store <- list()
+
+# ============================================================
+# 2. Loop — add coxph for HR
+# ============================================================
+
+for (gene in genes) {
+
+  if (!gene %in% rownames(ExpreTable)) {
+    warning("Skipping ", gene, ": not found in ExpreTable.")
+    next
+  }
+
+  gene_expr <- as.numeric(ExpreTable[gene, ])
+  names(gene_expr) <- colnames(ExpreTable)
+
+  common_samples <- intersect(names(gene_expr), surv_meta$barcode)
+  if (length(common_samples) < 10) {
+    warning("Skipping ", gene, ": fewer than 10 matched samples.")
+    next
+  }
+
+  expr_matched <- as.numeric(gene_expr[common_samples])
+  meta_matched <- surv_meta[surv_meta$barcode %in% common_samples, ]
+  meta_matched <- meta_matched[match(common_samples, meta_matched$barcode), ]
+
+  low_cut  <- quantile(expr_matched, 0.25, na.rm = TRUE)
+  high_cut <- quantile(expr_matched, 0.75, na.rm = TRUE)
+
+  meta_matched$Group <- case_when(
+    expr_matched <= low_cut  ~ "Low",
+    expr_matched >= high_cut ~ "High",
+    TRUE                     ~ NA_character_
+  )
+
+  plot_df <- meta_matched %>%
+    mutate(
+      FollowTime   = as.numeric(FollowTime),
+      vital_status = ifelse(vital_status == "Dead", 1, 0),
+      Group        = factor(Group, levels = c("Low", "High"))  # Low = reference
+    ) %>%
+    filter(!is.na(Group))
+
+  if (nrow(plot_df) < 10) {
+    warning("Skipping ", gene, " (25/75): not enough samples after split.")
+    next
+  }
+
+  surv_obj   <- Surv(time = plot_df$FollowTime, event = plot_df$vital_status)
+  fit        <- survfit(surv_obj ~ Group, data = plot_df)
+  surv_diff  <- survdiff(surv_obj ~ Group, data = plot_df)
+  log_rank_p <- 1 - pchisq(surv_diff$chisq, df = length(surv_diff$n) - 1)
+
+  # HR from Cox model (Low as reference)
+  cox_fit   <- coxph(surv_obj ~ Group, data = plot_df)
+  cox_sum   <- summary(cox_fit)
+  HR        <- cox_sum$conf.int[1, "exp(coef)"]
+  HR_low    <- cox_sum$conf.int[1, "lower .95"]
+  HR_high   <- cox_sum$conf.int[1, "upper .95"]
+
+  pval_store[[gene]] <- log_rank_p
+  all_plots[[gene]]  <- list(
+    plot    = ggsurvplot(
+      fit, data = plot_df,
+      conf.int     = TRUE,
+      pval         = FALSE,
+      risk.table   = FALSE,
+      legend.title = gene,
+      legend.labs  = c("High", "Low"),
+      xlab         = "",
+      ylab         = "",
+      ggtheme      = theme_minimal()
+    )$plot,
+    HR      = HR,
+    HR_low  = HR_low,
+    HR_high = HR_high
+  )
+}
+
+# ============================================================
+# 3. Multiple testing correction
+# ============================================================
+
+pval_df <- data.frame(
+  gene  = names(pval_store),
+  p_raw = unlist(pval_store),
+  stringsAsFactors = FALSE
+) %>%
+  mutate(
+    p_adj_BH = p.adjust(p_raw, method = "BH"),
+    sig       = p_adj_BH < 0.05
+  )
+
+print(pval_df)
+
+# ============================================================
+# 4. Finalise plots — BH p + HR annotation, no raw p
+# ============================================================
+
+final_plots <- list()
+
+for (gene in names(all_plots)) {
+
+  adj_p   <- pval_df$p_adj_BH[pval_df$gene == gene]
+  HR      <- all_plots[[gene]]$HR
+  HR_low  <- all_plots[[gene]]$HR_low
+  HR_high <- all_plots[[gene]]$HR_high
+  p_col   <- ifelse(adj_p < 0.05, "#BA3B46", "grey40")
+
+  p_label <- paste0(
+    "adj.logrank p = ", formatC(adj_p, format = "e", digits = 2), "\n",
+    "HR = ",     round(HR, 2),
+    " [", round(HR_low, 2), "-", round(HR_high, 2), "]"
+  )
+
+  KM_final <- all_plots[[gene]]$plot +
+    ggtitle(gene) +
+    scale_color_manual(values = c("High" = "#BA3B46", "Low" = "#53A2BE")) +
+    scale_fill_manual( values = c("High" = "#BA3B46", "Low" = "#53A2BE")) +
+    annotate(
+      "text",
+      x      = Inf, y = Inf,
+      label  = p_label,
+      hjust  = 1.1, vjust = 1.4,
+      size   = 8,
+      colour = p_col
+    ) +
+    theme(
+      axis.line        = element_line(colour = "black"),
+      panel.grid       = element_blank(),
+      panel.border     = element_blank(),
+      panel.background = element_blank(),
+      text             = element_text(size = 25, family = "Arial MS"),
+      plot.title       = element_text(hjust = 0.5),
+      plot.subtitle    = element_text(hjust = 0.5, face = "italic"),
+      legend.position  = "none"
+    )
+
+  final_plots[[gene]] <- KM_final
+}
+
+# ============================================================
+# 5. Arrange and save
+# ============================================================
+
+final_panel <- ggarrange(
+  plotlist = final_plots,
+  ncol     = 4,
+  nrow     = ceiling(length(final_plots) / 4)
+)
+
+print(final_panel)
+
+
+# ============================================================
+# 6. Save
+# ============================================================
+
+png("~/Projects/StressGranules/SGPAPER/Images/PNG/SurvivalGenes.png",
+    width  = 28,
+    height = 12,
+    units  = "in", res = 300)
+print(final_panel)
+dev.off()
+```
+
+
 
 # Session Info
 
