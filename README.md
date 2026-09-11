@@ -1,4 +1,4 @@
-# StressGranules - WIP
+# StressGranules
 
 [![DOI](https://zenodo.org/badge/984654102.svg)](https://doi.org/10.5281/zenodo.21724124)
 
