@@ -31,7 +31,7 @@ This repository contains all analyses and code associated with our study on stre
 
 If you use this repository or any of its contents, please cite our associated publication:
 
-> [Insert full citation and DOI once available]
+> https://www.biorxiv.org/content/10.64898/2026.09.08.749846v1
 
 # Contact
 
